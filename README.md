@@ -4,6 +4,21 @@
 
 > 状态：**渲染与 Web 控制台可用；BLE 发送目前仅 macOS 已验证，Windows 适配进行中。**
 
+
+## 直接下载就能用（推荐）
+
+不用装 Python、不用命令行，**下载解压 → 双击 → 浏览器自动打开**。
+
+1. 打开 [Releases](https://github.com/shidaifufen/todoocard-eink/releases) 或点绿色 `Code` → `Download ZIP`
+2. 解压到任意文件夹（路径别带特殊符号）
+3. 双击对应系统的一键启动：
+   - Windows：`启动（Windows）.bat`
+   - macOS：`启动（macOS）.command`（首次可能要右键 → 打开）
+4. 浏览器会自动打开 `http://127.0.0.1:8199/card.html`
+
+第一次运行会自动创建独立环境并安装依赖（需要联网，约 1 分钟），之后秒开。
+如果提示找不到 Python，脚本会帮你打开下载页——**安装时记得勾选 "Add Python to PATH"**。
+
 ## 能做什么
 
 - **13 个模板**：每日总结 / 待办 / 天气 / 月历 / 每日一句 / 诗词（带赏析）/ 时间进度 / 充电统计 / 倒计时 / 照片轮播 / Bing 壁纸 / AI 生图 / 自定义积木
