@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>土豆片助手 · 场景广场</title>
+<link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--line:#e7e9ef;--text:#15171c;--sub:#5e6472;--dim:#9aa0ad;
+        --dark:#0f1116;--accent:#4f8cff;--ok:#2fbf7f;--red:#ff5b5b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",Arial,sans-serif}
+  .wrap{max-width:1280px;margin:0 auto;padding:0 24px}
+  header{padding:22px 0 6px}
+  .top{display:flex;align-items:center;gap:12px}
+  .logo{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,#ff6b6b,#ffb020);
+        display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700}
+  h1{font-size:19px;margin:0;font-weight:700;letter-spacing:.2px}
+  .sub{font-size:12px;color:var(--dim)}
+  .nav{margin-left:auto;display:flex;gap:8px}
+  .nav a{font-size:13px;color:var(--sub);text-decoration:none;padding:8px 14px;border-radius:999px;
+        border:1px solid var(--line);background:#fff}
+  .hero{margin:18px 0 10px;background:#fff;border-radius:22px;padding:26px 28px;border:1px solid var(--line)}
+  .tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--sub);
+       background:#f1f3f8;border-radius:999px;padding:5px 12px}
+  .hero h2{font-size:28px;margin:12px 0 6px;letter-spacing:-.5px}
+  .hero p{margin:0 0 14px;color:var(--sub);font-size:13.5px}
+  .stats{display:flex;gap:26px;font-size:13px;color:var(--sub)}
+  .stats b{color:var(--text);font-size:16px}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}
+  .filters button{border:1px solid var(--line);background:#fff;color:var(--sub);border-radius:999px;
+       padding:7px 16px;font:inherit;cursor:pointer;font-size:13px}
+  .filters button.on{background:var(--dark);color:#fff;border-color:var(--dark)}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;padding-bottom:50px}
+  @media (max-width:1000px){.grid{grid-template-columns:repeat(2,1fr)}}
+  @media (max-width:640px){.grid{grid-template-columns:1fr}}
+  .scene{background:var(--card);border:1px solid var(--line);border-radius:20px;overflow:hidden;
+         display:flex;flex-direction:column}
+  .scene .art{height:300px;display:flex;align-items:center;justify-content:center;padding:18px}
+  .scene .art img{height:100%;width:auto;border-radius:10px;box-shadow:0 8px 24px rgba(20,24,40,.12);
+        background:#fff}
+  .scene .body{padding:14px 16px 16px;display:flex;flex-direction:column;gap:6px;flex:1}
+  .scene .row1{display:flex;align-items:center;justify-content:space-between}
+  .chip{font-size:11.5px;padding:3px 10px;border-radius:999px;background:#eef7f0;color:#2f8f5b}
+  .chip.read{background:#eef3ff;color:#3f6ed0}
+  .chip.data{background:#fff4e8;color:#c07a1c}
+  .chip.fun{background:#f6eeff;color:#7a4fd0}
+  .chip.img{background:#ffeef0;color:#c04653}
+  .scene h3{margin:2px 0 0;font-size:16px;font-weight:650}
+  .scene p{margin:0;font-size:12.5px;color:var(--sub);flex:1}
+  .scene .actions{display:flex;gap:8px;margin-top:6px}
+  .scene button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);
+       background:#fff;color:var(--text);padding:8px 14px;font-size:13px}
+  .scene button.primary{background:var(--dark);border-color:var(--dark);color:#fff}
+  /* 发送状态窗 */
+  .sendpanel{position:fixed;right:22px;bottom:22px;width:330px;background:#101218;color:#e9eaee;
+       border:1px solid #2a2d35;border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.35);
+       padding:12px 14px;display:none;z-index:50}
+  .sendpanel.show{display:block}
+  .sp-head{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
+  .sp-dot{width:8px;height:8px;border-radius:50%;background:#ffb020;animation:pulse 1.2s infinite}
+  .sendpanel.ok .sp-dot{background:#38c98a;animation:none}
+  .sendpanel.bad .sp-dot{background:#ff5c5c;animation:none}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+  .sp-head button{margin-left:auto;background:transparent;border:0;color:#9a9daa;font-size:16px;cursor:pointer}
+  .sp-body{font-size:12.5px;color:#c9ccd4;margin-top:6px;line-height:1.5}
+  .sp-log{margin-top:8px;max-height:110px;overflow:auto;font:11px/1.5 ui-monospace,Menlo,monospace;
+       color:#8b90a0;white-space:pre-wrap}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#000c;color:#fff;
+       padding:10px 16px;border-radius:10px;font-size:13px;opacity:0;pointer-events:none;transition:.25s;z-index:30}
+  .toast.show{opacity:1}
+  /* 详情抽屉 */
+  .drawer{position:fixed;inset:0;background:#000a;display:none;z-index:40;align-items:center;justify-content:center;padding:24px}
+  .drawer.show{display:flex}
+  .drawer .box{background:#fff;border-radius:22px;max-width:1000px;width:100%;max-height:90vh;overflow:auto;
+       padding:22px;display:grid;grid-template-columns:minmax(0,420px) 1fr;gap:22px}
+  @media (max-width:860px){.drawer .box{grid-template-columns:1fr}}
+  .drawer img{width:100%;border-radius:14px;border:1px solid var(--line);background:#fff}
+  label.f{display:block;font-size:12.5px;color:var(--sub);margin:10px 0 5px}
+  input,textarea,select{font:inherit;width:100%;border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+  textarea{min-height:90px;resize:vertical}
+  .drawer h3{margin:0 0 4px;font-size:18px}
+  .drawer .hint{font-size:12px;color:var(--dim);margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="top">
+      <div class="logo">土</div>
+      <div>
+        <h1>土豆片助手 · 场景广场</h1>
+        <div class="sub">挑一个场景，一键推到你的 528×792 六色墨水屏</div>
+      </div>
+      <nav class="nav">
+        <a href="card.html">← 控制台</a>
+        <a href="/">控制页</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero">
+    <span class="tag">◍ 场景广场</span>
+    <h2>探索卡片场景</h2>
+    <p>每个场景都是一张排版好的卡：点「发送」直接上屏，点「编辑」改内容。</p>
+    <div style="display:flex;align-items:center;gap:10px;margin:0 0 14px;max-width:420px">
+      <span style="font-size:12px;color:var(--sub);white-space:nowrap">字号</span>
+      <input type="range" id="scaleRange" min="100" max="130" step="5" value="110"
+             style="flex:1" oninput="onScale(this.value)">
+      <span id="scaleVal" style="font-size:12px;color:var(--dim);width:42px">110%</span>
+    </div>
+    <div class="stats">
+      <span><b id="stCount">12</b> 个场景</span>
+      <span><b>5</b> 个分类</span>
+      <span><b id="stSent">0</b> 次发送</span>
+    </div>
+  </section>
+
+  <div class="filters" id="filters">
+    <button data-cat="all" class="on">全部</button>
+    <button data-cat="life">生活</button>
+    <button data-cat="read">阅读</button>
+    <button data-cat="data">数据</button>
+    <button data-cat="fun">趣味</button>
+    <button data-cat="img">图像</button>
+  </div>
+
+  <div class="grid" id="grid"></div>
+</div>
+
+<div class="drawer" id="drawer">
+  <div class="box">
+    <div>
+      <img id="dPreview" alt="预览">
+      <div class="hint" id="dHint">发送会覆盖卡片当前画面。</div>
+    </div>
+    <div>
+      <h3 id="dTitle">场景</h3>
+      <div class="hint" id="dDesc"></div>
+      <div id="dEditor"></div>
+      <div class="actions" style="display:flex;gap:8px;margin-top:16px">
+        <button class="primary" id="dSend" style="padding:10px 18px;border-radius:12px;background:#0f1116;color:#fff;border:0">发送到卡片</button>
+        <button id="dRefresh" style="padding:10px 18px;border-radius:12px;border:1px solid #e7e9ef;background:#fff">换一张预览</button>
+        <button id="dClose" style="padding:10px 18px;border-radius:12px;border:1px solid #e7e9ef;background:#fff">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="sendpanel" id="sendPanel">
+  <div class="sp-head"><span class="sp-dot"></span><b id="spTitle">正在发送</b>
+    <button onclick="spHide()" title="隐藏">×</button></div>
+  <div class="sp-body" id="spBody">准备中…</div>
+  <div class="sp-log" id="spLog"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '';
+const $ = id => document.getElementById(id);
+const toast = m => { const t=$('toast'); t.textContent=m; t.classList.add('show');
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2400); };
+let STATE={}, CAT='all';
+
+const SCENES = [
+  {kind:'summary',  cat:'life', name:'每日总结', desc:'日期 + 天气 + 待办 + 每日一句，一张看完今天。', art:'#eaf7f0'},
+  {kind:'todo',     cat:'life', name:'今日待办', desc:'大编号清单，勾掉一件算一件。', art:'#fff7e6'},
+  {kind:'weather',  cat:'life', name:'天气看板', desc:'巨大温度、体感、未来四小时、AQI 彩色胶囊。', art:'#eef3ff'},
+  {kind:'calendar', cat:'life', name:'月历',     desc:'整月网格，今天红圈，周末红字。', art:'#f3f0ff'},
+  {kind:'quote',    cat:'read', name:'每日一句', desc:'hitokoto 随机一句，红色引号，白底大字。', art:'#ffeef0'},
+  {kind:'poem',     cat:'read', name:'每日诗词', desc:'今日诗词 + 朱红印章，横排大字。', art:'#fdf1ee'},
+  {kind:'progress', cat:'data', name:'时间进度', desc:'年度 365 点阵 + 本月/本周/今天进度条。', art:'#fff1ea'},
+  {kind:'energy',   cat:'data', name:'充电统计', desc:'昨日各口 Wh 条形图 + 今日累计。', art:'#eef7f7'},
+  {kind:'countdown',cat:'data', name:'倒计时',   desc:'纪念日按临近排序，大号剩余天数。', art:'#f1f6ff'},
+  {kind:'ai',       cat:'fun',  name:'AI 生图',  desc:'内置提示词或自己写，生成后铺满整张卡。', art:'#f6eeff'},
+  {kind:'photo',    cat:'img',  name:'照片轮播', desc:'多文件夹洗牌轮播，一轮不重复。', art:'#eef4ff'},
+  {kind:'bing',     cat:'img',  name:'Bing 壁纸',desc:'每天一张 Bing 每日一图，直接上屏。', art:'#eefaf3'},
+];
+
+function render(){
+  const grid = $('grid'); grid.innerHTML='';
+  SCENES.filter(s => CAT==='all' || s.cat===CAT).forEach(s => {
+    const el = document.createElement('div'); el.className='scene';
+    el.innerHTML = `<div class="art" style="background:${s.art}">
+        <img src="/api/card/preview?kind=${s.kind}&t=${Date.now()}" alt="${s.name}" loading="lazy">
+      </div>
+      <div class="body">
+        <div class="row1"><span class="chip ${s.cat}">${catName(s.cat)}</span>
+          <span class="sub">官方</span></div>
+        <h3>${s.name}</h3><p>${s.desc}</p>
+        <div class="actions">
+          <button class="primary" onclick="send('${s.kind}')">发送</button>
+          <button onclick="openScene('${s.kind}')">编辑</button>
+        </div>
+      </div>`;
+    grid.appendChild(el);
+  });
+  $('stCount').textContent = SCENES.length;
+}
+const catName = c => ({life:'生活',read:'阅读',data:'数据',fun:'趣味',img:'图像'}[c]||'其他');
+
+document.querySelectorAll('#filters button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#filters button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); CAT=b.dataset.cat; render();
+});
+
+async function load(){
+  try{
+    const c = (await (await fetch('/api/card',{cache:'no-store'})).json()).card;
+    STATE = c;
+    $('stSent').textContent = (c.history||[]).length;
+    if (c.scale) {
+      const v = Math.round(c.scale*100);
+      $('scaleRange').value = Math.min(130, Math.max(100, v));
+      $('scaleVal').textContent = v + '%';
+    }
+  }catch(e){}
+}
+
+function spShow(title){
+  const p = $('sendPanel'); p.className='sendpanel show'; p.classList.remove('ok','bad');
+  $('spTitle').textContent = title; $('spBody').textContent = '准备中…'; $('spLog').textContent = '';
+}
+function spLine(text){ $('spBody').textContent = text; }
+function spLogLine(text){
+  const l = $('spLog'); l.textContent += (l.textContent ? '\n' : '') + text; l.scrollTop = l.scrollHeight;
+}
+function spDone(ok, text){
+  const p = $('sendPanel'); p.classList.add(ok?'ok':'bad');
+  $('spTitle').textContent = ok ? '发送成功' : '发送失败';
+  $('spBody').textContent = text; if (ok) setTimeout(spHide, 6000);
+}
+function spHide(){ $('sendPanel').className = 'sendpanel'; }
+
+async function send(kind){
+  spShow('正在发送 · ' + (SCENES.find(x=>x.kind===kind)||{}).name);
+  spLine('正在等待卡片广播（最长 3 分钟）…');
+  const before = STATE.last;
+  const d = await (await fetch('/api/card/send',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({kind})})).json();
+  if(!d.ok){ spDone(false, d.error || '启动失败'); return; }
+  for (let i=0;i<90;i++){
+    await new Promise(r=>setTimeout(r,3000));
+    let c;
+    try { c = (await (await fetch('/api/card',{cache:'no-store'})).json()).card; } catch(e) { continue; }
+    STATE = c;
+    if (c.busy) spLine('正在连接并写入卡片…（已等 ' + (i*3) + ' 秒）');
+    else spLine('等待结果…');
+    if (c.last && (!before || c.last.ts !== before.ts)){
+      spDone(c.last.ok, c.last.ok ? `用时 ${c.last.seconds}s` : (c.last.message||'').slice(0,120));
+      load(); return;
+    }
+  }
+  spDone(false, '超时：3 分钟内没等到卡片');
+}
+
+let current = null;
+function openScene(kind){
+  const s = SCENES.find(x=>x.kind===kind); current = s;
+  $('drawer').classList.add('show');
+  $('dTitle').textContent = s.name;
+  $('dDesc').textContent = s.desc;
+  $('dPreview').src = `/api/card/preview?kind=${kind}&t=${Date.now()}`;
+  $('dSend').onclick = () => send(kind);
+  $('dRefresh').onclick = () => { $('dPreview').src = `/api/card/preview?kind=${kind}&fresh=1&t=${Date.now()}`; };
+  $('dClose').onclick = () => $('drawer').classList.remove('show');
+  renderEditor(kind);
+}
+
+function renderEditor(kind){
+  const box = $('dEditor');
+  if (kind === 'todo'){
+    box.innerHTML = `<label class="f">今日待办（每行一条）</label><textarea id="e1"></textarea>
+      <div style="margin-top:10px"><button onclick="save('todos')">保存</button></div>`;
+    $('e1').value = (STATE.todos||[]).join('\n');
+  } else if (kind === 'countdown'){
+    box.innerHTML = `<label class="f">纪念日（每行：2027-01-01 元旦）</label><textarea id="e1"></textarea>
+      <div style="margin-top:10px"><button onclick="save('countdowns')">保存</button></div>`;
+    $('e1').value = (STATE.countdowns||[]).map(x=>`${x.date} ${x.name}`).join('\n');
+  } else if (kind === 'weather' || kind === 'summary'){
+    const w = STATE.weather||{};
+    box.innerHTML = `<label class="f">城市</label><input id="e1" value="${w.name||''}">
+      <label class="f">纬度 / 经度</label>
+      <div style="display:flex;gap:8px"><input id="e2" value="${w.lat??''}"><input id="e3" value="${w.lon??''}"></div>
+      <div style="margin-top:10px"><button onclick="save('weather')">保存</button></div>`;
+  } else if (kind === 'ai'){
+    box.innerHTML = `<label class="f">提示词（留空随机）</label><textarea id="e1"></textarea>
+      <div style="margin-top:10px"><button onclick="save('ai_prompt')">保存提示词</button>
+      <button onclick="genAI()">生成一张</button></div>`;
+    $('e1').value = STATE.ai_prompt || '';
+  } else if (kind === 'photo' || kind === 'bing'){
+    box.innerHTML = `<label class="f">照片文件夹（每行一个路径）</label>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button onclick="pickFolders()">＋ 系统选择器添加</button></div>
+      <textarea id="e1"></textarea>
+      <div style="margin-top:10px"><button onclick="save('folders')">保存</button></div>`;
+    $('e1').value = (STATE.folders||[]).join('\n');
+  } else {
+    box.innerHTML = `<div class="hint">这个场景不需要额外设置，点「发送到卡片」即可。</div>`;
+  }
+}
+
+async function save(type){
+  let body = {};
+  const v = $('e1') ? $('e1').value : '';
+  if (type === 'todos') body = {todos: v.split('\n').map(x=>x.trim()).filter(Boolean)};
+  if (type === 'countdowns') body = {countdowns: v.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{
+      const m = l.match(/^(\d{4}-\d{2}-\d{2})\s*(.*)$/); return m?{date:m[1],name:m[2]||'纪念日'}:null;
+    }).filter(Boolean)};
+  if (type === 'weather') body = {weather:{enabled:true,name:v||'本地',
+      lat:parseFloat($('e2').value)||39.9042, lon:parseFloat($('e3').value)||116.4074}};
+  if (type === 'ai_prompt') body = {ai_prompt: v.trim()};
+  if (type === 'folders') body = {folders: v.split('\n').map(x=>x.trim()).filter(Boolean)};
+  const d = await (await fetch('/api/card/config',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body)})).json();
+  toast(d.ok?'已保存':'保存失败');
+  load();
+  $('dPreview').src = `/api/card/preview?kind=${current.kind}&t=${Date.now()}`;
+}
+
+async function pickFolders(){
+  toast('已弹出系统文件夹选择器…');
+  const d = await (await fetch('/api/card/pick-folder',{method:'POST'})).json();
+  if (!d.ok){ toast('选择失败'); return; }
+  if (!d.paths || !d.paths.length){ toast('没有选择文件夹'); return; }
+  $('e1').value = (d.folders||[]).join('\n');
+  toast('已添加 ' + d.paths.length + ' 个文件夹');
+  load();
+}
+
+async function genAI(){
+  toast('生成中…');
+  const d = await (await fetch('/api/card/ai/generate',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({prompt:($('e1')||{}).value||''})})).json();
+  if(!d.ok){ toast('失败：'+(d.error||'')); return; }
+  $('dPreview').src = d.image + '&t=' + Date.now();
+  toast('生成完成');
+}
+
+let scaleTimer = null;
+function onScale(v){
+  $('scaleVal').textContent = v + '%';
+  clearTimeout(scaleTimer);
+  scaleTimer = setTimeout(async () => {
+    await fetch('/api/card/config', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({scale: parseInt(v,10)/100})});
+    render();              // 重新拉预览（带时间戳，不会用缓存旧图）
+  }, 250);
+}
+
+render(); load(); setInterval(load, 30000);
+</script>
+</body>
+</html>

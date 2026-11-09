@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>土豆片 · 卡片控制台</title>
+<link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+<style>
+  :root{--bg:#0d0e11;--panel:#15161a;--panel2:#1c1e24;--line:#2a2d35;--text:#e9eaee;--sub:#9a9daa;--dim:#6d7180;
+        --accent:#4f8cff;--ok:#38c98a;--danger:#ff5c5c;--warm:#ffb020}
+  @media (prefers-color-scheme: light){:root{--bg:#f5f6f9;--panel:#fff;--panel2:#f7f8fb;--line:#e4e6ee;
+        --text:#1a1c22;--sub:#5b6070;--dim:#8b90a0}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",Arial,sans-serif}
+  .app{max-width:1560px;margin:0 auto;padding:18px 22px 60px;display:grid;
+       grid-template-columns:250px minmax(0,1fr);gap:18px;align-items:start}
+  @media (max-width:980px){.app{grid-template-columns:1fr;padding:12px}}
+  .rail{position:sticky;top:16px;display:flex;flex-direction:column;gap:12px}
+  @media (max-width:980px){.rail{position:static}}
+  .brand{display:flex;align-items:center;gap:10px;padding:4px 6px 10px}
+  .brand h1{font-size:17px;margin:0;font-weight:650}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--ok)}
+  .group{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:8px}
+  .group h2{font-size:11px;letter-spacing:.12em;color:var(--dim);margin:6px 10px 8px;font-weight:600}
+  .nav{display:flex;flex-direction:column;gap:2px}
+  .nav button{display:flex;align-items:center;gap:9px;width:100%;text-align:left;border:0;background:transparent;
+       color:var(--sub);padding:8px 10px;border-radius:9px;font:inherit;cursor:pointer;font-size:13.5px}
+  .nav button:hover{background:var(--panel2);color:var(--text)}
+  .nav button.on{background:rgba(79,140,255,.14);color:var(--text);font-weight:600}
+  .nav .ico{width:18px;text-align:center;font-size:13px;opacity:.9}
+  .main{display:flex;flex-direction:column;gap:16px;min-width:0}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px}
+  .card h3{margin:0 0 12px;font-size:14px;font-weight:650;display:flex;align-items:center;gap:8px}
+  .card h3::before{content:"";width:3px;height:14px;border-radius:2px;background:var(--accent)}
+  .topline{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:2px 4px}
+  .pill{font-size:12px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--sub)}
+  .pill.on{color:var(--ok);border-color:rgba(56,201,138,.35);background:rgba(56,201,138,.08)}
+  .pill.off{color:var(--danger);border-color:rgba(255,92,92,.35);background:rgba(255,92,92,.08)}
+  .split{display:grid;grid-template-columns:minmax(0,440px) minmax(0,1fr);gap:18px;align-items:start}
+  @media (max-width:1260px){.split{grid-template-columns:1fr}}
+  .scene-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;margin-top:12px}
+  .scene{cursor:pointer;border-radius:12px;overflow:hidden;background:var(--bg2);border:1px solid var(--line);
+         transition:transform .15s,border-color .15s}
+  .scene:hover{transform:translateY(-2px);border-color:var(--accent)}
+  .scene img{width:100%;display:block;aspect-ratio:2/3;object-fit:cover}
+  .scene .meta{padding:8px 10px}
+  .scene .meta b{display:block;font-size:13px}
+  .scene .meta span{display:block;font-size:11.5px;color:var(--sub);margin-top:2px}
+  .preview-box{position:relative;display:flex;justify-content:center}
+  .preview{width:100%;max-width:430px;height:auto;border-radius:14px;border:1px solid var(--line);
+           background:#fff;display:block;margin:0 auto}
+  .preview-box.loading .preview{opacity:.35}
+  .pl{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:13px;color:var(--sub);display:none}
+  .preview-box.loading .pl{display:block}
+  .quote-line{font-size:12.5px;color:var(--dim);margin-top:6px}
+  button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);background:var(--panel2);
+         color:var(--text);padding:8px 13px;transition:.15s}
+  button:hover{border-color:var(--dim)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button:disabled{opacity:.55;cursor:default}
+  .btnrow{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}
+  label.f{display:block;font-size:12.5px;color:var(--sub);margin:10px 0 5px}
+  input[type=text],input[type=password],input[type=time],textarea,select{font:inherit;width:100%;
+       background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+  textarea{min-height:88px;resize:vertical}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media (max-width:560px){.grid2{grid-template-columns:1fr}}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;
+       border-bottom:1px dashed var(--line)}
+  .row:last-child{border-bottom:0}
+  .switch{position:relative;width:44px;height:24px;flex:none}
+  .switch input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer;z-index:2}
+  .switch i{position:absolute;inset:0;background:var(--line);border-radius:999px;transition:.2s}
+  .switch i::after{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;border-radius:50%;
+       background:#fff;transition:.2s}
+  .switch input:checked + i{background:var(--ok)}
+  .switch input:checked + i::after{transform:translateX(20px)}
+  .sched{display:grid;grid-template-columns:104px 1fr auto auto;gap:8px;margin-bottom:8px;align-items:center}
+  .hint{font-size:11.5px;color:var(--dim);margin-top:8px;line-height:1.7}
+  .dev{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:var(--panel2);border:1px solid var(--line);
+       border-radius:10px;padding:8px 10px;margin:6px 0;word-break:break-all}
+  .hist{font-size:12.5px;display:flex;gap:10px;padding:7px 0;border-bottom:1px dashed var(--line)}
+  .hist:last-child{border-bottom:0}
+  .hist .ok{color:var(--ok)} .hist .bad{color:var(--danger)}
+  .sendpanel{position:fixed;right:22px;bottom:22px;width:330px;background:#101218;color:#e9eaee;
+       border:1px solid #2a2d35;border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.35);
+       padding:12px 14px;display:none;z-index:50}
+  .sendpanel.show{display:block}
+  .sp-head{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
+  .sp-dot{width:8px;height:8px;border-radius:50%;background:#ffb020;animation:pulse 1.2s infinite}
+  .sendpanel.ok .sp-dot{background:#38c98a;animation:none}
+  .sendpanel.bad .sp-dot{background:#ff5c5c;animation:none}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+  .sp-head button{margin-left:auto;background:transparent;border:0;color:#9a9daa;font-size:16px;cursor:pointer}
+  .sp-body{font-size:12.5px;color:#c9ccd4;margin-top:6px;line-height:1.5}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#000c;color:#fff;
+       padding:10px 16px;border-radius:10px;font-size:13px;opacity:0;pointer-events:none;transition:.25s;z-index:30}
+  .toast.show{opacity:1}
+  .modal{position:fixed;inset:0;background:#000b;display:none;align-items:center;justify-content:center;z-index:40;padding:20px}
+  .modal.show{display:flex}
+  .modal .box{background:var(--panel);border:1px solid var(--line);border-radius:18px;max-width:720px;width:100%;padding:20px}
+  .steps{display:flex;gap:10px;margin:14px 0}
+  .step{flex:1;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--panel2)}
+  .step b{display:block;font-size:11px;color:var(--dim)}
+  .step.on{border-color:var(--accent)} .step.done{border-color:var(--ok)}
+  .pairlog{background:#0b0c0f;border:1px solid var(--line);border-radius:12px;padding:10px;height:190px;
+           overflow:auto;font:11.5px/1.5 ui-monospace,Menlo,monospace;color:#cfd3da;white-space:pre-wrap}
+  .hide{display:none !important}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="brand"><span class="dot"></span><h1>土豆片控制台</h1></div>
+    <div class="group">
+      <h2>卡片模板</h2>
+      <nav class="nav" id="tplNav">
+        <a href="scenes.html" style="display:flex;align-items:center;gap:9px;padding:8px 10px;
+           border-radius:9px;color:var(--sub);text-decoration:none;font-size:13.5px;margin-bottom:4px">
+          <span class="ico">◫</span>场景广场 ↗</a>
+      </nav>
+    </div>
+    <div class="group">
+      <h2>设置</h2>
+      <nav class="nav" id="setNav">
+        <button data-panel="device"><span class="ico">◈</span>设备与配对</button>
+        <button data-panel="schedule"><span class="ico">◷</span>每日计划</button>
+        <button data-panel="photos"><span class="ico">▣</span>照片与壁纸</button>
+        <button data-panel="ai"><span class="ico">✦</span>AI 生图</button>
+        <button data-panel="history"><span class="ico">≡</span>发送历史</button>
+      </nav>
+    </div>
+    <div class="group">
+      <h2>显示</h2>
+      <div style="padding:2px 10px 8px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--sub)">
+          <span>字号</span><span id="scaleVal">110%</span>
+        </div>
+        <input type="range" id="scaleRange" min="100" max="130" step="5" value="110"
+               style="width:100%;margin-top:6px" oninput="onScale(true)" onchange="onScale(false)">
+
+      </div>
+    </div>
+    <div class="group">
+      <div class="topline" style="padding:0 6px 2px">
+        <span class="pill" id="devPill">未指定设备</span>
+        <span class="pill" id="queuePill" style="display:none"></span>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topline">
+      <span class="pill" id="lastPill">还没有发送记录</span>
+      <span class="quote-line" id="quoteLine" style="margin-left:auto"></span>
+    </div>
+
+    <section class="card" id="panel-tpl">
+      <div class="split">
+        <div>
+          <h3 id="tplTitle">每日总结</h3>
+          <div class="preview-box" id="previewBox">
+            <img class="preview" id="previewImg" alt="预览">
+            <div class="pl">生成中…</div>
+          </div>
+          <div class="btnrow">
+            <button class="primary" onclick="send(currentTpl)">发送这个模板</button>
+            <button onclick="preview(currentTpl, true)">换一张预览</button>
+          </div>
+          <div class="hint" id="tplHint">发送会覆盖卡片画面；失败会进队列，卡片一出现就自动补发。</div>
+        </div>
+        <div>
+          <h3>本模板设置</h3>
+          <div id="editor"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card hide" id="panel-scenes">
+      <div class="hd"><h3>场景广场</h3>
+        <button onclick="loadScenes()">刷新预览</button></div>
+      <div class="hint">点任意场景即可切到该模板并预览，不跳页面。</div>
+      <div id="sceneGrid" class="scene-grid"></div>
+    </section>
+
+    <section class="card hide" id="panel-device">
+      <h3>设备与配对</h3>
+      <div class="row"><span>已绑定 UUID</span><span id="devId" class="dev" style="margin:0">--</span></div>
+      <div class="btnrow">
+        <button onclick="scanDevices()">扫描附近设备</button>
+        <button class="primary" onclick="startPair()">开始配对（会显示每一步）</button>
+      </div>
+      <div class="row"><span>按键唤醒时随机推一张照片</span>
+        <span class="switch"><input type="checkbox" id="btnPhoto"><i></i></span></div>
+      <div class="hint">配对只需一次。之后传图不用按键：卡片会自己广播，服务最多等 3 分钟。</div>
+      <div id="pairHint" class="hint" style="display:none;color:var(--warm)"></div>
+      <div id="scanResult"></div>
+    </section>
+
+    <section class="card hide" id="panel-schedule">
+      <h3>每日计划</h3>
+      <div class="hint" id="schedState" style="margin:-4px 0 10px">调度器状态读取中…</div>
+      <div id="schedList"></div>
+      <div class="btnrow">
+        <button onclick="addSched()">+ 加一条</button>
+        <button class="primary" onclick="saveSched()">保存计划</button>
+        <button id="restoreBtn" onclick="restoreSched()" style="display:none">恢复上次计划</button>
+      </div>
+      <div class="hint">到点自动生成并推送；Mac 睡眠错过时，唤醒后 6 小时内补发。</div>
+    </section>
+
+    <section class="card hide" id="panel-photos">
+      <h3>照片与壁纸</h3>
+      <label class="f">照片文件夹（每行一个绝对路径）</label>
+      <div class="btnrow" style="margin:0 0 8px">
+        <button onclick="pickFolders()">＋ 用系统选择器添加文件夹</button>
+      </div>
+      <textarea id="folders" placeholder="/Users/you/Pictures/TodooCard&#10;/Users/you/Downloads/相机"></textarea>
+      <div class="row"><span>包含子文件夹（穿透轮换）</span>
+        <span class="switch"><input type="checkbox" id="recursive" checked><i></i></span></div>
+      <div class="grid2">
+        <div><label class="f">轮播方式</label>
+          <select id="photoMode">
+            <option value="shuffle">洗牌（一轮不重复）</option>
+            <option value="random">纯随机</option>
+            <option value="sequential">按顺序</option>
+          </select>
+        </div>
+        <div><label class="f">Bing 每日壁纸</label>
+          <div class="row" style="border:0;padding:0"><span class="hint" style="margin:0">文件夹为空时也能换图</span>
+            <span class="switch"><input type="checkbox" id="bingEnabled"><i></i></span></div>
+        </div>
+      </div>
+      <div class="row"><span>照片底部压信息带（日期/时间）</span>
+        <span class="switch"><input type="checkbox" id="photoOverlay" checked><i></i></span></div>
+      <div class="btnrow">
+        <button class="primary" onclick="saveContent()">保存照片设置</button>
+        <button onclick="showBing()">看今天的 Bing 壁纸</button>
+      </div>
+      <div class="hint" id="photoHint">共 0 张可选照片</div>
+      <img id="bingPrev" style="display:none;max-width:100%;margin-top:10px;border-radius:12px" alt="Bing">
+    </section>
+
+    <section class="card hide" id="panel-ai">
+      <h3>AI 生图</h3>
+      <div class="grid2">
+        <div><label class="f">接口地址（留空用免费出图）</label>
+          <input type="text" id="aiEndpoint" placeholder="https://api.openai.com/v1"></div>
+        <div><label class="f">模型</label>
+          <input type="text" id="aiModel" placeholder="gpt-image-1"></div>
+      </div>
+      <div class="grid2">
+        <div><label class="f">API Key</label>
+          <input type="password" id="aiKey" placeholder="sk-…"></div>
+        <div><label class="f">尺寸</label>
+          <input type="text" id="aiSize" placeholder="1024x1024"></div>
+      </div>
+      <label class="f">提示词（留空每次随机）</label>
+      <textarea id="aiPrompt" placeholder="a quiet desk at night, warm lamp, cinematic"></textarea>
+      <div class="btnrow">
+        <button onclick="randomPrompt()">随机一条内置提示词</button>
+        <button class="primary" onclick="saveAi()">保存 AI 设置</button>
+        <button onclick="generateAi()">生成一张</button>
+      </div>
+      <div class="hint" id="aiStatus">未生成</div>
+      <img id="aiPrev" style="display:none;max-width:100%;margin-top:10px;border-radius:12px" alt="AI">
+    </section>
+
+    <section class="card hide" id="panel-history">
+      <h3>发送历史</h3>
+      <div id="history"></div>
+    </section>
+  </main>
+</div>
+
+<div class="modal" id="pairModal">
+  <div class="box">
+    <h3 style="margin:0 0 6px">配对土豆片</h3>
+    <div class="hint" style="margin-top:0">按顺序做，界面会自动往下走。</div>
+    <div class="steps">
+      <div class="step" id="step1"><b>第 1 步</b><span>点「开始配对」</span></div>
+      <div class="step" id="step2"><b>第 2 步</b><span>长按背面按钮 5 秒</span></div>
+      <div class="step" id="step3"><b>第 3 步</b><span>等待「配对完成」</span></div>
+    </div>
+    <div class="pairlog" id="pairLog">等待开始…</div>
+    <div class="btnrow"><button class="primary" onclick="startPair()">开始配对</button>
+      <button onclick="closePair()">关闭</button></div>
+  </div>
+</div>
+
+<div class="sendpanel" id="sendPanel">
+  <div class="sp-head"><span class="sp-dot"></span><b id="spTitle">正在发送</b>
+    <button onclick="spHide()" title="隐藏">×</button></div>
+  <div class="sp-body" id="spBody">准备中…</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '';
+const $ = id => document.getElementById(id);
+let TPL_LABEL = {};
+let currentTpl = 'summary';
+let panel = 'tpl';
+let previewSeq = 0;
+let STATE = {};
+const toast = m => { const t=$('toast'); t.textContent=m; t.classList.add('show');
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2400); };
+const fmtTime = ts => new Date(ts*1000).toLocaleString('zh-CN',{hour12:false});
+const postJSON = async (url, body) => (await fetch(API+url,{method:'POST',
+  headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})})).json().catch(()=>({}));
+
+const SCENES = [
+  {k:'summary',  n:'每日总结', d:'日期 · 天气 · 待办 · 进度'},
+  {k:'todo',     n:'今日待办', d:'黄条标题 · 书写行'},
+  {k:'weather',  n:'天气看板', d:'当前天气 · 三段信息 · 趋势'},
+  {k:'calendar', n:'月历',     d:'本月网格 · 今天红圈 · 本周'},
+  {k:'quote',    n:'每日一句', d:'竖红条 · 引号大字'},
+  {k:'poem',     n:'每日诗词', d:'诗句 · 赏析'},
+  {k:'progress', n:'时间进度', d:'年度点阵 · 三条进度'},
+  {k:'energy',   n:'充电统计', d:'昨日用量 · 端口明细'},
+  {k:'countdown',n:'倒计时',   d:'纪念日 · 剩余天数'},
+  {k:'photo',    n:'照片轮播', d:'EXIF · 地点 · 天气'},
+  {k:'bing',     n:'Bing 壁纸', d:'每日一图'},
+  {k:'ai',       n:'AI 生图',  d:'提示词出图'},
+  {k:'custom',   n:'自定义',   d:'积木拼接'}
+];
+
+function renderScenes(){
+  const box = $('sceneGrid');
+  if (!box) return;
+  box.innerHTML = SCENES.map(s => `
+    <div class="scene" onclick="pickScene('${s.k}')">
+      <img src="${API}/api/card/preview?kind=${s.k}&t=${Date.now()}" alt="${s.n}" loading="lazy">
+      <div class="meta"><b>${s.n}</b><span>${s.d}</span></div>
+    </div>`).join('');
+}
+function pickScene(k){ currentTpl = k; switchPanel('tpl'); renderNav(); }
+async function loadScenes(){ renderScenes(); toast('预览已刷新'); }
+
+function renderNav(){
+  const nav = $('tplNav'); nav.innerHTML = '';
+  // renderNav 会重建列表，场景广场这条要每次补回去
+  const scenes = document.createElement('button');
+  scenes.innerHTML = '<span class="ico">◫</span>场景广场';
+  scenes.dataset.scenes = '1';
+  scenes.onclick = () => switchPanel('scenes');
+  nav.appendChild(scenes);
+  Object.keys(TPL_LABEL).forEach(k => {
+    const b = document.createElement('button');
+    b.dataset.tpl = k;
+    b.innerHTML = `<span class="ico">▤</span>${TPL_LABEL[k]}`;
+    b.classList.toggle('on', k === currentTpl && panel === 'tpl');
+    b.onclick = () => { currentTpl = k; switchPanel('tpl'); };
+    nav.appendChild(b);
+  });
+  document.querySelectorAll('#setNav button').forEach(b =>
+    b.classList.toggle('on', b.dataset.panel === panel));
+}
+function switchPanel(p){
+  panel = p;
+  ['tpl','scenes','device','schedule','photos','ai','history'].forEach(x =>
+    $('panel-'+x).classList.toggle('hide', x !== p));
+  document.querySelectorAll('#tplNav button').forEach(b =>
+    b.classList.toggle('on', p === 'tpl' && b.dataset.tpl === currentTpl));
+  document.querySelectorAll('#setNav button').forEach(b =>
+    b.classList.toggle('on', b.dataset.panel === p));
+  if (p === 'tpl'){ $('tplTitle').textContent = TPL_LABEL[currentTpl] || ''; renderEditor(); preview(currentTpl); }
+  if (p === 'scenes') renderScenes();
+  if (p === 'schedule'){ renderSched(STATE.schedule||[]); renderSchedState(); }
+  if (p === 'history') renderHistory(STATE.history||[]);
+}
+document.querySelectorAll('#setNav button').forEach(b => b.onclick = () => switchPanel(b.dataset.panel));
+
+function renderEditor(){
+  const box = $('editor');
+  if (currentTpl === 'todo'){
+    box.innerHTML = `<label class="f">今日待办（每行一条，最多 6 条）</label>
+      <textarea id="e_todos"></textarea>
+      <div class="btnrow"><button class="primary" onclick="saveTodos()">保存待办</button></div>`;
+    $('e_todos').value = (STATE.todos||[]).join('\n');
+  } else if (currentTpl === 'countdown'){
+    box.innerHTML = `<label class="f">纪念日（每行：2027-01-01 元旦）</label>
+      <textarea id="e_cd"></textarea>
+      <div class="btnrow"><button class="primary" onclick="saveCountdowns()">保存纪念日</button></div>`;
+    $('e_cd').value = (STATE.countdowns||[]).map(x=>`${x.date} ${x.name}`).join('\n');
+  } else if (currentTpl === 'weather' || currentTpl === 'summary'){
+    const w = STATE.weather || {};
+    box.innerHTML = `<label class="f">城市</label><input type="text" id="e_city" value="${w.name||''}">
+      <div class="grid2"><div><label class="f">纬度</label><input type="text" id="e_lat" value="${w.lat??''}"></div>
+      <div><label class="f">经度</label><input type="text" id="e_lon" value="${w.lon??''}"></div></div>
+      <div class="btnrow"><button class="primary" onclick="saveWeather()">保存</button></div>`;
+  } else if (currentTpl === 'poem'){
+    renderPoemEditor();
+  } else if (currentTpl === 'custom'){
+    renderBlockEditor();
+  } else if (currentTpl === 'ai'){
+    box.innerHTML = `<div class="hint">提示词、接口和 Key 在左侧「AI 生图」里统一设置。</div>
+      <div class="btnrow"><button onclick="switchPanel('ai')">去设置</button></div>`;
+  } else if (currentTpl === 'photo' || currentTpl === 'bing'){
+    box.innerHTML = `<div class="hint">文件夹、轮播方式和 Bing 开关在左侧「照片与壁纸」里设置。</div>
+      <div class="btnrow"><button onclick="switchPanel('photos')">去设置</button></div>`;
+  } else if (currentTpl === 'quote' || currentTpl === 'poem'){
+    box.innerHTML = `<div class="hint">点「换一张预览」会换一条新的${currentTpl==='quote'?'句子':'诗词'}，每天 0 点自动换新。</div>`;
+  } else {
+    box.innerHTML = `<div class="hint">这个模板没有额外设置，直接发送即可。</div>`;
+  }
+}
+
+const BLOCK_LABEL = {title:'标题', bigdate:'日期大字', weather:'天气', todos:'待办',
+                     quote:'每日一句', dots:'年度点阵', image:'图片', text:'文本行', rule:'分割线'};
+let CUSTOM = null;
+
+function renderPoemEditor(){
+  const box = $('editor');
+  box.innerHTML = `
+    <label class="f">赏析（留空自动生成）</label>
+    <textarea id="poemNote" rows="6" style="width:100%;box-sizing:border-box"
+      placeholder="写一段 60~100 字的赏析，会印在诗词下方">${(STATE.poem_note||'')}</textarea>
+    <div class="btnrow"><button class="primary" onclick="savePoemNote()">保存并预览</button></div>
+    <div class="hint">留空则根据诗词自动生成一句话；写了就用你的。</div>`;
+}
+
+async function savePoemNote(){
+  const v = $('poemNote').value.trim();
+  const d = await postJSON('/api/card/config', {poem_note: v});
+  if (d.ok && d.card) STATE = d.card;
+  toast(v ? '已保存自定义赏析' : '已清空，将自动生成');
+  preview('poem', true);
+}
+
+function renderBlockEditor(){
+  CUSTOM = JSON.parse(JSON.stringify((STATE.custom) || {title:'我的卡片', accent:'red', blocks:[]}));
+  const box = $('editor');
+  const opts = Object.keys(BLOCK_LABEL).map(k=>`<option value="${k}">${BLOCK_LABEL[k]}</option>`).join('');
+  box.innerHTML = `
+    <label class="f">卡片标题</label><input id="c_title" value="${CUSTOM.title||''}">
+    <label class="f">强调色</label>
+    <select id="c_accent">
+      <option value="red">红</option><option value="blue">蓝</option>
+      <option value="green">绿</option><option value="black">黑</option><option value="yellow">黄</option>
+    </select>
+    <label class="f">积木（从上到下）</label>
+    <div id="c_blocks"></div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <select id="c_add" style="flex:1">${opts}</select>
+      <button onclick="addBlock()">＋ 添加</button>
+    </div>
+    <div class="btnrow"><button class="primary" onclick="saveCustom()">保存并预览</button></div>`;
+  $('c_accent').value = CUSTOM.accent || 'red';
+  drawBlocks();
+}
+
+function drawBlocks(){
+  const box = $('c_blocks'); if (!box) return;
+  box.innerHTML = '';
+  (CUSTOM.blocks||[]).forEach((b, i) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:6px';
+    const txt = (b.type === 'text' || b.type === 'title')
+      ? `<input data-i="${i}" class="btext" value="${(b.text||'').replace(/"/g,'&quot;')}" placeholder="文字" style="flex:1">`
+      : `<span style="flex:1;color:var(--sub);font-size:12.5px">${BLOCK_LABEL[b.type]||b.type}</span>`;
+    row.innerHTML = `${txt}
+      <button onclick="moveBlock(${i},-1)">↑</button>
+      <button onclick="moveBlock(${i},1)">↓</button>
+      <button onclick="delBlock(${i})">×</button>`;
+    box.appendChild(row);
+  });
+  box.querySelectorAll('.btext').forEach(inp => {
+    inp.onchange = () => { CUSTOM.blocks[+inp.dataset.i].text = inp.value; };
+  });
+}
+function addBlock(){
+  CUSTOM.blocks = CUSTOM.blocks || [];
+  CUSTOM.blocks.push({type: $('c_add').value});
+  drawBlocks();
+}
+function moveBlock(i, d){
+  const j = i + d; if (j < 0 || j >= CUSTOM.blocks.length) return;
+  [CUSTOM.blocks[i], CUSTOM.blocks[j]] = [CUSTOM.blocks[j], CUSTOM.blocks[i]];
+  drawBlocks();
+}
+function delBlock(i){ CUSTOM.blocks.splice(i,1); drawBlocks(); }
+async function saveCustom(){
+  CUSTOM.title = $('c_title').value.trim() || '我的卡片';
+  CUSTOM.accent = $('c_accent').value;
+  const d = await postJSON('/api/card/config', {custom: CUSTOM});
+  toast(d.ok ? '已保存' : '保存失败');
+  load(); preview('custom', true);
+}
+
+async function load(){
+  const c = (await (await fetch(API+'/api/card',{cache:'no-store'})).json()).card;
+  STATE = c;
+  $('devPill').textContent = c.device_id ? (c.device_name || '已绑定') : '未指定设备';
+  $('devPill').className = 'pill ' + (c.device_id ? 'on' : 'off');
+  $('devId').textContent = c.device_id || '未绑定（先扫描并选择设备）';
+  $('folders').value = (c.folders||[]).join('\n');
+  $('photoMode').value = c.photo_mode || 'shuffle';
+  $('photoOverlay').checked = c.photo_overlay !== false;
+  $('recursive').checked = c.recursive !== false;
+  $('bingEnabled').checked = c.bing_enabled !== false;
+  $('btnPhoto').checked = !!c.button_photo;
+  $('photoHint').textContent = `共 ${c.photo_count} 张可选照片`;
+  const sc = Math.round((c.scale || 1.1) * 100);
+  $('scaleRange').value = Math.min(130, Math.max(100, sc));
+  $('scaleVal').textContent = sc + '%';
+  $('aiEndpoint').value = (c.ai && c.ai.endpoint) || '';
+  $('aiModel').value = (c.ai && c.ai.model) || '';
+  $('aiSize').value = (c.ai && c.ai.size) || '1024x1024';
+  $('aiPrompt').value = c.ai_prompt || '';
+  $('aiKey').placeholder = (c.ai && c.ai.api_key_set) ? '已保存（留空不改）' : 'sk-…（留空用免费出图）';
+  if (c.ai_last && c.ai_last.path){
+    $('aiPrev').src = '/api/card/ai/image?t=' + (c.ai_last.ts || Date.now());
+    $('aiPrev').style.display = 'block';
+    $('aiStatus').textContent = '上次生成：' + (c.ai_last.prompt||'').slice(0,60);
+  }
+  if (c.quote) $('quoteLine').textContent = `每日一句：${c.quote.text} — ${c.quote.from||''}`;
+  if (c.last){
+    $('lastPill').textContent = (c.last.ok?'上次成功 ':'上次失败 ') + fmtTime(c.last.ts);
+    $('lastPill').className = 'pill ' + (c.last.ok?'on':'off');
+  }
+  if (c.busy) $('lastPill').textContent = '正在发送…';
+  const q = (c.outbox||[]).length;
+  $('queuePill').style.display = q ? '' : 'none';
+  $('queuePill').textContent = `队列 ${q}`;
+  renderSched(c.schedule||[]);
+  renderRestoreBtn();
+  renderHistory(c.history||[]);
+  if (panel === 'tpl') renderEditor();
+}
+
+async function preview(kind, fresh){
+  const img = $('previewImg'), box = $('previewBox');
+  const seq = ++previewSeq;
+  box.classList.add('loading');
+  img.onload = () => { if (seq === previewSeq) box.classList.remove('loading'); };
+  img.onerror = () => { if (seq === previewSeq){ box.classList.remove('loading'); toast('这张生成失败，点「换一张预览」重试'); } };
+  img.src = `${API}/api/card/preview?kind=${encodeURIComponent(kind)}&t=${Date.now()}` + (fresh ? '&fresh=1' : '');
+  if (fresh && (kind === 'quote' || kind === 'poem')) setTimeout(load, 1500);
+}
+
+function renderSched(list){
+  const box = $('schedList'); if (!box) return;
+  box.innerHTML = '';
+  list.forEach(it => {
+    const div = document.createElement('div'); div.className = 'sched';
+    const opts = Object.keys(TPL_LABEL).map(k =>
+      `<option value="${k}"${it.kind===k?' selected':''}>${TPL_LABEL[k]}</option>`).join('');
+    div.innerHTML = `<input type="time" value="${it.time}"><select>${opts}</select>
+      <button onclick="runNow(this.parentNode.querySelector('select').value)">执行</button>
+      <button onclick="this.parentNode.remove()">删</button>`;
+    box.appendChild(div);
+  });
+}
+function renderSchedState(){
+  const el = $('schedState'); if (!el) return;
+  const t = STATE.last_tick ? new Date(STATE.last_tick*1000).toLocaleTimeString('zh-CN',{hour12:false}) : '—';
+  const age = STATE.last_tick ? Math.round(Date.now()/1000 - STATE.last_tick) : null;
+  const alive = age !== null && age < 60;
+  el.innerHTML = (alive ? '🟢 调度器运行中' : '🔴 调度器可能停了')
+    + ` · 上次检查 ${t}${age!==null?`（${age}s 前）`:''}`;
+  el.style.color = alive ? 'var(--ok)' : 'var(--danger)';
+}
+
+function addSched(){
+  const div = document.createElement('div'); div.className = 'sched';
+  const opts = Object.keys(TPL_LABEL).map(k => `<option value="${k}">${TPL_LABEL[k]}</option>`).join('');
+  div.innerHTML = `<input type="time" value="08:00"><select>${opts}</select>
+    <button onclick="runNow(this.parentNode.querySelector('select').value)">执行</button>
+    <button onclick="this.parentNode.remove()">删</button>`;
+  $('schedList').appendChild(div);
+}
+const collectSched = () => [...document.querySelectorAll('#schedList .sched')].map(d => ({
+  time: d.querySelector('input[type=time]').value,
+  kind: d.querySelector('select').value, enabled: true })).filter(x=>x.time);
+function renderRestoreBtn(){
+  const b = $('restoreBtn');
+  if (!b) return;
+  const has = (STATE.schedule_backup||[]).length > 0;
+  b.style.display = has ? '' : 'none';
+  if (has) b.textContent = `恢复上次计划（${STATE.schedule_backup.length} 条）`;
+}
+
+async function restoreSched(){
+  const d = await postJSON('/api/card/schedule/restore', {});
+  if (d.ok && d.card){ STATE = d.card; renderSched(STATE.schedule||[]);
+    renderSchedState(); renderRestoreBtn(); toast('已恢复上次计划'); }
+  else toast('恢复失败：' + (d.error||''));
+}
+
+async function runNow(kind){
+  toast('已触发：' + (TPL_LABEL[kind]||kind));
+  await postJSON('/api/card/send', {kind});
+  switchPanel('tpl'); currentTpl = kind; renderNav(); switchPanel('tpl');
+}
+
+async function saveSched(){
+  const rows = collectSched();
+  if (!rows.length && (STATE.schedule||[]).length &&
+      !confirm('现在列表是空的，保存会把计划全部清空。确定吗？（清空后可用「恢复上次计划」找回）')) {
+    return;
+  }
+  const d = await postJSON('/api/card/config',{schedule:rows});
+  if (d.ok && d.card){
+    // 直接用服务端返回的规范化结果刷新，避免 30 秒轮询用旧数据把界面刷回去
+    STATE = d.card;
+    renderSched(STATE.schedule || []);
+    renderSchedState();
+    renderRestoreBtn();
+    toast('计划已保存');
+  } else {
+    toast('保存失败：' + (d.error || '服务端拒绝'));
+  }
+}
+
+async function saveTodos(){
+  const todos = ($('e_todos')?.value || '').split('\n').map(x=>x.trim()).filter(Boolean);
+  const d = await postJSON('/api/card/config', {todos});
+  toast(d.ok?'待办已保存':'保存失败'); load();
+}
+async function saveCountdowns(){
+  const countdowns = ($('e_cd')?.value || '').split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{
+    const m = l.match(/^(\d{4}-\d{2}-\d{2})\s*(.*)$/);
+    return m ? {date:m[1], name:m[2]||'纪念日'} : null;
+  }).filter(Boolean);
+  const d = await postJSON('/api/card/config', {countdowns});
+  toast(d.ok?'纪念日已保存':'保存失败'); load();
+}
+async function saveWeather(){
+  const weather = {enabled:true, name:$('e_city').value.trim()||'本地',
+    lat: parseFloat($('e_lat').value)||39.9042, lon: parseFloat($('e_lon').value)||116.4074};
+  const d = await postJSON('/api/card/config', {weather});
+  toast(d.ok?'已保存':'保存失败'); load();
+}
+async function saveContent(){
+  const body = {folders: $('folders').value.split('\n').map(x=>x.trim()).filter(Boolean),
+    photo_mode:$('photoMode').value, photo_overlay:$('photoOverlay').checked,
+    recursive:$('recursive').checked,
+    bing_enabled:$('bingEnabled').checked, button_photo:$('btnPhoto').checked};
+  const d = await postJSON('/api/card/config', body);
+  toast(d.ok?'已保存':'保存失败'); load();
+}
+async function saveAi(){
+  const ai = {endpoint:$('aiEndpoint').value.trim(), model:$('aiModel').value.trim(),
+              size:$('aiSize').value.trim()||'1024x1024'};
+  if ($('aiKey').value.trim()) ai.api_key = $('aiKey').value.trim();
+  const d = await postJSON('/api/card/config', {ai, ai_prompt:$('aiPrompt').value.trim()});
+  toast(d.ok?'AI 设置已保存':'保存失败'); $('aiKey').value=''; load();
+}
+async function randomPrompt(){
+  const d = await (await fetch('/api/card/ai/prompt')).json();
+  $('aiPrompt').value = d.prompt || ''; toast('已填入一条提示词');
+}
+async function generateAi(){
+  $('aiStatus').textContent = '生成中，可能要 20~90 秒…';
+  const d = await postJSON('/api/card/ai/generate', {prompt:$('aiPrompt').value.trim()});
+  if (!d.ok){ $('aiStatus').textContent = '失败：' + (d.error||''); return; }
+  $('aiPrev').src = d.image + '&t=' + Date.now(); $('aiPrev').style.display='block';
+  $('aiStatus').textContent = '已生成：' + (d.prompt||'').slice(0,60);
+  currentTpl = 'ai'; switchPanel('tpl');
+}
+
+function spShow(title){
+  const p = $('sendPanel'); p.className = 'sendpanel show'; p.classList.remove('ok','bad');
+  $('spTitle').textContent = title; $('spBody').textContent = '准备中…';
+}
+function spDone(ok, text){
+  const p = $('sendPanel'); p.classList.add(ok ? 'ok' : 'bad');
+  $('spTitle').textContent = ok ? '发送成功' : '发送失败';
+  $('spBody').textContent = text;
+  if (ok) setTimeout(spHide, 6000);
+}
+function spHide(){ $('sendPanel').className = 'sendpanel'; }
+
+async function send(kind){
+  const before = STATE.last;
+  spShow('正在发送 · ' + (TPL_LABEL[kind] || kind));
+  $('spBody').textContent = '正在等待卡片广播（最长 3 分钟）…';
+  const d = await postJSON('/api/card/send', {kind});
+  if (!d.ok){ spDone(false, d.error || '启动失败'); return; }
+  for (let i=0;i<90;i++){
+    await new Promise(r=>setTimeout(r,3000));
+    const c = (await (await fetch(API+'/api/card',{cache:'no-store'})).json()).card;
+    STATE = c;
+    $('spBody').textContent = c.busy ? `正在连接并写入卡片…（已等 ${i*3} 秒）` : '等待结果…';
+    if (c.last && (!before || c.last.ts !== before.ts)){
+      spDone(c.last.ok, c.last.ok ? `用时 ${c.last.seconds}s` : (c.last.message||'').slice(0,120));
+      break;
+    }
+  }
+  load();
+}
+
+async function scanDevices(){
+  $('scanResult').innerHTML = '<div class="hint">扫描中，约 30 秒…</div>';
+  const d = await postJSON('/api/card/scan', {});
+  if (!d.ok){ $('scanResult').innerHTML = `<div class="hint" style="color:var(--danger)">${d.error||'扫描失败'}</div>`; return; }
+  const lines = d.devices||[];
+  if (!lines.length){ $('scanResult').innerHTML = '<div class="hint">没扫到兼容设备</div>'; return; }
+  $('scanResult').innerHTML = lines.map(ln=>{
+    const m = ln.match(/id=([0-9A-Fa-f-]{36})/);
+    return `<div class="dev">${ln.replace(/</g,'&lt;')}<div style="margin-top:6px">
+      <button onclick="useDevice('${m?m[1]:''}')">用这台</button></div></div>`;
+  }).join('');
+}
+async function useDevice(id){
+  const d = await postJSON('/api/card/config', {device_id:id});
+  if (d.ok) toast('已绑定'); load();
+}
+let pairTimer = null;
+function closePair(){ $('pairModal').classList.remove('show'); clearInterval(pairTimer); load(); }
+async function startPair(){
+  $('pairModal').classList.add('show'); $('pairLog').textContent = '等待卡片进入配对窗口…';
+  ['step1','step2','step3'].forEach(s=>$(s).classList.remove('on','done'));
+  $('step1').classList.add('done'); $('step2').classList.add('on');
+  const d = await postJSON('/api/card/pair/start', {});
+  if (!d.ok){ $('pairLog').textContent = '启动失败：' + (d.error||''); return; }
+  clearInterval(pairTimer);
+  pairTimer = setInterval(async () => {
+    const st = await (await fetch('/api/card/pair/status')).json();
+    $('pairLog').textContent = (st.log||[]).join('\n') || '等待中…';
+    $('pairLog').scrollTop = $('pairLog').scrollHeight;
+    if (st.state === 'pairing'){ $('step3').classList.add('on'); }
+    if (st.state === 'success'){ $('step3').classList.add('done'); toast('配对完成');
+      clearInterval(pairTimer); setTimeout(closePair, 1500); }
+    if (st.state === 'fail'){ toast('配对失败，重试一次'); clearInterval(pairTimer); }
+  }, 1000);
+}
+let scaleTimer = null;
+function onScale(live){
+  const v = parseInt($('scaleRange').value, 10) / 100;
+  $('scaleVal').textContent = Math.round(v * 100) + '%';
+  clearTimeout(scaleTimer);
+  scaleTimer = setTimeout(async () => {
+    await postJSON('/api/card/config', {scale: v});
+    if (!live) load();
+    preview(currentTpl);
+  }, live ? 220 : 0);
+}
+
+async function pickFolders(){
+  toast('已弹出系统文件夹选择器…');
+  const d = await postJSON('/api/card/pick-folder', {});
+  if (!d.ok){ toast('选择失败：' + (d.error||'')); return; }
+  if (!d.paths || !d.paths.length){ toast('没有选择文件夹'); return; }
+  $('folders').value = (d.folders || []).join('\n');
+  toast('已添加 ' + d.paths.length + ' 个文件夹');
+  load();
+}
+
+async function showBing(){
+  const img = $('bingPrev'); img.src = '/api/card/bing?t=' + Date.now(); img.style.display='block';
+}
+function renderHistory(list){
+  const box = $('history'); if (!box) return;
+  if (!list.length){ box.innerHTML = '<div class="hint">还没有发送记录</div>'; return; }
+  box.innerHTML = list.slice().reverse().map(h=>`
+    <div class="hist"><span class="${h.ok?'ok':'bad'}">${h.ok?'✓':'✕'}</span>
+      <span style="width:130px;color:var(--dim)">${fmtTime(h.ts)}</span>
+      <span style="width:80px">${TPL_LABEL[h.kind]||h.kind}</span>
+      <span style="flex:1;word-break:break-all">${(h.file||h.message||'').slice(0,70)}</span>
+      <span style="color:var(--dim)">${h.seconds?h.seconds+'s':''}</span></div>`).join('');
+}
+
+async function boot(){
+  try{
+    const d = await (await fetch('/api/card/templates')).json();
+    if (d.ok && d.templates) TPL_LABEL = d.templates;
+  }catch(e){}
+  renderNav();
+  await load();
+  const qp = new URLSearchParams(location.search);
+  const wantPanel = qp.get('panel');
+  const want = qp.get('kind');
+  if (want && TPL_LABEL[want]) currentTpl = want;
+  switchPanel(wantPanel || 'tpl');
+  setInterval(load, 30000);
+}
+boot();
+</script>
+</body>
+</html>
