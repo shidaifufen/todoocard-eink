@@ -1124,7 +1124,12 @@ class CardService:
         # 深色 HUD 下抗锯齿会被二值化吃掉一圈，字号整体再放大 10% 才看得清
         R.set_scale(_sc * (1.1 if self.cfg.get("theme") == "wo" else 1.0))
         if kind == "photo":
-            photo = self.pick_photo(consume=consume)
+            # 预览和发送必须是同一张：钉住选中的照片，直到推送成功或点「换一张预览」
+            pin = getattr(self, "_photo_pin", None)
+            if fresh or not pin or not Path(pin).exists():
+                pin = self.pick_photo(consume=False)
+                self._photo_pin = pin
+            photo = pin
             if not photo:
                 raise RuntimeError("照片文件夹是空的（在网页里添加目录）")
             return self.compose_photo(Path(photo)), Path(photo).name
@@ -1350,6 +1355,12 @@ class CardService:
                     self._enqueue(kind)
                 self._add_history(entry)
                 self._emit()
+                if res["ok"] and kind == "photo":
+                    self._photo_pin = None      # 已上屏，换下一张
+                    try:
+                        self.pick_photo(consume=True)
+                    except Exception:
+                        pass
                 _LOGGER.info("土豆片推送 %s: %s (%.1fs)", kind, "成功" if res["ok"] else "失败",
                              res["seconds"])
                 return {"ok": res["ok"], **entry, "output": res["output"]}
