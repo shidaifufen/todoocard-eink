@@ -193,6 +193,14 @@ class CardService:
                 kind = _k if _k in TEMPLATES else "summary"
                 clean.append({"time": t, "kind": kind, "enabled": bool(it.get("enabled", True))})
             cur["schedule"] = sorted(clean, key=lambda x: x["time"])
+            # 新存的计划不应该"追溯执行"：今天已经过点的那几条直接标记为已处理，
+            # 否则一保存，调度器看到"到点了但没跑过"，立刻推一张卡上去。
+            runs = cur.setdefault("last_runs", {})
+            _now = datetime.now()
+            for it in cur["schedule"]:
+                hh, mm = (int(x) for x in it["time"].split(":"))
+                if _now.replace(hour=hh, minute=mm, second=0, microsecond=0) <= _now:
+                    runs.setdefault(f"{it['time']}_{it['kind']}", int(_now.timestamp()))
         if "folders" in patch:
             cur["folders"] = [str(f).strip() for f in (patch.get("folders") or []) if str(f).strip()]
         if "countdowns" in patch:

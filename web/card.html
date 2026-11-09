@@ -525,7 +525,8 @@ async function load(){
   const q = (c.outbox||[]).length;
   $('queuePill').style.display = q ? '' : 'none';
   $('queuePill').textContent = `队列 ${q}`;
-  renderSched(c.schedule||[]);
+  // 正在编辑计划时不要用轮询结果重建列表，否则没保存的改动会被"弹掉"
+  if (panel !== 'schedule') renderSched(c.schedule||[]);
   renderRestoreBtn();
   renderHistory(c.history||[]);
   if (panel === 'tpl') renderEditor();
