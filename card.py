@@ -954,14 +954,15 @@ class CardService:
         title = (poem.get("title") or "").strip()
         if not title:
             return ""
-        cached = self._note_cache.get(title)
+        _ck = f"v2:{title}"
+        cached = self._note_cache.get(_ck)
         if cached:
             return cached
 
         first = (poem.get("lines") or [""])[0]
-        prompt = (f"请用 70~100 字白话写一段诗词赏析，讲意境和情绪，不要逐句翻译，"
-                  f"不要分点，不要引号。诗词：《{title}》{poem.get('dynasty','')}"
-                  f"{poem.get('author','')}，首句：{first}")
+        prompt = (f"为中学课本写一段赏析，70~110 字，平实准确，不抒情、不分点。\n"
+                  f"《{title}》{poem.get('dynasty','')}{poem.get('author','')}\n"
+                  f"原文：{'／'.join((poem.get('lines') or [])[:4]) or first}")
         note = self._ai_text(prompt)
         if len(note) < 20:
             note = ""
