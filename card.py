@@ -408,6 +408,25 @@ class CardService:
 
     # ── 系统文件夹选择器 ──
     def pick_folders(self) -> list[str]:
+        if sys.platform != "darwin":
+            return self._pick_folders_tk()
+        return self._pick_folders_macos()
+
+    def _pick_folders_tk(self) -> list[str]:
+        """Windows / Linux：tkinter 只能一次选一个，多选就多弹几次。"""
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()
+            picked = filedialog.askdirectory(title="选择照片文件夹（可多次选择）")
+            root.destroy()
+            return [picked] if picked else []
+        except Exception as e:
+            _LOGGER.warning("选文件夹失败: %s", e)
+            return []
+
+    def _pick_folders_macos(self) -> list[str]:
         """弹 macOS 原生「选择文件夹」对话框，返回选中的绝对路径。
 
         用 osascript 调 NSOpenPanel（choose folder），支持一次选多个；
@@ -1177,6 +1196,8 @@ class CardService:
         return sender, conv
 
     def _build_payload(self, image_path: Path) -> dict:
+        if sys.platform != "darwin":
+            return self._build_payload_python(image_path)
         sender, conv = self._ensure_bins()
         work = self.cards_dir / "work"
         if work.exists():
@@ -1204,6 +1225,21 @@ class CardService:
         return {"payload": qlz, "legacy": f"{prefix}.protocol.legacy.qlz",
                 "raw": f"{prefix}.controller.bin", "sender": str(sender)}
 
+    def _build_payload_python(self, image_path: Path) -> dict:
+        """Windows / Linux：payload.py 生成的产物与 Swift 工具逐字节一致（已 md5 对齐）。"""
+        import payload as P
+        work = self.cards_dir / "work"
+        if work.exists():
+            shutil.rmtree(work)
+        work.mkdir(parents=True)
+        arts = P.build(Path(image_path), work / "img")
+        qlz = work / "img.protocol.qlz"
+        import quicklz_payload
+        raw = arts["controller"].read_bytes()
+        qlz.write_bytes(quicklz_payload.build_level3_payload(raw))
+        return {"payload": qlz, "legacy": arts["legacy"], "raw": arts["controller"],
+                "sender": None}
+
     def _wait_for_card(self, timeout: float) -> bool:
         """先自己扫，扫到再交给发送器——卡片平时不广播，直接发必然扑空。"""
         deadline = time.time() + timeout
@@ -1213,6 +1249,26 @@ class CardService:
         return False
 
     def _send_blocking(self, image_path: Path, wait_sec: float | None = None) -> dict:
+        if sys.platform != "darwin":
+            return self._send_python(image_path, wait_sec)
+        return self._send_macos(image_path, wait_sec)
+
+    def _send_python(self, image_path: Path, wait_sec: float | None = None) -> dict:
+        """Windows / Linux：payload.py + sender.py（bleak）。"""
+        import asyncio as _aio
+        import sender as S
+        t0 = time.time()
+        try:
+            art = self._build_payload_python(image_path)
+            res = _aio.run(S.send(art["payload"], self.cfg.get("device_id") or None,
+                                  log=lambda m: _LOGGER.info("%s", m),
+                                  timeout=wait_sec or 120))
+            res["seconds"] = round(time.time() - t0, 1)
+            return res
+        except Exception as e:
+            return {"ok": False, "seconds": round(time.time() - t0, 1), "message": str(e)}
+
+    def _send_macos(self, image_path: Path, wait_sec: float | None = None) -> dict:
         started = time.time()
         dev = (self.cfg.get("device_id") or "").strip()
         if not dev:

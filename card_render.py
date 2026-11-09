@@ -24,16 +24,39 @@ WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"
 WEEKDAYS_SHORT = ["一", "二", "三", "四", "五", "六", "日"]
 
 FONTS = {
-    "bold": ["/System/Library/Fonts/STHeiti Medium.ttc",
-             "/System/Library/Fonts/Hiragino Sans GB.ttc",
-             "/System/Library/Fonts/Supplemental/Songti.ttc"],
-    "light": ["/System/Library/Fonts/STHeiti Light.ttc",
-              "/System/Library/Fonts/Hiragino Sans GB.ttc",
-              "/System/Library/Fonts/Supplemental/Songti.ttc"],
-    "num": ["/System/Library/Fonts/HelveticaNeue.ttc",
-            "/System/Library/Fonts/Avenir Next.ttc",
-            "/System/Library/Fonts/Helvetica.ttc",
-            "/System/Library/Fonts/SFNS.ttf"],
+    "bold": [
+        # macOS
+        "/System/Library/Fonts/STHeiti Medium.ttc",
+        "/System/Library/Fonts/Hiragino Sans GB.ttc",
+        "/System/Library/Fonts/Supplemental/Songti.ttc",
+        # Windows
+        "C:/Windows/Fonts/msyhbd.ttc",
+        "C:/Windows/Fonts/msyh.ttc",
+        "C:/Windows/Fonts/simhei.ttf",
+        # Linux
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+    ],
+    "light": [
+        "/System/Library/Fonts/STHeiti Light.ttc",
+        "/System/Library/Fonts/Hiragino Sans GB.ttc",
+        "/System/Library/Fonts/Supplemental/Songti.ttc",
+        "C:/Windows/Fonts/msyh.ttc",
+        "C:/Windows/Fonts/simhei.ttf",
+        "C:/Windows/Fonts/simsun.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+    ],
+    "num": [
+        "/System/Library/Fonts/HelveticaNeue.ttc",
+        "/System/Library/Fonts/Avenir Next.ttc",
+        "/System/Library/Fonts/Helvetica.ttc",
+        "/System/Library/Fonts/SFNS.ttf",
+        "C:/Windows/Fonts/arialbd.ttf",
+        "C:/Windows/Fonts/arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ],
 }
 
 
