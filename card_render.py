@@ -681,13 +681,25 @@ def render_poem(ctx: dict):
     d = ImageDraw.Draw(img)
 
     title = p.get("title") or "今日诗词"
+    # 长词牌不外抛：先缩字号，缩到 22 还放不下就在「·」处断成两行
+    title_lines = [title]
     tf = font("bold", 30)
-    while text_width(d, title, tf) > CARD_W - M * 2 - 90 and tf.size > 18:
+    while text_width(d, title, tf) > CARD_W - M * 2 - 60 and tf.size > 22:
         tf = font("bold", tf.size - 2)
-    d.rectangle([M, 34, M + 13, 47], fill=RED)
-    d.text((M + 24, 20), title, font=tf, fill=BLACK)
+    if text_width(d, title, tf) > CARD_W - M * 2 - 60 and "·" in title:
+        a, b = title.split("·", 1)
+        title_lines = [a.strip() + "·", b.strip()]
+        tf = font("bold", 24)
+        while any(text_width(d, t, tf) > CARD_W - M * 2 - 60 for t in title_lines) and tf.size > 18:
+            tf = font("bold", tf.size - 2)
 
-    ay = 20 + tf.size + 4
+    d.rectangle([M, 34, M + 13, 47], fill=RED)
+    ty = 20
+    for tl in title_lines:
+        d.text((M + 24, ty), tl, font=tf, fill=BLACK)
+        ty += int(tf.size * 1.15)
+
+    ay = ty + 2
     if p.get("author"):
         d.text((M + 24, ay), f"{p.get('dynasty','')} · {p['author']}",
                font=font("light", 17), fill=BLACK)
@@ -695,38 +707,39 @@ def render_poem(ctx: dict):
     d.line([M, ry, CARD_W - M, ry], fill=BLACK, width=3)
     d.line([M, ry, M + 90, ry], fill=RED, width=6)
 
-    lines = p.get("lines") or ["今天也要好好生活。"]
+    raw_lines = p.get("lines") or ["今天也要好好生活。"]
     nf = font("light", 20)
     note_lines = wrap(d, note, nf, CARD_W - M * 2)[:10] if note else []
     note_h = (len(note_lines) * 34 + 46) if note_lines else 0
 
-    f = font("bold", 34)
-    for size in (34, 30, 26, 22, 19):
+    # 诗句可能很长（词牌常见），先按宽度折行，再按"总行数放得下"选字号
+    avail_h = CARD_H - 120 - (ry + 24) - note_h - 20
+    f, disp = font("bold", 32), []
+    for size in (32, 28, 24, 21, 19):
         f = font("bold", size)
         lh = int(size * 1.7)
-        body_h = len(lines) * lh
-        avail = CARD_H - 120 - (ry + 24)
-        if all(text_width(d, ln, f) <= CARD_W - M * 2 for ln in lines) and body_h + note_h + 30 <= avail:
+        disp = []
+        for ln in raw_lines:
+            disp += wrap(d, ln, f, CARD_W - M * 2)
+        if len(disp) * lh <= avail_h:
             break
 
-    # 正文 + 赏析整体在标题区与印章之间做垂直分配，避免底部一大片空
     lh = int(f.size * 1.7)
-    body_h = len(lines) * lh
-    total = body_h + note_h
-    space = (CARD_H - 130) - (ry + 20)
-    y = ry + 20 + max(0, min(130, (space - total) // 2))
-    lh = int(f.size * 1.7)
-    for ln in lines:
+    total_h = len(disp) * lh
+    y = ry + 24 + max(0, min(60, (avail_h - total_h) // 3))
+    for ln in disp:
         d.text((M, y), ln, font=f, fill=BLACK)
         y += lh
 
-    if note_lines:
+    if note_lines and y + 40 < CARD_H - 130:
         y += 6
         d.line([M, y, CARD_W - M, y], fill=BLACK, width=1)
         y += 14
         d.text((M, y), "赏析", font=font("bold", 17), fill=RED)
         y += 28
         for ln in note_lines:
+            if y > CARD_H - 150:
+                break
             d.text((M, y), ln, font=nf, fill=BLACK)
             y += 34
 

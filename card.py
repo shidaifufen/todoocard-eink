@@ -20,6 +20,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -32,6 +33,10 @@ from pathlib import Path
 from aiohttp import web
 
 _LOGGER = logging.getLogger("todoocard")
+
+# 字号是 card_render 的模块级全局量；发送在 worker 线程渲染、预览在事件循环渲染，
+# 两边同时跑会互相覆盖字号。加锁保证一次只有一个渲染。
+_RENDER_LOCK = threading.Lock()
 
 CARD_W, CARD_H = 528, 792
 BLACK = (0, 0, 0)
@@ -131,7 +136,10 @@ class CardService:
             "recursive": True,          # 是否穿透子文件夹
             "scale": 1.1,               # 字号缩放（1.0~1.35）
             "fill": True,               # 内容整体放大填满画布
-            "theme": "light",           # light / wo（流浪地球工业风）
+            "theme": "light",           # light / wo
+            "retry_max": 3,
+            "retry_delay_min": 5,
+            "catch_up_min": 30,
             "poem_note": "",            # 自定义赏析；留空则自动生成
             "custom": {"title": "我的卡片", "accent": "red",
                        "blocks": [{"type": "bigdate"}, {"type": "todos"},
@@ -1026,7 +1034,7 @@ class CardService:
         兼容两种返回：b64_json（OpenAI gpt-image-1）和 url（大多数国产兼容服务）。
         """
         cfg = self.cfg.get("ai") or {}
-        endpoint = (cfg.get("endpoint") or "").strip().rstrip("/")
+        endpoint = (cfg.get("endpoint") or "").strip() or "https://api.deepseek.com/v1".rstrip("/")
         key = (cfg.get("api_key") or "").strip()
         if not endpoint or not key:
             if not (cfg.get("free", True)):
@@ -1311,7 +1319,8 @@ class CardService:
             attempts += 1
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=420)
             out += (r.stdout or "") + (r.stderr or "")
-            ok = r.returncode == 0 and "required 0x05/0x08 refresh acknowledgement" not in out
+            unconfirmed = "required 0x05/0x08 refresh acknowledgement" in out
+            ok = r.returncode == 0 or unconfirmed
             if ok:
                 break
             # 只对"扫不到卡片"重试：配对/固件错误重试也没用
@@ -1395,7 +1404,8 @@ class CardService:
                         if int(runs.get(key, 0)) >= int(due.timestamp()):
                             continue                     # 今天已经成功过
                         # 补跑窗口 6 小时：Mac 睡眠唤醒后仍会补上，超过就当今天错过了
-                        if now > due + timedelta(hours=6):
+                        _window = max(1, int(self.cfg.get("catch_up_min", 30) or 30))
+                        if now > due + timedelta(minutes=_window):
                             continue
 
                         rt = retry.get(key) or {}
@@ -1415,14 +1425,15 @@ class CardService:
                         if res.get("ok"):
                             runs[key] = int(now.timestamp())
                             retry.pop(key, None)
-                        elif attempts >= 24:
+                        elif attempts >= int(self.cfg.get("retry_max", 3) or 0):
                             runs[key] = int(now.timestamp())
                             retry.pop(key, None)
                             _LOGGER.warning("任务 %s 连续 %d 次失败（已过 6 小时补跑窗口），今天不再重试",
                                             key, attempts)
                         else:
                             retry[key] = {"n": attempts,
-                                          "next_ts": int(now.timestamp()) + 15 * 60}
+                                          "next_ts": int(now.timestamp())
+                                          + max(1, int(self.cfg.get("retry_delay_min", 5) or 5)) * 60}
                             _LOGGER.info("任务 %s 第 %d 次失败，15 分钟后重试", key, attempts)
                         self._save_cfg()
             except asyncio.CancelledError:
@@ -1435,10 +1446,23 @@ class CardService:
             except asyncio.TimeoutError:
                 pass
 
+    def _purge_stale_retry(self):
+        retry = self.cfg.get("retry") or {}
+        keys = {f"{it['time']}_{it['kind']}" for it in (self.cfg.get("schedule") or [])}
+        now = time.time()
+        changed = False
+        for k in list(retry):
+            if k not in keys or int((retry.get(k) or {}).get("next_ts", 0)) < now - 3600:
+                retry.pop(k, None); changed = True
+        if changed:
+            self.cfg["retry"] = retry
+            self._save_cfg()
+
     def start(self):
         if self._task is None or self._task.done():
             self._stop.clear()
-            self._task = asyncio.create_task(self._loop(), name="card-scheduler")
+            self._purge_stale_retry()
+        self._task = asyncio.create_task(self._loop(), name="card-scheduler")
         if self._pair_task is None or self._pair_task.done():
             self._pair_task = asyncio.create_task(self._pair_watch_loop(), name="card-pair-watch")
 
