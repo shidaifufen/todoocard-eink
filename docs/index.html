@@ -50,6 +50,12 @@
   </div>
 </header>
 
+<div id="localBar" class="box" style="display:none;max-width:1180px;margin:0 auto 18px">
+  <h2 style="font-size:17px">✅ 检测到本机已在运行服务</h2>
+  <p style="margin:6px 0 14px">你现在可以打开完整控制台：改模板、配定时、连真机发送。</p>
+  <a class="btn" href="http://127.0.0.1:8199/card.html">打开完整控制台</a>
+</div>
+
 <div class="bar">
   <span style="color:var(--sub);font-size:13px;white-space:nowrap">字号</span>
   <input id="scale" type="range" min="100" max="155" step="5" value="115">
@@ -106,6 +112,15 @@ function apply(){
   grid.style.zoom = (v / 115).toFixed(3);   // 整页缩放，模拟不同字号下的观感
 }
 slider.addEventListener('input', apply); apply();
+
+// 探测本机服务：HTTPS 页面访问 127.0.0.1 属于"可信来源"，Chrome/Edge/Safari 都允许
+(function probeLocal(){
+  const url = 'http://127.0.0.1:8199/api/card';
+  const show = () => { document.getElementById('localBar').style.display = 'block'; };
+  fetch(url, {mode: 'no-cors', cache: 'no-store'})
+    .then(show)
+    .catch(() => setTimeout(probeLocal, 4000));
+})();
 </script>
 </body>
 </html>
