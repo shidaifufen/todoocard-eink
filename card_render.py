@@ -1473,16 +1473,19 @@ def render_weather_blocks(ctx: dict):
     if aq is not None:
         label, _c = _aqi_label(aq)
         d.text((mid_x + 14, y0 + 8), "空气质量", font=font("bold", 17), fill=WHITE if aqi_color(aq) in (RED, BLUE, BLACK) else BLACK)
-        d.text((mid_x + 14, y0 + 30), str(aq), font=font("num", 54), fill=WHITE if aqi_color(aq) in (RED, BLUE, BLACK) else BLACK)
-        d.text((mid_x + 14, y0 + 96), f"AQI / {label}",
+        d.text((mid_x + 14, y0 + 24), str(aq), font=font("num", 48), fill=WHITE if aqi_color(aq) in (RED, BLUE, BLACK) else BLACK)
+        d.text((mid_x + 14, y0 + 100), f"AQI / {label}",
                font=font("light", 16), fill=WHITE if aqi_color(aq) in (RED, BLUE, BLACK) else BLACK)
     cell(mid_x, y0 + 132, CARD_W - M, y1)
     info = [("湿度", f"{round(w.get('hum') or 0)}%"),
             ("体感", f"{round(w.get('feels') or t)}°")]
-    yy = y0 + 140
+    _info_top = y0 + 132
+    _line_h = 34
+    _block_h = _line_h * len(info)
+    yy = _info_top + max(8, (y1 - _info_top - _block_h) // 2)
     for k, v in info:
         d.text((mid_x + 14, yy), f"{k} {v}", font=font("bold", 19), fill=BLACK)
-        yy += 34
+        yy += _line_h
 
     # ── 三天预报 ──
     y2 = y1
@@ -1496,10 +1499,14 @@ def render_weather_blocks(ctx: dict):
         cell(x0, y2, x0 + colw, y2 + 156)
     for i, day in enumerate(days):
         x0 = M + 48 + i * colw
-        d.text((x0 + 12, y2 + 12), str(day.get("label", "")), font=font("light", 18), fill=BLACK)
-        d.text((x0 + 12, y2 + 44), str(day.get("text", "")), font=font("bold", 30), fill=BLACK)
-        d.text((x0 + 12, y2 + 100), f"{day.get('lo')}°~{day.get('hi')}°",
-               font=font("bold", 22), fill=BLACK)
+        cx = x0 + colw // 2
+
+        def ctext(txt, y, f, color=BLACK):
+            d.text((cx - text_width(d, txt, f) // 2, y), txt, font=f, fill=color)
+
+        ctext(str(day.get("label", "")), y2 + 12, font("light", 18))
+        ctext(str(day.get("text", "")), y2 + 44, font("bold", 30))
+        ctext(f"{day.get('lo')}～{day.get('hi')}°", y2 + 102, font("bold", 20))
 
     # ── 日出日落 / 明天 ──
     y3 = y2 + 156
