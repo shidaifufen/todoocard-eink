@@ -583,10 +583,10 @@ def render_progress(ctx: dict):
 
     d.text((M, CARD_H - 74), f"今年还剩 {left_days}", font=font("bold", 16), fill=BLACK) if False else None
     left_days = (y1 - now).days
-    d.text((M, CARD_H - 92), "今年还剩", font=font("bold", 19), fill=BLACK)
-    d.rectangle([M, CARD_H - 58, M + 10, CARD_H - 20], fill=RED)
-    _num(d, M + 22, CARD_H - 64, f"{left_days}", 30, BLACK)
-    d.text((M + 22 + text_width(d, f"{left_days}", font("num", 30)) + 8, CARD_H - 54),
+    d.text((M, CARD_H - 84), "今年还剩", font=font("bold", 19), fill=BLACK)
+    d.rectangle([M, CARD_H - 50, M + 10, CARD_H - 14], fill=RED)
+    _num(d, M + 22, CARD_H - 56, f"{left_days}", 30, BLACK)
+    d.text((M + 22 + text_width(d, f"{left_days}", font("num", 30)) + 8, CARD_H - 46),
            "天", font=font("bold", 17), fill=BLACK)
     _right_text(d, "土豆片", CARD_H - 50, 16, "light")
     return img

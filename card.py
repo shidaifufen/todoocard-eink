@@ -135,6 +135,10 @@ class CardService:
             "retry_delay_min": 5,
             "catch_up_min": 30,
             "poem_note": "",            # 自定义赏析；留空则自动生成
+            "poem_ai": {"enabled": True, "endpoint": "https://api.deepseek.com/v1",
+                        "api_key": "", "model": "deepseek-chat"},
+            "standby": False,           # 待机：暂停扫描/补发/定时，把蓝牙让给网页版
+            "line_gap": 1.0,            # 行距系数（1.0~1.4）
             "custom": {"title": "我的卡片", "accent": "red",
                        "blocks": [{"type": "bigdate"}, {"type": "todos"},
                                   {"type": "quote"}, {"type": "dots"}]},
@@ -173,7 +177,8 @@ class CardService:
         for key in ("enabled", "device_id", "device_name", "folders", "schedule",
                     "todos", "weather", "cooldown_days", "photo_mode", "photo_overlay",
                     "bing_enabled", "ai", "ai_prompt", "button_photo", "countdowns",
-                    "recursive", "scale", "custom", "fill", "theme", "poem_note"):
+                    "recursive", "scale", "custom", "fill", "theme", "poem_note",
+                    "poem_ai", "standby", "line_gap"):
             if key in patch:
                 cur[key] = patch[key]
         if "schedule" in patch:
@@ -279,6 +284,9 @@ class CardService:
         _LOGGER.info("自动配对监听已启动（长按卡片背面按钮 5 秒即可）")
         while not self._stop.is_set():
             try:
+                if self.cfg.get("standby"):
+                    await asyncio.sleep(15)
+                    continue
                 need_scan = bool(self.cfg.get("outbox")) or self.cfg.get("button_photo")
                 if self.cfg.get("device_id") and need_scan and not self._busy:
                     found = await asyncio.get_running_loop().run_in_executor(
@@ -903,7 +911,7 @@ class CardService:
         # 日历/自定义这类"表格型"版面本来就有固定节奏，均摊间距反而会把
         # 周条和页脚挤到一起，所以不对它们做纵向均摊。
         if self.cfg.get("fill", True):
-            img = R.distribute_vertical(img)
+            img = R.distribute_vertical(img, max_gap=int(64 * float(self.cfg.get("line_gap", 1.0) or 1.0)))
         out = self.cards_dir / "summary.png"
         img.save(out)
         return out
@@ -1086,21 +1094,60 @@ class CardService:
             _LOGGER.debug("文本生成失败: %s", e)
             return ""
 
+    def _note_via_api(self, prompt: str) -> str:
+        """用 OpenAI 兼容的 chat/completions 生成赏析；没配 key 就返回空。"""
+        cfg = self.cfg.get("poem_ai") or {}
+        endpoint = (cfg.get("endpoint") or "").strip() or "https://api.deepseek.com/v1"
+        key = (cfg.get("api_key") or "").strip()
+        if not (cfg.get("enabled", True) and key):
+            return ""
+        url = endpoint if endpoint.endswith("/chat/completions") else endpoint.rstrip("/") + "/chat/completions"
+        body = json.dumps({
+            "model": cfg.get("model") or "deepseek-chat",
+            "messages": [
+                {"role": "system", "content": (
+                    "你是一名中学语文教材的诗词注释编写者。要求：\n"
+                    "1. 语言平实、准确，像课本注释，不抒情、不排比、不用感叹句；\n"
+                    "2. 按「写的什么景/事 → 用了什么手法 → 表达什么情感」三层说清；\n"
+                    "3. 70~110 字，不分点、不加小标题、不用引号；\n"
+                    "4. 不评价诗人成就，不写赏析套话（如“读来令人…”）。")},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.3,
+            "max_tokens": 220,
+        }).encode()
+        try:
+            req = urllib.request.Request(url, data=body, headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {key}",
+            })
+            with urllib.request.urlopen(req, timeout=25) as r:
+                j = json.loads(r.read().decode())
+            txt = (j["choices"][0]["message"]["content"] or "").strip()
+            return txt[:400]
+        except Exception as e:
+            _LOGGER.debug("赏析 API 失败: %s", e)
+            return ""
+
     def poem_note(self, poem: dict) -> str:
         """给诗词配一段白话赏析：按标题缓存，AI 生成失败则用模板兜底。"""
         title = (poem.get("title") or "").strip()
         if not title:
             return ""
+        _ai = self.cfg.get("poem_ai") or {}
+        _api_ready = bool(_ai.get("api_key"))     # endpoint 有默认值，key 才是开关
         _ck = f"v2:{title}"
         cached = self._note_cache.get(_ck)
-        if cached:
+        # 模板兜底的句子以「《」开头：配好 API 之后不能拿它当缓存命中，
+        # 否则永远看不到 AI 写的内容（这正是"填了 key 还是老文案"的原因）。
+        if cached and not (_api_ready and cached.startswith("《")):
             return cached
 
         first = (poem.get("lines") or [""])[0]
         prompt = (f"为中学课本写一段赏析，70~110 字，平实准确，不抒情、不分点。\n"
                   f"《{title}》{poem.get('dynasty','')}{poem.get('author','')}\n"
                   f"原文：{'／'.join((poem.get('lines') or [])[:4]) or first}")
-        note = self._ai_text(prompt)
+        note = self._note_via_api(prompt) or self._ai_text(prompt)
         if len(note) < 20:
             note = ""
 
@@ -1110,12 +1157,13 @@ class CardService:
             note = (f"《{title}》{poem.get('dynasty','')}{poem.get('author','')}作，"
                     f"共 {n} 句。以“{first[:12]}”起笔，写景入情，"
                     f"读时不妨慢一点，让画面自己浮出来。")
-        self._note_cache[title] = note
-        try:
-            (self.data_dir / "poem_notes.json").write_text(
-                json.dumps(self._note_cache, ensure_ascii=False, indent=2), encoding="utf-8")
-        except Exception:
-            pass
+        if not note.startswith("《"):        # 只缓存真内容，模板兜底不落盘
+            self._note_cache[_ck] = note
+            try:
+                (self.data_dir / "poem_notes.json").write_text(
+                    json.dumps(self._note_cache, ensure_ascii=False, indent=2), encoding="utf-8")
+            except Exception:
+                pass
         return note
 
     def bing_wallpaper(self, idx: int | None = None) -> Path | None:
@@ -1253,7 +1301,12 @@ class CardService:
         # 深色 HUD 下抗锯齿会被二值化吃掉一圈，字号整体再放大 10% 才看得清
         R.set_scale(_sc * (1.1 if self.cfg.get("theme") == "wo" else 1.0))
         if kind == "photo":
-            photo = self.pick_photo(consume=consume)
+            # 预览和发送必须是同一张：钉住，成功后再换
+            pin = getattr(self, "_photo_pin", None)
+            if fresh or not pin or not Path(pin).exists():
+                pin = self.pick_photo(consume=False)
+                self._photo_pin = pin
+            photo = pin
             if not photo:
                 raise RuntimeError("照片文件夹是空的（在网页里添加目录）")
             return self.compose_photo(Path(photo)), Path(photo).name
@@ -1326,7 +1379,7 @@ class CardService:
         # 日历/自定义这类"表格型"版面本来就有固定节奏，均摊间距反而会把
         # 周条和页脚挤到一起，所以不对它们做纵向均摊。
         if self.cfg.get("fill", True) and kind not in ("calendar", "custom"):
-            img = R.distribute_vertical(img)
+            img = R.distribute_vertical(img, max_gap=int(64 * float(self.cfg.get("line_gap", 1.0) or 1.0)))
         out = self.cards_dir / f"{kind}.png"
         img.save(out)
         return out, TEMPLATES.get(kind, kind)
@@ -1547,7 +1600,7 @@ class CardService:
         self._last_tick_text = "started"
         while not self._stop.is_set():
             try:
-                if self.cfg.get("enabled"):
+                if self.cfg.get("enabled") and not self.cfg.get("standby"):
                     await self._drain_outbox()
                     now = datetime.now()
                     runs = self.cfg.setdefault("last_runs", {})
@@ -1659,6 +1712,10 @@ class CardService:
             "fill": bool(self.cfg.get("fill", True)),
             "theme": self.cfg.get("theme", "light"),
             "poem_note": self.cfg.get("poem_note", ""),
+            "poem_ai": {**{"enabled": True, "endpoint": "https://api.deepseek.com/v1",
+                           "api_key": "", "model": "deepseek-chat"}, **(self.cfg.get("poem_ai") or {})},
+            "standby": bool(self.cfg.get("standby")),
+            "line_gap": float(self.cfg.get("line_gap", 1.0) or 1.0),
             "custom": self.cfg.get("custom") or {},
             "photo_overlay": bool(self.cfg.get("photo_overlay", True)),
             "photo_count": len(photos),
@@ -1874,6 +1931,25 @@ def current() -> CardService:
 
 
 def make_routes():
+    async def _ai_write(request):
+        """根据提示词生成卡面文字（写入自定义模板）。"""
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        prompt = (body or {}).get("prompt", "").strip()
+        if not prompt:
+            return web.json_response({"ok": False, "error": "提示词不能为空"}, status=400)
+        svc = current()
+        sys_prompt = ("请为一块 528x792 的电子墨水屏写卡面文字：\n"
+                      f"用户要求：{prompt}\n"
+                      "输出 3~5 行、每行不超过 14 个汉字，不要表情符号、不要编号、不要解释，只输出正文。")
+        text = svc._note_via_api(sys_prompt) or ""
+        if not text:
+            return web.json_response({"ok": False, "error": "AI 未返回内容：先在「AI 生图」里填接口和 Key"}, status=400)
+        lines = [ln.strip(" 　-·") for ln in text.splitlines() if ln.strip()][:5]
+        return web.json_response({"ok": True, "lines": lines})
+
     async def _status(request):
         return web.json_response({"ok": True, "card": current().status()})
 
@@ -2073,6 +2149,7 @@ def make_routes():
 
     return [
         ("GET", "/api/card", _status),
+        ("POST", "/api/card/ai/write", _ai_write),
         ("GET", "/api/card/templates", _templates),
         ("GET", "/api/card/quote", _quote),
         ("GET", "/api/card/bing", _bing),

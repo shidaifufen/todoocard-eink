@@ -137,8 +137,13 @@
         <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--sub)">
           <span>字号</span><span id="scaleVal">110%</span>
         </div>
-        <input type="range" id="scaleRange" min="100" max="130" step="5" value="110"
+        <input type="range" id="scaleRange" min="100" max="155" step="5" value="110"
                style="width:100%;margin-top:6px" oninput="onScale(true)" onchange="onScale(false)">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--sub);margin-top:10px">
+          <span>行距</span><span id="gapVal">100%</span>
+        </div>
+        <input type="range" id="gapRange" min="90" max="140" step="5" value="100"
+               style="width:100%;margin-top:6px" oninput="onGap(true)" onchange="onGap(false)">
 
       </div>
     </div>
@@ -256,7 +261,23 @@
         <div><label class="f">尺寸</label>
           <input type="text" id="aiSize" placeholder="1024x1024"></div>
       </div>
-      <label class="f">提示词（留空每次随机）</label>
+      <h3 style="margin-top:18px">AI 文字（赏析 / 写卡面）</h3>
+      <div class="grid2">
+        <div><label class="f">接口地址</label>
+          <input type="text" id="paEndpoint" placeholder="https://api.deepseek.com/v1"></div>
+        <div><label class="f">模型</label>
+          <input type="text" id="paModel" placeholder="deepseek-chat"></div>
+      </div>
+      <label class="f">API Key（DeepSeek 等 OpenAI 兼容接口）</label>
+      <input type="password" id="paKey" placeholder="sk-…">
+      <label class="f">让 AI 写一张卡面（提示词）</label>
+      <textarea id="writePrompt" placeholder="例如：提醒我今天要交房租和买猫粮，语气轻松一点"></textarea>
+      <div class="btnrow">
+        <button class="primary" onclick="aiWrite()">生成并填入「自定义卡片」</button>
+        <button onclick="savePoemAi()">保存 AI 文字设置</button>
+      </div>
+
+      <label class="f" style="margin-top:14px">提示词（留空每次随机）</label>
       <textarea id="aiPrompt" placeholder="a quiet desk at night, warm lamp, cinematic"></textarea>
       <div class="btnrow">
         <button onclick="randomPrompt()">随机一条内置提示词</button>
@@ -504,12 +525,19 @@ async function load(){
   $('btnPhoto').checked = !!c.button_photo;
   $('photoHint').textContent = `共 ${c.photo_count} 张可选照片`;
   const sc = Math.round((c.scale || 1.1) * 100);
-  $('scaleRange').value = Math.min(130, Math.max(100, sc));
+  $('scaleRange').value = Math.min(155, Math.max(100, sc));
+  const gv = Math.round((c.line_gap || 1) * 100);
+  if ($('gapRange')) $('gapRange').value = Math.min(140, Math.max(90, gv));
+  if ($('gapVal')) $('gapVal').textContent = gv + '%';
   $('scaleVal').textContent = sc + '%';
   $('aiEndpoint').value = (c.ai && c.ai.endpoint) || '';
   $('aiModel').value = (c.ai && c.ai.model) || '';
   $('aiSize').value = (c.ai && c.ai.size) || '1024x1024';
   $('aiPrompt').value = c.ai_prompt || '';
+  const pa = c.poem_ai || {};
+  if ($('paEndpoint')) $('paEndpoint').value = pa.endpoint || 'https://api.deepseek.com/v1';
+  if ($('paModel')) $('paModel').value = pa.model || 'deepseek-chat';
+  if ($('paKey')) $('paKey').value = pa.api_key || '';
   $('aiKey').placeholder = (c.ai && c.ai.api_key_set) ? '已保存（留空不改）' : 'sk-…（留空用免费出图）';
   if (c.ai_last && c.ai_last.path){
     $('aiPrev').src = '/api/card/ai/image?t=' + (c.ai_last.ts || Date.now());
@@ -650,7 +678,31 @@ async function saveAi(){
   const d = await postJSON('/api/card/config', {ai, ai_prompt:$('aiPrompt').value.trim()});
   toast(d.ok?'AI 设置已保存':'保存失败'); $('aiKey').value=''; load();
 }
-async function randomPrompt(){
+async async function savePoemAi(){
+  const poemAi = {enabled: true,
+    endpoint: ($('paEndpoint').value || '').trim() || 'https://api.deepseek.com/v1',
+    api_key: ($('paKey').value || '').trim(),
+    model: ($('paModel').value || '').trim() || 'deepseek-chat'};
+  const d = await postJSON('/api/card/config', {poem_ai: poemAi});
+  toast(d.ok ? 'AI 文字设置已保存' : '保存失败');
+}
+
+async function aiWrite(){
+  const prompt = ($('writePrompt').value || '').trim();
+  if (!prompt) return toast('先写提示词');
+  toast('AI 正在写…');
+  const d = await postJSON('/api/card/ai/write', {prompt});
+  if (!d.ok) return toast(d.error || '生成失败');
+  const custom = Object.assign({}, STATE.custom || {title: '我的卡片', blocks: []});
+  custom.title = prompt.slice(0, 12);
+  custom.blocks = [{type: 'bigdate'}, ...d.lines.map((t) => ({type: 'text', text: t, size: 24}))];
+  await postJSON('/api/card/config', {custom});
+  currentTpl = 'custom';
+  renderNav(); switchPanel('tpl');
+  toast('已填入自定义卡片，可继续微调');
+}
+
+function randomPrompt(){
   const d = await (await fetch('/api/card/ai/prompt')).json();
   $('aiPrompt').value = d.prompt || ''; toast('已填入一条提示词');
 }
@@ -730,6 +782,16 @@ async function startPair(){
   }, 1000);
 }
 let scaleTimer = null;
+function onGap(live){
+  const v = parseInt($('gapRange').value, 10) / 100;
+  $('gapVal').textContent = Math.round(v * 100) + '%';
+  clearTimeout(window.__gapT);
+  window.__gapT = setTimeout(async () => {
+    await postJSON('/api/card/config', {line_gap: v});
+    if (!live) load();
+  }, live ? 250 : 0);
+}
+
 function onScale(live){
   const v = parseInt($('scaleRange').value, 10) / 100;
   $('scaleVal').textContent = Math.round(v * 100) + '%';
