@@ -102,6 +102,20 @@ def font(kind: str, size: int):
     return ImageFont.load_default()
 
 
+def font_px(kind: str, px: int):
+    """按绝对像素建字体（不再乘缩放系数），诗词用它保证"字号真的跟着滑杆走"。"""
+    from PIL import ImageFont
+    from pathlib import Path as _P
+    px = max(8, int(px))
+    for path in FONTS.get(kind, FONTS["light"]):
+        try:
+            if _P(path).exists():
+                return ImageFont.truetype(path, px)
+        except Exception:
+            continue
+    return ImageFont.load_default()
+
+
 def new_canvas(bg=WHITE):
     from PIL import Image
     return Image.new("RGB", (CARD_W, CARD_H), bg)
@@ -664,7 +678,7 @@ def render_quote(ctx: dict):
 
     f = font("bold", 40)
     lines = wrap(d, text, f, CARD_W - M * 2 - 46)[:7]
-    lh = 56
+    lh = int(56 * _LINE)          # 行距滑杆要影响引文行高
     block_h = len(lines) * lh
     y0 = max(170, (CARD_H - 120 - block_h) // 2)
 
@@ -730,17 +744,24 @@ def render_poem(ctx: dict):
 
     # 诗句可能很长（词牌常见），先按宽度折行，再按"总行数放得下"选字号
     avail_h = CARD_H - 120 - (ry + 24) - note_h - 20
-    f, disp = font("bold", 32), []
-    for size in (32, 28, 24, 21, 19):
-        f = font("bold", size)
-        lh = int(size * 1.7)
-        disp = []
-        for ln in raw_lines:
-            disp += wrap(d, ln, f, CARD_W - M * 2)
-        if len(disp) * lh <= avail_h:
-            break
-
-    lh = int(f.size * 1.7)
+    # 字号优先：从大往小试，最小不低于 28（再小真机上就看不清了），
+    # 放不下就按行数截断并补 "……"，而不是无限缩小
+    # 绝对字号：直接由 基准×滑杆 算像素，诗词才会真的跟着滑杆变大
+    _px = int(round(30 * BASE_FONT * _SCALE))
+    _px = max(28, min(66, _px))
+    f = font_px("bold", _px)
+    lh = int(_px * 1.62)
+    wrapped = []
+    for ln in raw_lines:
+        wrapped += wrap(d, ln, f, CARD_W - M * 2)
+    max_lines = max(2, int(avail_h // lh))
+    disp = wrapped[:max_lines]
+    if len(wrapped) > max_lines and disp:
+        # 截断标记也要量宽度，别让它顶出右边界
+        last = disp[-1]
+        while last and text_width(d, last + "……", f) > CARD_W - M * 2:
+            last = last[:-1]
+        disp[-1] = (last or "…") + "……"
     total_h = len(disp) * lh
     y = ry + 24 + max(0, min(60, (avail_h - total_h) // 3))
     for ln in disp:
