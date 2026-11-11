@@ -62,6 +62,7 @@ FONTS = {
 
 #: 全局字号缩放（1.0~1.35）。只缩放字体，不改边距——用户要的是"字更大"，
 #: 而不是"把整张卡放大"。所有字体都走 font()，所以一个变量就能整体调。
+BASE_FONT = 1.1      # 字号整体基准（比上一版大 10%）
 _SCALE = 1.0
 _LINE = 1.0          # 行内行距系数（由 card.py 按 line_gap 传入）
 
@@ -71,7 +72,8 @@ def set_scale(v: float):
     try:
         _SCALE = max(0.85, min(1.35, float(v)))
     except (TypeError, ValueError):
-        _SCALE = 1.0
+        BASE_FONT = 1.1      # 字号整体基准（比上一版大 10%）
+_SCALE = 1.0
 _LINE = 1.0          # 行内行距系数（由 card.py 按 line_gap 传入）
 
 
@@ -89,7 +91,7 @@ def scale() -> float:
 
 def font(kind: str, size: int):
     from PIL import ImageFont
-    size = max(8, int(round(size * _SCALE)))
+    size = max(8, int(round(size * BASE_FONT * _SCALE)))
     for path in FONTS.get(kind, FONTS["light"]):
         try:
             from pathlib import Path
