@@ -63,6 +63,7 @@ FONTS = {
 #: 全局字号缩放（1.0~1.35）。只缩放字体，不改边距——用户要的是"字更大"，
 #: 而不是"把整张卡放大"。所有字体都走 font()，所以一个变量就能整体调。
 _SCALE = 1.0
+_LINE = 1.0          # 行内行距系数（由 card.py 按 line_gap 传入）
 
 
 def set_scale(v: float):
@@ -71,6 +72,15 @@ def set_scale(v: float):
         _SCALE = max(0.85, min(1.35, float(v)))
     except (TypeError, ValueError):
         _SCALE = 1.0
+_LINE = 1.0          # 行内行距系数（由 card.py 按 line_gap 传入）
+
+
+def set_line(v: float):
+    global _LINE
+    try:
+        _LINE = max(0.9, min(1.6, float(v)))
+    except (TypeError, ValueError):
+        _LINE = 1.0
 
 
 def scale() -> float:
@@ -377,12 +387,12 @@ def render_summary(ctx: dict):
     cnt = f"{len(todos)} 项"
     d.text((CARD_W - M - text_width(d, cnt, _right_font(cnt, 15)), y + 4),
            cnt, font=_right_font(cnt, 15), fill=BLACK)
-    y += 34
+    y += int(34 * _LINE)
 
     colors = [RED, BLUE, GREEN, YELLOW]
     if not todos:
         d.text((M, y), "今天还没有安排", font=font("light", 20), fill=BLACK)
-        y += 40
+        y += int(40 * _LINE)
     for i, item in enumerate(todos):
         _circle(d, M + 14, y + 14, 14, colors[i % 4])
         d.text((M + 7, y + 5), str(i + 1), font=font("num", 14), fill=WHITE)
@@ -426,7 +436,7 @@ def render_summary(ctx: dict):
     yy = CARD_H - 76
     for ln in ql:
         d.text((M, yy), ln, font=qf, fill=BLACK)
-        yy += 24
+        yy += int(24 * _LINE)
     _right_text(d, "土豆片", CARD_H - 32, 16, "light")
     return img
 
@@ -490,7 +500,7 @@ def render_weather(ctx: dict):
     y = y2 + 96
     d.text((M, y), "未来几小时", font=font("bold", 19), fill=BLACK)
     d.line([M + 120, y + 13, CARD_W - M, y + 13], fill=BLACK, width=3)
-    y += 34
+    y += int(34 * _LINE)
 
     hours = (w.get("hourly") or [])[:4]
     aqi = w.get("aqi")
@@ -579,7 +589,7 @@ def render_progress(ctx: dict):
         d.text((M, yy), label, font=font("bold", 19), fill=BLACK)
         d.text((M + 58, yy - 2), f"{p_*100:.0f}%", font=font("num", 19), fill=BLACK)
         _bar(d, M + 136, yy, GRID_W - 136, 22, p_, color)
-        yy += 40
+        yy += int(40 * _LINE)
 
     d.text((M, CARD_H - 74), f"今年还剩 {left_days}", font=font("bold", 16), fill=BLACK) if False else None
     left_days = (y1 - now).days
@@ -615,7 +625,7 @@ def render_todo(ctx: dict):
         for i in range(6):
             d.rectangle([M + 42, y + 4, M + 64, y + 26], outline=BLACK, width=2)
             d.line([M + 76, y + 26, CARD_W - M, y + 26], fill=BLACK, width=1)
-            y += 56
+            y += int(56 * _LINE)
         y -= 40
         d.text((M, y + 40), "在网页里添加今天要做的事", font=font("light", 18), fill=BLACK)
     for i, item in enumerate(todos):
@@ -732,16 +742,16 @@ def render_poem(ctx: dict):
         y += lh
 
     if note_lines and y + 40 < CARD_H - 130:
-        y += 6
+        y += int(6 * _LINE)
         d.line([M, y, CARD_W - M, y], fill=BLACK, width=1)
-        y += 14
+        y += int(14 * _LINE)
         d.text((M, y), "赏析", font=font("bold", 17), fill=RED)
-        y += 28
+        y += int(28 * _LINE)
         for ln in note_lines:
             if y > CARD_H - 150:
                 break
             d.text((M, y), ln, font=nf, fill=BLACK)
-            y += 34
+            y += int(34 * _LINE)
 
     seal = font("bold", 26)
     sx = CARD_W - M - 54
@@ -769,7 +779,7 @@ def render_calendar(ctx: dict):
         color = RED if i >= 5 else BLACK
         f = font("bold", 18)
         d.text((M + i * col_w + (col_w - text_width(d, wd, f)) / 2, y), wd, font=f, fill=color)
-    y += 34
+    y += int(34 * _LINE)
 
     weeks = _cal.Calendar(firstweekday=0).monthdayscalendar(now.year, now.month)
     # 行高按剩余空间算：本周条 + 页脚要留够，130% 字号时也不会挤到一起
@@ -852,7 +862,7 @@ def render_countdown(ctx: dict):
         for i in range(3):
             d.line([M, yy + 30, CARD_W - M, yy + 30], fill=BLACK, width=1)
             d.text((M, yy + 44), "— —", font=font("num", 22), fill=BLACK)
-            yy += 96
+            yy += int(96 * _LINE)
     for i, it in enumerate(sorted(items, key=_key)[:5]):
         try:
             target = datetime.strptime(it.get("date", ""), "%Y-%m-%d").date()
@@ -863,13 +873,13 @@ def render_countdown(ctx: dict):
         d.text((30, y), it.get("name") or "纪念日", font=font("bold", 24), fill=BLACK)
         d.text((CARD_W - 30 - text_width(d, it.get("date", ""), font("light", 16),), y + 6),
                it.get("date", ""), font=font("light", 16), fill=BLACK)
-        y += 40
+        y += int(40 * _LINE)
         f = font("num", 62)
         d.text((30, y), big, font=f, fill=colors[i % len(colors)])
         d.text((30 + text_width(d, big, f) + 10, y + 24), note, font=font("bold", 18), fill=BLACK)
-        y += 80
+        y += int(80 * _LINE)
         _rule(d, y, x0=30, x1=CARD_W - 30, w=1)
-        y += 22
+        y += int(22 * _LINE)
         if y > CARD_H - 110:
             break
     return img
@@ -893,12 +903,12 @@ def render_energy(ctx: dict):
     y = sub_y + 34
     if not stats:
         d.text((M, y), "昨天没有充电记录", font=font("light", 18), fill=BLACK)
-        y += 34
+        y += int(34 * _LINE)
         for i in range(4):
             d.text((M, y + 6), ["C1", "C2", "C3", "A"][i], font=font("bold", 19), fill=BLACK)
             d.rectangle([M + 46, y, CARD_W - M - 74, y + 18], outline=BLACK, width=2)
             d.text((CARD_W - M - 66, y + 2), "0.0 Wh", font=font("num", 13), fill=BLACK)
-            y += 34
+            y += int(34 * _LINE)
     colors = [YELLOW, RED, BLUE, GREEN]
     peak = max([x["wh"] for x in stats] or [1])
     for i, st in enumerate(stats[:4]):
@@ -906,9 +916,9 @@ def render_energy(ctx: dict):
         d.text((M + 62, y), f"{st['wh']:.1f} Wh", font=font("num", 18), fill=BLACK)
         d.text((CARD_W - M - text_width(d, f"峰值 {st['peak']} W", font("light", 13)), y + 4),
                f"峰值 {st['peak']} W", font=font("light", 17), fill=BLACK)
-        y += 28
+        y += int(28 * _LINE)
         _bar(d, M, y, GRID_W, 18, st["wh"] / peak, colors[i % 4])
-        y += 42
+        y += int(42 * _LINE)
 
     y = max(y + 10, 560)
     d.line([M, y - 12, CARD_W - M, y - 12], fill=BLACK, width=2)
@@ -916,13 +926,13 @@ def render_energy(ctx: dict):
     t_total = sum(x["wh"] for x in today)
     _num(d, CARD_W - M - text_width(d, f"{t_total:.1f}", font("num", 22)) - 26, y - 4,
          f"{t_total:.1f}", 22, BLACK, "Wh", 13, BLACK)
-    y += 30
+    y += int(30 * _LINE)
     if today:
         for st in today[:4]:
             d.text((M, y), st["port"], font=font("bold", 19), fill=BLACK)
             d.text((M + 56, y), f"{st['wh']:.1f} Wh", font=font("num", 15), fill=BLACK)
             d.text((M + 150, y + 2), f"{st['count']} 次", font=font("light", 16), fill=BLACK)
-            y += 26
+            y += int(26 * _LINE)
     else:
         d.text((M, y), "今天还没有充电", font=font("light", 19), fill=BLACK)
     d.text((M, CARD_H - 44), "数据来自本机 port_history.db", font=font("light", 11), fill=BLACK)
@@ -1038,7 +1048,7 @@ def render_ai(ctx: dict):
         yy = CARD_H - band + 14
         for ln in lines:
             d.text((24, yy), ln, font=font("light", 19), fill=BLACK)
-            yy += 22
+            yy += int(22 * _LINE)
         d.text((24, CARD_H - 30), "AI 生图 · 土豆片", font=font("light", 16), fill=BLACK)
         return img
 
@@ -1053,7 +1063,7 @@ def render_ai(ctx: dict):
     for ln in wrap(d, prompt or "a quiet desk at night, warm lamp, cinematic",
                    font("light", 18), CARD_W - M * 2 - 40)[:6]:
         d.text((M + 20, yy), ln, font=font("light", 18), fill=BLACK)
-        yy += 28
+        yy += int(28 * _LINE)
     d.text((M, CARD_H - 60), "生成后这里会变成整张图", font=font("light", 17), fill=BLACK)
     return img
 
@@ -1108,7 +1118,7 @@ def _draw_block(d, img, blk, ctx, y, width, accent):
             f = font("light", 21)
             lines = wrap(d, item, f, w - 34)[:1]
             d.text((x + 30, yy), lines[0] if lines else item, font=f, fill=BLACK)
-            yy += 34
+            yy += int(34 * _LINE)
         return yy - y + 6
     if t == "quote":
         q = ctx.get("quote") or {}
@@ -1117,10 +1127,10 @@ def _draw_block(d, img, blk, ctx, y, width, accent):
         yy = y
         for ln in lines:
             d.text((x, yy), ln, font=f, fill=BLACK)
-            yy += 40
+            yy += int(40 * _LINE)
         if q.get("from"):
             d.text((x, yy), f"— {q['from']}", font=font("light", 13), fill=accent)
-            yy += 22
+            yy += int(22 * _LINE)
         return yy - y + 4
     if t == "dots":
         now = ctx["now"]

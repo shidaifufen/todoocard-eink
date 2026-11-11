@@ -1300,6 +1300,7 @@ class CardService:
         _sc = float(self.cfg.get("scale", 1.1) or 1.1)
         # 深色 HUD 下抗锯齿会被二值化吃掉一圈，字号整体再放大 10% 才看得清
         R.set_scale(_sc * (1.1 if self.cfg.get("theme") == "wo" else 1.0))
+        R.set_line(float(self.cfg.get("line_gap", 1.0) or 1.0))
         if kind == "photo":
             # 预览和发送必须是同一张：钉住，成功后再换
             pin = getattr(self, "_photo_pin", None)
