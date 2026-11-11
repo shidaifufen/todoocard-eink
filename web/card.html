@@ -436,6 +436,8 @@ let CUSTOM = null;
 function renderPoemEditor(){
   const box = $('editor');
   box.innerHTML = `
+    <div class="row" style="margin-bottom:8px"><span>整首优先（不截断，字号自动缩小）</span>
+      <span class="switch"><input type="checkbox" id="poemFull"><i></i></span></div>
     <label class="f">赏析（留空自动生成）</label>
     <textarea id="poemNote" rows="6" style="width:100%;box-sizing:border-box"
       placeholder="写一段 60~100 字的赏析，会印在诗词下方">${(STATE.poem_note||'')}</textarea>
@@ -448,7 +450,7 @@ async function savePoemNote(){
   const d = await postJSON('/api/card/config', {poem_note: v});
   if (d.ok && d.card) STATE = d.card;
   toast(v ? '已保存自定义赏析' : '已清空，将自动生成');
-  preview('poem', true);
+  preview('poem', false);
 }
 
 function renderBlockEditor(){

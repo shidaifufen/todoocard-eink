@@ -134,7 +134,8 @@ class CardService:
             "retry_max": 3,
             "retry_delay_min": 5,
             "catch_up_min": 30,
-            "poem_note": "",            # 自定义赏析；留空则自动生成
+            "poem_note": "",
+            "poem_full": False,          # true=整首优先（不截断，字号自动缩）            # 自定义赏析；留空则自动生成
             "poem_ai": {"enabled": True, "endpoint": "https://api.deepseek.com/v1",
                         "api_key": "", "model": "deepseek-chat"},
             "standby": False,           # 待机：暂停扫描/补发/定时，把蓝牙让给网页版
@@ -177,7 +178,7 @@ class CardService:
         for key in ("enabled", "device_id", "device_name", "folders", "schedule",
                     "todos", "weather", "cooldown_days", "photo_mode", "photo_overlay",
                     "bing_enabled", "ai", "ai_prompt", "button_photo", "countdowns",
-                    "recursive", "scale", "custom", "fill", "theme", "poem_note",
+                    "recursive", "scale", "custom", "fill", "theme", "poem_note", "poem_full",
                     "poem_ai", "standby", "line_gap"):
             if key in patch:
                 cur[key] = patch[key]
@@ -1348,6 +1349,7 @@ class CardService:
         elif kind == "poem":
             ctx["poem"] = self.daily_poem(force=fresh)
             ctx["note"] = (self.cfg.get("poem_note") or "").strip() or self.poem_note(ctx["poem"])
+            ctx["poem_full"] = bool(self.cfg.get("poem_full"))
             img = R.render_poem(ctx)
         elif kind == "custom":
             ccfg = self.cfg.get("custom") or {}
@@ -1714,6 +1716,7 @@ class CardService:
             "fill": bool(self.cfg.get("fill", True)),
             "theme": self.cfg.get("theme", "light"),
             "poem_note": self.cfg.get("poem_note", ""),
+            "poem_full": bool(self.cfg.get("poem_full")),
             "poem_ai": {**{"enabled": True, "endpoint": "https://api.deepseek.com/v1",
                            "api_key": "", "model": "deepseek-chat"}, **(self.cfg.get("poem_ai") or {})},
             "standby": bool(self.cfg.get("standby")),

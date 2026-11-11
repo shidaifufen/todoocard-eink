@@ -749,6 +749,19 @@ def render_poem(ctx: dict):
     # 绝对字号：直接由 基准×滑杆 算像素，诗词才会真的跟着滑杆变大
     _px = int(round(30 * BASE_FONT * _SCALE))
     _px = max(28, min(66, _px))
+
+    if ctx.get("poem_full"):
+        # 整首优先：不截断，字号从目标值往下收敛到放得下为止
+        for _try in range(_px, 19, -2):
+            f_try = font_px("bold", _try)
+            lh_try = int(_try * 1.62)
+            wrapped_try = []
+            for ln in raw_lines:
+                wrapped_try += wrap(d, ln, f_try, CARD_W - M * 2)
+            if len(wrapped_try) * lh_try <= avail_h:
+                _px = _try
+                break
+
     f = font_px("bold", _px)
     lh = int(_px * 1.62)
     wrapped = []
