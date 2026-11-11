@@ -140,9 +140,9 @@
         <input type="range" id="scaleRange" min="100" max="155" step="5" value="110"
                style="width:100%;margin-top:6px" oninput="onScale(true)" onchange="onScale(false)">
         <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--sub);margin-top:10px">
-          <span>行距</span><span id="gapVal">110%</span>
+          <span>行距</span><span id="gapVal">100%</span>
         </div>
-        <input type="range" id="gapRange" min="90" max="140" step="5" value="110"
+        <input type="range" id="gapRange" min="90" max="180" step="5" value="100"
                style="width:100%;margin-top:6px" oninput="onGap(true)" onchange="onGap(false)">
 
       </div>
@@ -526,8 +526,8 @@ async function load(){
   $('photoHint').textContent = `共 ${c.photo_count} 张可选照片`;
   const sc = Math.round((c.scale || 1.1) * 100);
   $('scaleRange').value = Math.min(155, Math.max(100, sc));
-  const gv = Math.round((c.line_gap || 1.1) * 100);
-  if ($('gapRange')) $('gapRange').value = Math.min(140, Math.max(90, gv));
+  const gv = Math.round((c.line_gap || 1.0) * 100);
+  if ($('gapRange')) $('gapRange').value = Math.min(180, Math.max(90, gv));
   if ($('gapVal')) $('gapVal').textContent = gv + '%';
   $('scaleVal').textContent = sc + '%';
   $('aiEndpoint').value = (c.ai && c.ai.endpoint) || '';
