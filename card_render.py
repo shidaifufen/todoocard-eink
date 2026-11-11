@@ -1436,25 +1436,31 @@ def render_weather_blocks(ctx: dict):
     return img
 
 
-def snap_palette(img, keep=None, threshold: int = 46):
-    """把接近六色的像素吸附到精确调色板色，避免抗锯齿灰边被抖动成彩色噪点。
+def snap_palette(img, keep=None, threshold: int = 60):
+    """把像素吸附到六色调色板，白底才不会有抖动出来的彩色噪点。
 
-    keep: [(x0, y0, x1, y1)] 区域保持原样（一般是照片区域）。
+    - 灰阶像素（R≈G≈B）：按亮度吸附到黑或白，文字边缘因此变锐
+    - 彩色像素：距离调色板 <= threshold 时吸附，否则保留（照片的抖动不能抹平）
+    - keep: [(x0,y0,x1,y1)] 区域原样保留
     """
     pal = [(0, 0, 0), (255, 255, 255), (255, 255, 0), (255, 0, 0), (0, 0, 255), (0, 255, 0)]
     keep = keep or []
     px = img.load()
     w, h = img.size
+    lim = threshold * threshold * 3
     for y in range(h):
         for x in range(w):
-            if any(k[0] <= x < k[2] and k[1] <= y < k[3] for k in keep):
+            if keep and any(k[0] <= x < k[2] and k[1] <= y < k[3] for k in keep):
                 continue
             r, g, b = px[x, y][:3]
-            best, bd = None, threshold * threshold * 3
+            if max(r, g, b) - min(r, g, b) < 42:
+                px[x, y] = (0, 0, 0) if (r * 299 + g * 587 + b * 114) // 1000 < 128 else (255, 255, 255)
+                continue
+            best, bd = None, lim
             for pr, pg, pb in pal:
                 dr, dg, db = r - pr, g - pg, b - pb
                 dd = dr * dr + dg * dg + db * db
-                if dd < bd:
+                if dd <= bd:
                     bd, best = dd, (pr, pg, pb)
             if best:
                 px[x, y] = best

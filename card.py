@@ -884,6 +884,7 @@ class CardService:
             "weather": self.weather_data(),
         }
         img = R.render_summary(ctx)
+        img = R.snap_palette(img)
         if self.cfg.get("theme") == "wo":
             img = R.to_dark_hud(img)
         # 日历/自定义这类"表格型"版面本来就有固定节奏，均摊间距反而会把
@@ -1304,6 +1305,9 @@ class CardService:
             img = R.render_ai(ctx)
         else:
             raise RuntimeError(f"未知模板: {kind}")
+        # 吸附调色板：去掉抗锯齿灰边，避免抖动后白底出现彩色噪点（版式不变）
+        if kind not in ("photo", "bing", "ai"):
+            img = R.snap_palette(img)
         if self.cfg.get("theme") == "wo" and kind not in ("photo", "bing", "ai"):
             img = R.to_dark_hud(img)
         # 日历/自定义这类"表格型"版面本来就有固定节奏，均摊间距反而会把
