@@ -530,7 +530,7 @@ class CardService:
     def _scan_photos(self) -> list[str]:
         # 6 万张照片每次 preview 都重扫太慢，缓存 10 分钟
         cached = getattr(self, "_photos_cache", None)
-        if cached and time.time() - cached[0] < 600:
+        if cached and time.time() - cached[0] < 1800:
             return cached[1]
         out = []
         for folder in self.cfg.get("folders") or []:
@@ -1548,7 +1548,8 @@ class CardService:
             self._busy = True
             self._emit()
             try:
-                image, label = self.build_card(kind, consume=True)
+                image, label = await asyncio.get_running_loop().run_in_executor(
+                    None, self.build_card, kind, True)
                 async with BLE_GUARD:
                     res = await asyncio.get_running_loop().run_in_executor(
                         None, self._send_blocking, image, wait_sec)
@@ -1678,6 +1679,12 @@ class CardService:
         if self._task is None or self._task.done():
             self._stop.clear()
             self._purge_stale_retry()
+        # 6 万张照片首次遍历要 2~5 秒；放到后台线程预热，避免第一次打开网页被卡住
+        try:
+            import threading
+            threading.Thread(target=self._scan_photos, daemon=True).start()
+        except Exception:
+            pass
         self._task = asyncio.create_task(self._loop(), name="card-scheduler")
         if self._pair_task is None or self._pair_task.done():
             self._pair_task = asyncio.create_task(self._pair_watch_loop(), name="card-pair-watch")

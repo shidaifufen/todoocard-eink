@@ -198,6 +198,10 @@
       </div>
       <div class="row"><span>按键唤醒时随机推一张照片</span>
         <span class="switch"><input type="checkbox" id="btnPhoto"><i></i></span></div>
+      <div class="row" style="margin-top:10px"><span><b>暂停自动推送</b><br>
+        <span class="hint">把蓝牙让给网页版：停止扫描、补发和定时任务；手动点「发送」仍然可用</span></span>
+        <span class="switch"><input type="checkbox" id="standbySw" onchange="toggleStandby()"><i></i></span></div>
+      <div id="standbyHint" class="hint"></div>
       <div class="hint">配对只需一次。之后传图不用按键：卡片会自己广播，服务最多等 3 分钟。</div>
       <div id="pairHint" class="hint" style="display:none;color:var(--warm)"></div>
       <div id="scanResult"></div>
@@ -268,10 +272,10 @@
         <div><label class="f">模型</label>
           <input type="text" id="paModel" placeholder="deepseek-chat"></div>
       </div>
-      <label class="f">API Key（DeepSeek 等 OpenAI 兼容接口）</label>
+      <label class="f">API Key（OpenAI 兼容接口）</label>
       <input type="password" id="paKey" placeholder="sk-…">
       <label class="f">让 AI 写一张卡面（提示词）</label>
-      <textarea id="writePrompt" placeholder="例如：提醒我今天要交房租和买猫粮，语气轻松一点"></textarea>
+      <textarea id="writePrompt" placeholder="例如：提醒我今天交房租、买猫粮，语气轻松"></textarea>
       <div class="btnrow">
         <button class="primary" onclick="aiWrite()">生成并填入「自定义卡片」</button>
         <button onclick="savePoemAi()">保存 AI 文字设置</button>
@@ -406,7 +410,7 @@ function renderEditor(){
       <textarea id="e_cd"></textarea>
       <div class="btnrow"><button class="primary" onclick="saveCountdowns()">保存纪念日</button></div>`;
     $('e_cd').value = (STATE.countdowns||[]).map(x=>`${x.date} ${x.name}`).join('\n');
-  } else if (currentTpl === 'weather' || currentTpl === 'weather2' || currentTpl === 'summary'){
+  } else if (currentTpl === 'weather' || currentTpl === 'summary'){
     const w = STATE.weather || {};
     box.innerHTML = `<label class="f">城市</label><input type="text" id="e_city" value="${w.name||''}">
       <div class="grid2"><div><label class="f">纬度</label><input type="text" id="e_lat" value="${w.lat??''}"></div>
@@ -441,13 +445,25 @@ function renderPoemEditor(){
     <label class="f">赏析（留空自动生成）</label>
     <textarea id="poemNote" rows="6" style="width:100%;box-sizing:border-box"
       placeholder="写一段 60~100 字的赏析，会印在诗词下方">${(STATE.poem_note||'')}</textarea>
+    <label class="f">赏析 API（OpenAI 兼容，可留空用模板）</label>
+    <input id="pa_endpoint" placeholder="https://api.deepseek.com/v1" style="width:100%;box-sizing:border-box">
+    <input id="pa_key" placeholder="API Key" type="password" style="width:100%;box-sizing:border-box;margin-top:6px">
+    <input id="pa_model" placeholder="模型，默认 deepseek-chat" style="width:100%;box-sizing:border-box;margin-top:6px">
     <div class="btnrow"><button class="primary" onclick="savePoemNote()">保存并预览</button></div>
-    <div class="hint">留空则根据诗词自动生成一句话；写了就用你的。</div>`;
+    <div class="hint">赏析内容优先用你写的；留空则调用上面的 API；没配 API 时退回模板。</div>`;
+  const pa = STATE.poem_ai || {};
+  $('pa_endpoint').value = pa.endpoint || 'https://api.deepseek.com/v1';
+  $('pa_key').value = pa.api_key || '';
+  $('pa_model').value = pa.model || 'deepseek-chat';
+  $('poemFull').checked = !!STATE.poem_full;
 }
 
 async function savePoemNote(){
   const v = $('poemNote').value.trim();
-  const d = await postJSON('/api/card/config', {poem_note: v});
+  const poemAi = {enabled: true, endpoint: $('pa_endpoint').value.trim(),
+                  api_key: $('pa_key').value.trim(), model: $('pa_model').value.trim() || 'deepseek-chat'};
+  const d = await postJSON('/api/card/config', {poem_note: v, poem_ai: poemAi,
+                                               poem_full: $('poemFull').checked});
   if (d.ok && d.card) STATE = d.card;
   toast(v ? '已保存自定义赏析' : '已清空，将自动生成');
   preview('poem', false);
@@ -513,6 +529,17 @@ async function saveCustom(){
   load(); preview('custom', true);
 }
 
+async function toggleStandby(){
+  const on = $('standbySw').checked;
+  const d = await postJSON('/api/card/config', {standby: on});
+  if (!d.ok) { toast('切换失败：' + (d.error || '')); return; }
+  toast(on ? '已暂停自动推送，蓝牙让给网页版' : '已恢复自动推送');
+  if (d.card) {
+    $('standbySw').checked = !!d.card.standby;
+    $('standbyHint').textContent = d.card.standby ? '🟡 待机中：自动推送已暂停，网页版可以独占蓝牙' : '';
+  }
+}
+
 async function load(){
   const c = (await (await fetch(API+'/api/card',{cache:'no-store'})).json()).card;
   STATE = c;
@@ -525,13 +552,20 @@ async function load(){
   $('recursive').checked = c.recursive !== false;
   $('bingEnabled').checked = c.bing_enabled !== false;
   $('btnPhoto').checked = !!c.button_photo;
+  if ($('standbySw')) {
+    $('standbySw').checked = !!c.standby;
+    $('standbyHint').textContent = c.standby ? '🟡 待机中：自动推送已暂停，网页版可以独占蓝牙' : '';
+  }
   $('photoHint').textContent = `共 ${c.photo_count} 张可选照片`;
   const sc = Math.round((c.scale || 1.1) * 100);
-  $('scaleRange').value = Math.min(155, Math.max(100, sc));
+  // 拖动过程中不要被 30 秒轮询拉回去，否则手感就是"滑不动"
+  if (!scaleDragging) {
+    $('scaleRange').value = Math.min(155, Math.max(100, sc));
   const gv = Math.round((c.line_gap || 1.0) * 100);
   if ($('gapRange')) $('gapRange').value = Math.min(180, Math.max(90, gv));
   if ($('gapVal')) $('gapVal').textContent = gv + '%';
-  $('scaleVal').textContent = sc + '%';
+  }
+  $('scaleVal').textContent = Math.min(155, Math.max(100, sc)) + '%';
   $('aiEndpoint').value = (c.ai && c.ai.endpoint) || '';
   $('aiModel').value = (c.ai && c.ai.model) || '';
   $('aiSize').value = (c.ai && c.ai.size) || '1024x1024';
@@ -661,7 +695,7 @@ async function saveCountdowns(){
 }
 async function saveWeather(){
   const weather = {enabled:true, name:$('e_city').value.trim()||'本地',
-    lat: parseFloat($('e_lat').value)||39.9042, lon: parseFloat($('e_lon').value)||116.4074};
+    lat: parseFloat($('e_lat').value)||22.5431, lon: parseFloat($('e_lon').value)||114.0579};
   const d = await postJSON('/api/card/config', {weather});
   toast(d.ok?'已保存':'保存失败'); load();
 }
@@ -680,7 +714,7 @@ async function saveAi(){
   const d = await postJSON('/api/card/config', {ai, ai_prompt:$('aiPrompt').value.trim()});
   toast(d.ok?'AI 设置已保存':'保存失败'); $('aiKey').value=''; load();
 }
-async async function savePoemAi(){
+async function savePoemAi(){
   const poemAi = {enabled: true,
     endpoint: ($('paEndpoint').value || '').trim() || 'https://api.deepseek.com/v1',
     api_key: ($('paKey').value || '').trim(),
@@ -699,9 +733,8 @@ async function aiWrite(){
   custom.title = prompt.slice(0, 12);
   custom.blocks = [{type: 'bigdate'}, ...d.lines.map((t) => ({type: 'text', text: t, size: 24}))];
   await postJSON('/api/card/config', {custom});
-  currentTpl = 'custom';
-  renderNav(); switchPanel('tpl');
-  toast('已填入自定义卡片，可继续微调');
+  currentTpl = 'custom'; renderNav(); switchPanel('tpl');
+  toast('已填入自定义卡片');
 }
 
 async function randomPrompt(){
@@ -784,18 +817,21 @@ async function startPair(){
   }, 1000);
 }
 let scaleTimer = null;
+let scaleDragging = false;
 function onGap(live){
   const v = parseInt($('gapRange').value, 10) / 100;
   $('gapVal').textContent = Math.round(v * 100) + '%';
   clearTimeout(window.__gapT);
   window.__gapT = setTimeout(async () => {
     await postJSON('/api/card/config', {line_gap: v});
-    preview(currentTpl, true);   // 行距改了必须重出图
+    // 重出图但不换内容：fresh=false，避免一首诗/一句话被换掉
+    preview(currentTpl, false);
     if (!live) load();
   }, live ? 300 : 0);
 }
 
 function onScale(live){
+  scaleDragging = live;
   const v = parseInt($('scaleRange').value, 10) / 100;
   $('scaleVal').textContent = Math.round(v * 100) + '%';
   clearTimeout(scaleTimer);
