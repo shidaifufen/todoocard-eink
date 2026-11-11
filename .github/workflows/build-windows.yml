@@ -1,0 +1,50 @@
+name: build-windows-portable
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 版本号（例如 1.0.11）
+        required: true
+        default: "1.0.11"
+  push:
+    tags:
+      - "v*-windows"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 打包便携 zip
+        shell: pwsh
+        run: |
+          $ver = "${{ github.event.inputs.version }}"
+          if (-not $ver) { $ver = "${{ github.ref_name }}".TrimStart("v").Replace("-windows","") }
+          Write-Host "版本: $ver"
+          pwsh -File packaging/build.ps1 -Version $ver
+
+      - name: 列出产物
+        shell: pwsh
+        run: Get-ChildItem release | Format-Table Name,Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: todoocard-windows-portable
+          path: release/*.zip
+
+      - name: 附加到 Release（tag 触发时）
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.zip
+          tag_name: ${{ github.ref_name }}
+          name: Windows 便携版 ${{ github.ref_name }}
+          body: |
+            Windows 解压即用包（由 GitHub Actions 在 windows-latest 上构建）。
+            解压后双击「土豆片卡片工坊.exe」，浏览器自动打开控制台。
