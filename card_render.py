@@ -426,17 +426,21 @@ def render_summary(ctx: dict):
                 outline=i >= filled, width=1)
     d.text((M, dots_y + 22), f"{passed}/{total}", font=font("num", 15), fill=BLACK)
 
-    d.line([M, CARD_H - 92, CARD_W - M, CARD_H - 92], fill=BLACK, width=2)
+    # 底部引文块：行距放大时整块向上生长，而不是压住页脚
     qf = font("light", 19)
     _qt = f"“{quote.get('text','把今天过好。')}”"
     _all = wrap(d, _qt, qf, CARD_W - M * 2)
     ql = _all[:2]
     if len(_all) > 2 and ql:
         ql[-1] = ql[-1][:-1] + "…”" if len(ql[-1]) > 1 else ql[-1] + "…”"
-    yy = CARD_H - 76
+    adv = int(24 * _LINE)
+    block_h = adv * max(1, len(ql))
+    start_y = CARD_H - 40 - block_h
+    d.line([M, start_y - 18, CARD_W - M, start_y - 18], fill=BLACK, width=2)
+    yy = start_y
     for ln in ql:
         d.text((M, yy), ln, font=qf, fill=BLACK)
-        yy += int(24 * _LINE)
+        yy += adv
     _right_text(d, "土豆片", CARD_H - 32, 16, "light")
     return img
 
