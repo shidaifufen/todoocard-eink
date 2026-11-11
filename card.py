@@ -769,6 +769,19 @@ class CardService:
 
         meta = self._photo_exif(photo_path)
 
+        # 一点拍摄信息都没有：不留信息带，照片铺满整张卡（这条是用户定的规则，勿删）
+        _has_meta = bool(meta.get("taken") or meta.get("camera") or meta.get("lens")
+                         or meta.get("gps") or meta.get("iso") or meta.get("focal")
+                         or meta.get("aperture") or meta.get("shutter"))
+        if not _has_meta:
+            canvas = Image.new("RGB", (W, H), WHITE)
+            src = Image.open(photo_path)
+            src = ImageOps.exif_transpose(src).convert("RGB")
+            canvas.paste(_cover(src, W, H), (0, 0))
+            out = self.cards_dir / "photo.png"
+            canvas.save(out)
+            return out
+
         # 先决定信息带要有几行：没有的行就不画，整条带子跟着缩，不拿占位文字凑数
         gps = meta.get("gps")
         place = self.nearest_city(gps[0], gps[1]) if gps else ""
