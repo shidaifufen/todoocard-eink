@@ -898,6 +898,7 @@ class CardService:
         """海报版每日总结：交给 card_render 统一排版。"""
         _sc = float(self.cfg.get("scale", 1.1) or 1.1)
         R.set_scale(_sc * (1.1 if self.cfg.get("theme") == "wo" else 1.0))
+        R.set_line(float(self.cfg.get("line_gap", 1.0) or 1.0))
         ctx = {
             "now": datetime.now(),
             "todos": self.cfg.get("todos") or [],
