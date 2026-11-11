@@ -702,7 +702,7 @@ async function aiWrite(){
   toast('已填入自定义卡片，可继续微调');
 }
 
-function randomPrompt(){
+async function randomPrompt(){
   const d = await (await fetch('/api/card/ai/prompt')).json();
   $('aiPrompt').value = d.prompt || ''; toast('已填入一条提示词');
 }
