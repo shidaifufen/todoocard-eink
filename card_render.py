@@ -1463,9 +1463,9 @@ def render_weather_blocks(ctx: dict):
     tf = font("num", 92)
     d.text((M + 18, y0 + 10), f"{round(t)}", font=tf, fill=BLACK)
     d.text((M + 18 + text_width(d, f"{round(t)}", tf), y0 + 26), "°C", font=font("num", 34), fill=BLACK)
-    d.text((M + 20, y0 + 146), str(w.get("text", "")), font=font("bold", 38), fill=BLACK)
-    d.text((M + 20, y0 + 196),
-           f"今日 {round(w.get('lo',0))}—{round(w.get('hi',0))}°C",
+    d.text((M + 20, y0 + 150), str(w.get("text", "")), font=font("bold", 36), fill=BLACK)
+    d.text((M + 20, y0 + 206),
+           f"今日 {round(w.get('lo',0))}—{round(w.get('hi',0))}℃",
            font=font("light", 19), fill=BLACK)
 
     aq = w.get("aqi")
@@ -1503,20 +1503,20 @@ def render_weather_blocks(ctx: dict):
 
     # ── 日出日落 / 明天 ──
     y3 = y2 + 156
-    cell(M, y3, M + int((CARD_W - M * 2) * 0.5), y3 + 128, fill=BLUE)
+    cell(M, y3, M + int((CARD_W - M * 2) * 0.5), y3 + 140, fill=BLUE)
     d.text((M + 14, y3 + 10), "日出 / 日落", font=font("bold", 20), fill=WHITE)
-    d.text((M + 14, y3 + 46), str(w.get("sunrise") or "--"), font=font("num", 34), fill=WHITE)
-    d.text((M + 14, y3 + 92), str(w.get("sunset") or "--"), font=font("num", 34), fill=WHITE)
+    d.text((M + 14, y3 + 44), str(w.get("sunrise") or "--"), font=font("num", 29), fill=WHITE)
+    d.text((M + 14, y3 + 92), str(w.get("sunset") or "--"), font=font("num", 29), fill=WHITE)
     bx = M + int((CARD_W - M * 2) * 0.5)
-    cell(bx, y3, CARD_W - M, y3 + 128)
+    cell(bx, y3, CARD_W - M, y3 + 140)
     tmr = days[1] if len(days) > 1 else {}
     d.text((bx + 14, y3 + 10), "明天 " + str(tmr.get("date") or ""), font=font("light", 18), fill=BLACK)
-    d.text((bx + 14, y3 + 42), f"{tmr.get('text','')} {tmr.get('lo')}—{tmr.get('hi')}°C",
+    d.text((bx + 14, y3 + 42), f"{tmr.get('text','')} {tmr.get('lo')}—{tmr.get('hi')}℃",
            font=font("bold", 22), fill=BLACK)
     d.text((bx + 14, y3 + 96), f"今日：{w.get('text','')}", font=font("light", 18), fill=BLACK)
 
     # ── 穿衣参考 ──
-    y4 = y3 + 128
+    y4 = y3 + 140
     cell(M, y4, CARD_W - M, y4 + 76, fill=YELLOW)
     tt = float(t)
     advice = ("气温很低，建议羽绒服、厚毛衣，注意保暖。" if tt < 0 else
