@@ -138,7 +138,7 @@ class CardService:
             "poem_ai": {"enabled": True, "endpoint": "https://api.deepseek.com/v1",
                         "api_key": "", "model": "deepseek-chat"},
             "standby": False,           # 待机：暂停扫描/补发/定时，把蓝牙让给网页版
-            "line_gap": 1.0,            # 行距系数（1.0~1.4）
+            "line_gap": 1.1,            # 行距系数（默认 1.1）
             "custom": {"title": "我的卡片", "accent": "red",
                        "blocks": [{"type": "bigdate"}, {"type": "todos"},
                                   {"type": "quote"}, {"type": "dots"}]},
@@ -911,7 +911,7 @@ class CardService:
         # 日历/自定义这类"表格型"版面本来就有固定节奏，均摊间距反而会把
         # 周条和页脚挤到一起，所以不对它们做纵向均摊。
         if self.cfg.get("fill", True):
-            img = R.distribute_vertical(img, max_gap=int(64 * float(self.cfg.get("line_gap", 1.0) or 1.0)))
+            img = R.distribute_vertical(img, max_gap=int(64 * float(self.cfg.get("line_gap", 1.1) or 1.1)))
         out = self.cards_dir / "summary.png"
         img.save(out)
         return out
@@ -1379,7 +1379,7 @@ class CardService:
         # 日历/自定义这类"表格型"版面本来就有固定节奏，均摊间距反而会把
         # 周条和页脚挤到一起，所以不对它们做纵向均摊。
         if self.cfg.get("fill", True) and kind not in ("calendar", "custom"):
-            img = R.distribute_vertical(img, max_gap=int(64 * float(self.cfg.get("line_gap", 1.0) or 1.0)))
+            img = R.distribute_vertical(img, max_gap=int(64 * float(self.cfg.get("line_gap", 1.1) or 1.1)))
         out = self.cards_dir / f"{kind}.png"
         img.save(out)
         return out, TEMPLATES.get(kind, kind)
@@ -1715,7 +1715,7 @@ class CardService:
             "poem_ai": {**{"enabled": True, "endpoint": "https://api.deepseek.com/v1",
                            "api_key": "", "model": "deepseek-chat"}, **(self.cfg.get("poem_ai") or {})},
             "standby": bool(self.cfg.get("standby")),
-            "line_gap": float(self.cfg.get("line_gap", 1.0) or 1.0),
+            "line_gap": float(self.cfg.get("line_gap", 1.1) or 1.1),
             "custom": self.cfg.get("custom") or {},
             "photo_overlay": bool(self.cfg.get("photo_overlay", True)),
             "photo_count": len(photos),
