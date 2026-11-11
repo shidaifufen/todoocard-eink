@@ -1,6 +1,6 @@
 # Windows 安装与验证
 
-> 状态：代码已写完，**尚未在 Windows 真机验证**。下面每步都有预期输出，对不上就把日志发出来。
+> 状态：Web 控制台 / 渲染 / 扫描 / 配对已在 Windows 11 + Python 3.12 上跑通；**发送（BLE 写入）仍未真机验证**。下面每步都有预期输出，对不上就把日志发出来。
 
 ## 1. 环境
 
@@ -11,7 +11,7 @@
 ```bat
 git clone https://github.com/shidaifufen/todoocard-eink.git
 cd todoocard-eink
-run.bat
+启动（Windows）.bat
 ```
 
 浏览器打开 <http://127.0.0.1:8199/card.html>。
@@ -26,20 +26,21 @@ run.bat
 ## 3. 配对与扫描
 
 1. Windows 设置 → 蓝牙 → 添加设备 → 选择 `TodooCard` 或 `FFFF...`
-2. 控制台「设备与配对」→「扫描」应能看到卡片名称
-3. **发图前关掉 TodooCam 等其它连着卡片的程序**
+2. 控制台「设备与配对」→「扫描」应能看到卡片（Windows 上列的是 MAC 地址 `AA:BB:CC:DD:EE:FF`，macOS 上是 UUID）
+3. 网页「配对」按钮在 Windows 上走 `bleak` + 系统蓝牙配对，不用 Swift 工具
+4. **发图前关掉 TodooCam 等其它连着卡片的程序**
 
 ## 4. 发送（关键一步）
 
-点「发送这个模板」，控制台会打：
+点「发送这个模板」，控制台会打（payload 大小随图片内容变化，v157+ 走 QuickLZ，通常 2 万字节上下）：
 
 ```
-[sender] payload 218893 bytes, target=扫描发现
+[sender] payload 21632 bytes, target=扫描发现
 [sender] 已连接 ...
 [sender] 请求 block size
 [sender] control <- 01 20 00
 [sender] block payload = 28 字节
-[sender] 共 7818 块
+[sender] 共 773 块
 [sender] 数据写完，等显影确认…
 ```
 

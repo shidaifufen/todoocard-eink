@@ -279,7 +279,7 @@ function renderEditor(kind){
     box.innerHTML = `<label class="f">纪念日（每行：2027-01-01 元旦）</label><textarea id="e1"></textarea>
       <div style="margin-top:10px"><button onclick="save('countdowns')">保存</button></div>`;
     $('e1').value = (STATE.countdowns||[]).map(x=>`${x.date} ${x.name}`).join('\n');
-  } else if (kind === 'weather' || kind === 'summary'){
+  } else if (kind === 'weather' || kind === 'weather2' || kind === 'summary'){
     const w = STATE.weather||{};
     box.innerHTML = `<label class="f">城市</label><input id="e1" value="${w.name||''}">
       <label class="f">纬度 / 经度</label>

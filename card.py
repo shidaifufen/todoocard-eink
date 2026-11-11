@@ -65,14 +65,8 @@ FONT_CANDIDATES = {
 
 
 def _font(kind: str, size: int):
-    from PIL import ImageFont
-    for p in FONT_CANDIDATES.get(kind, []):
-        if Path(p).exists():
-            try:
-                return ImageFont.truetype(p, size)
-            except Exception:
-                continue
-    return ImageFont.load_default()
+    """统一走 card_render 的字体表（含 Windows 的 msyh/msyhbd），别再维护第二份。"""
+    return R.font(kind, size)
 
 
 def _load_font():
@@ -320,7 +314,7 @@ class CardService:
         """交互式配对：把 CLI 的输出逐行喂给网页，用户能看到"现在该干嘛"。"""
         dev = (self.cfg.get("device_id") or "").strip()
         if not dev:
-            return {"ok": False, "error": "还没有绑定设备 UUID"}
+            return {"ok": False, "error": "还没有绑定设备：先点「扫描设备」选一台"}
         if self._pair_state in ("waiting", "pairing"):
             return {"ok": True, "state": self._pair_state, "log": self._pair_lines[-50:]}
         self._pair_lines = []
@@ -329,6 +323,12 @@ class CardService:
 
         async def _run():
             try:
+                if sys.platform != "darwin":
+                    ok = await self._pair_bleak(dev)
+                    self._pair_state = "success" if ok else "fail"
+                    if ok:
+                        await self._drain_outbox()
+                    return
                 sender, _ = await asyncio.get_running_loop().run_in_executor(None, self._ensure_bins)
                 async with BLE_GUARD:
                     proc = await asyncio.create_subprocess_exec(
@@ -363,7 +363,50 @@ class CardService:
         self._pair_task = asyncio.create_task(_run(), name="card-pair-session")
         return {"ok": True, "state": self._pair_state}
 
+    async def _pair_bleak(self, device_id: str) -> bool:
+        """Windows / Linux：用系统 BLE 栈配对，不依赖 macOS 的 Swift 工具。
+
+        日志按 pair_session 的约定写进 _pair_lines，网页的「配对」弹窗照样能看。
+        """
+        from bleak import BleakClient, BleakScanner
+
+        def _log(msg: str):
+            _LOGGER.info("%s", msg)
+            self._pair_lines.append(msg)
+            self._pair_lines = self._pair_lines[-200:]
+            self._emit()
+
+        try:
+            async with BLE_GUARD:
+                _log(f"[ble] 正在找 {device_id} …（长按卡片背面按钮 5 秒可让它进入配对窗口）")
+                # bleak 3.x 只有 find_device_by_address（Windows 上就是 MAC 地址）
+                device = await BleakScanner.find_device_by_address(device_id, timeout=25)
+                if device is None:
+                    _log("[ble] 没扫到这台卡片：确认它没被 TodooCam 等 App 连着，再长按按钮 5 秒")
+                    return False
+                _log(f"[ble] 找到 {device.name or device_id}，连接中…")
+                client = BleakClient(device, timeout=30)
+                await client.connect()
+                try:
+                    if sys.platform == "win32":
+                        await client.pair()   # 走 Windows 系统蓝牙配对；其它平台没有这个 API
+                    _log("[ble] 配对完成")
+                finally:
+                    await client.disconnect()
+            self.cfg["paired_ts"] = int(time.time())
+            self._save_cfg()
+            self._emit()
+            return True
+        except Exception as e:
+            _log(f"[ble] 配对失败: {e}")
+            return False
+
     async def _run_pair(self, device_id: str) -> bool:
+        if sys.platform != "darwin":
+            ok = await self._pair_bleak(device_id)
+            if ok:
+                await self._drain_outbox()
+            return ok
         try:
             sender, _ = await asyncio.get_running_loop().run_in_executor(None, self._ensure_bins)
             r = await asyncio.get_running_loop().run_in_executor(
@@ -589,6 +632,44 @@ class CardService:
                 best, best_d = c["name"], km
         return best if best_d <= max_km else ""
 
+    def resolve_city(self, name: str) -> dict:
+        """城市名 → 经纬度。先联网查 Open-Meteo geocoding，失败退回内置 206 城。
+
+        网页版（todoocard-web）里点「拉取」做的是同一件事：输入"深圳"就把坐标换掉，
+        不然预览会一直显示默认的北京。
+        """
+        name = (name or "").strip()
+        if not name:
+            return {"ok": False, "error": "先填一个城市名"}
+        # 1) 在线 geocoding（准，带重名消歧）
+        try:
+            import urllib.parse
+            url = ("https://geocoding-api.open-meteo.com/v1/search?name=%s"
+                   "&count=1&language=zh&format=json" % urllib.parse.quote(name))
+            with urllib.request.urlopen(url, timeout=6) as r:
+                d = json.loads(r.read().decode())
+            results = d.get("results") or []
+            if results:
+                g = results[0]
+                detail = " · ".join([x for x in (g.get("admin1"), g.get("country")) if x])
+                return {"ok": True, "name": g.get("name") or name,
+                        "lat": round(float(g["latitude"]), 4),
+                        "lon": round(float(g["longitude"]), 4),
+                        "source": "open-meteo", "detail": detail}
+        except Exception as e:
+            _LOGGER.debug("在线城市解析失败，改用离线城市库: %s", e)
+        # 2) 离线城市库（内置 206 城，先精确后包含）
+        cities = self._cities or []
+        hit = next((c for c in cities if c.get("name") == name), None)
+        if not hit:
+            hit = next((c for c in cities
+                        if name in (c.get("name") or "") or (c.get("name") or "") in name), None)
+        if hit:
+            return {"ok": True, "name": hit["name"], "lat": hit["lat"], "lon": hit["lon"],
+                    "source": "offline", "detail": "离线城市库"}
+        return {"ok": False,
+                "error": f"没找到「{name}」：可以换个写法，或直接手填经纬度"}
+
     def _photo_exif(self, path: Path) -> dict:
         """读 EXIF：拍摄时间、设备、镜头、焦段/光圈/快门/ISO、GPS。读不到就返回空。"""
         out = {}
@@ -714,11 +795,15 @@ class CardService:
             wx_txt = ""
 
 
-        # 逐行按真实字高算，上下 padding 相等，文字才真正居中
-        _heights = [23] + [16] * len(extra)
-        _gap = 5
+        # 信息带：左右边距、字号、行距跟 card_render 的版式规范走（M / 行距 24）
+        MX = R.M
+        date_f = R.font("bold", 22)
+        meta_f = R.font("light", 16)
+        time_f = R.font("num", 22)
+        _heights = [22] + [16] * len(extra)
+        _gap = 6
         _content = sum(_heights) + _gap * (len(_heights) - 1)
-        _pad = 10
+        _pad = 14
         band = _content + _pad * 2
         photo_h = H - band
         canvas = Image.new("RGB", (W, H), WHITE)
@@ -740,21 +825,21 @@ class CardService:
                      else f"{taken.month}月{taken.day}日")
 
         y0 = photo_h + _pad
-        d.text((22, y0), f"{_date_txt} {WEEKDAYS[taken.weekday()]}",
-               font=_font("bold", 23), fill=BLACK)
+        d.text((MX, y0), f"{_date_txt} {WEEKDAYS[taken.weekday()]}", font=date_f, fill=BLACK)
         tm = taken.strftime("%H:%M")
-        d.text((W - 22 - d.textlength(tm, font=_font("num", 23)), y0),
-               tm, font=_font("num", 23), fill=BLACK)
+        d.text((W - MX - d.textlength(tm, font=time_f), y0), tm, font=time_f, fill=BLACK)
 
         yy = y0 + _heights[0] + _gap
         for i, line in enumerate(extra):
             if line:
-                d.text((22, yy), line, font=_font("light", 16), fill=BLACK)
+                d.text((MX, yy), line, font=meta_f, fill=BLACK)
             if i == 0 and wx_txt and extra:
-                d.text((W - 22 - d.textlength(wx_txt, font=_font("light", 16)), yy),
-                       wx_txt, font=_font("light", 16), fill=BLACK)
+                d.text((W - MX - d.textlength(wx_txt, font=meta_f), yy),
+                       wx_txt, font=meta_f, fill=BLACK)
             yy += _heights[i + 1] + _gap
 
+        # 照片区继续抖动，信息带吸附成 6 色（否则白底上会飘彩色噪点）
+        canvas = R.snap_palette(canvas, keep=[(0, 0, W, photo_h)])
         out = self.cards_dir / "photo.png"
         canvas.save(out)
         return out
@@ -810,13 +895,19 @@ class CardService:
         return out
 
     def render_placeholder(self, text: str) -> Path:
-        """没有照片时的兜底卡，避免定时任务静默失败。"""
+        """没有照片时的兜底卡，避免定时任务静默失败。走 card_render 的版式规范。"""
         from PIL import Image, ImageDraw
         img = Image.new("RGB", (CARD_W, CARD_H), WHITE)
         d = ImageDraw.Draw(img)
-        d.rectangle([0, 0, CARD_W, 92], fill=BLACK)
-        d.text((30, 26), "土豆片", font=_font("bold", 38), fill=WHITE)
-        d.text((30, 320), text, font=_font("bold", 30), fill=BLACK)
+        d.rectangle([0, 0, CARD_W, R.Y_RULE], fill=BLACK)
+        d.text((R.M, R.Y_HEAD), "土豆片", font=_font("bold", R.FS["title"]), fill=WHITE)
+        yy = R.Y_BODY
+        for line in str(text).split("\n"):
+            if not line.strip():
+                continue
+            d.text((R.M, yy), line.strip(), font=_font("bold", 26), fill=BLACK)
+            yy += 44
+        img = R.snap_palette(img)
         out = self.cards_dir / "placeholder.png"
         img.save(out)
         return out
@@ -835,9 +926,11 @@ class CardService:
         try:
             url = ("https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s"
                    "&current=temperature_2m,relative_humidity_2m,apparent_temperature,"
-                   "weather_code,wind_speed_10m&hourly=temperature_2m,weather_code"
-                   "&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset"
-                   "&timezone=auto&forecast_days=2"
+                   "weather_code,wind_speed_10m,wind_direction_10m"
+                   "&hourly=temperature_2m,weather_code"
+                   "&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset,"
+                   "weather_code,precipitation_probability_max"
+                   "&timezone=auto&forecast_days=4"
                    % (lat, lon))
             with urllib.request.urlopen(url, timeout=8) as r:
                 d = json.loads(r.read().decode())
@@ -854,7 +947,29 @@ class CardService:
                 lo=(daily.get("temperature_2m_min") or [None])[0],
                 sunrise=str((daily.get("sunrise") or [""])[0])[11:16],
                 sunset=str((daily.get("sunset") or [""])[0])[11:16],
+                precip=(daily.get("precipitation_probability_max") or [None])[0],
+                wind_text=_wind_text(cur.get("wind_direction_10m"), cur.get("wind_speed_10m")),
             )
+            # 未来 3 天（今天/明天/后天）：色块天气卡要用
+            days = daily.get("time") or []
+            his = daily.get("temperature_2m_max") or []
+            los = daily.get("temperature_2m_min") or []
+            codes = daily.get("weather_code") or []
+            labels = ("今天", "明天", "后天")
+            daily3 = []
+            for i in range(min(3, len(days))):
+                try:
+                    dt = datetime.strptime(str(days[i])[:10], "%Y-%m-%d")
+                except Exception:
+                    dt = None
+                daily3.append({
+                    "label": labels[i],
+                    "date": f"{dt.month}.{dt.day}" if dt else "",
+                    "hi": round(his[i]) if i < len(his) and his[i] is not None else None,
+                    "lo": round(los[i]) if i < len(los) and los[i] is not None else None,
+                    "text": _wx_text(codes[i]) if i < len(codes) else "",
+                })
+            data["daily3"] = daily3
             # 未来 4 个整点
             hours = d.get("hourly") or {}
             times = hours.get("time") or []
@@ -1124,12 +1239,7 @@ class CardService:
         # 深色 HUD 下抗锯齿会被二值化吃掉一圈，字号整体再放大 10% 才看得清
         R.set_scale(_sc * (1.1 if self.cfg.get("theme") == "wo" else 1.0))
         if kind == "photo":
-            # 预览和发送必须是同一张：钉住选中的照片，直到推送成功或点「换一张预览」
-            pin = getattr(self, "_photo_pin", None)
-            if fresh or not pin or not Path(pin).exists():
-                pin = self.pick_photo(consume=False)
-                self._photo_pin = pin
-            photo = pin
+            photo = self.pick_photo(consume=consume)
             if not photo:
                 raise RuntimeError("照片文件夹是空的（在网页里添加目录）")
             return self.compose_photo(Path(photo)), Path(photo).name
@@ -1151,6 +1261,8 @@ class CardService:
         }
         if kind == "weather":
             img = R.render_weather(ctx)
+        elif kind == "weather2":
+            img = R.render_weather_blocks(ctx)
         elif kind == "progress":
             img = R.render_progress(ctx)
         elif kind == "energy":
@@ -1276,19 +1388,37 @@ class CardService:
         return self._send_macos(image_path, wait_sec)
 
     def _send_python(self, image_path: Path, wait_sec: float | None = None) -> dict:
-        """Windows / Linux：payload.py + sender.py（bleak）。"""
+        """Windows / Linux：payload.py + sender.py（bleak）。
+
+        返回字段必须和 _send_macos 一致（ok / output / seconds），
+        否则 send() 记录历史时会 KeyError('output')，即使卡片已经刷成功也会显示"失败"。
+        """
         import asyncio as _aio
         import sender as S
         t0 = time.time()
+        lines: list[str] = []
+
+        def _log(msg: str) -> None:
+            lines.append(str(msg))
+            _LOGGER.info("%s", msg)
+
         try:
             art = self._build_payload_python(image_path)
+            # 等卡片广播的总时长（卡片自己会广播，不要求用户按键）
+            wait_s = float(wait_sec or self.cfg.get("wait_card_sec", 180) or 180)
             res = _aio.run(S.send(art["payload"], self.cfg.get("device_id") or None,
-                                  log=lambda m: _LOGGER.info("%s", m),
-                                  timeout=wait_sec or 120))
-            res["seconds"] = round(time.time() - t0, 1)
-            return res
+                                  log=_log, timeout=wait_s))
+            out = "\n".join(lines)
+            return {"ok": bool(res.get("ok")), "acked": res.get("acked", True),
+                    "output": out or str(res.get("message") or ""),
+                    "seconds": round(time.time() - t0, 1),
+                    "message": str(res.get("message") or "")}
         except Exception as e:
-            return {"ok": False, "seconds": round(time.time() - t0, 1), "message": str(e)}
+            msg = str(e)
+            out = "\n".join([*lines, msg]).strip()
+            _LOGGER.warning("发送失败: %s", msg)
+            return {"ok": False, "output": out, "seconds": round(time.time() - t0, 1),
+                    "message": msg}
 
     def _send_macos(self, image_path: Path, wait_sec: float | None = None) -> dict:
         started = time.time()
@@ -1348,22 +1478,23 @@ class CardService:
                 async with BLE_GUARD:
                     res = await asyncio.get_running_loop().run_in_executor(
                         None, self._send_blocking, image, wait_sec)
+                # 两个平台的发送器返回字段可能不完全一样，这里统一按"缺了也不炸"处理
+                ok = bool(res.get("ok"))
+                out_text = str(res.get("output") or res.get("message") or "")
+                if ok:
+                    msg = ("成功" if res.get("acked", True) is not False
+                           else "已写入（没等到显影确认，画面可能已刷新）")
+                else:
+                    msg = _friendly_error(out_text)
                 entry = {"ts": int(time.time()), "kind": kind, "file": label,
-                         "ok": bool(res["ok"]), "seconds": res["seconds"],
-                         "message": ("成功" if res["ok"] else _friendly_error(res["output"]))}
-                if not res["ok"] and requeue and _retryable(res["output"]):
+                         "ok": ok, "seconds": res.get("seconds", 0), "message": msg}
+                if not ok and requeue and _retryable(out_text):
                     self._enqueue(kind)
                 self._add_history(entry)
                 self._emit()
-                if res["ok"] and kind == "photo":
-                    self._photo_pin = None      # 已上屏，换下一张
-                    try:
-                        self.pick_photo(consume=True)
-                    except Exception:
-                        pass
-                _LOGGER.info("土豆片推送 %s: %s (%.1fs)", kind, "成功" if res["ok"] else "失败",
-                             res["seconds"])
-                return {"ok": res["ok"], **entry, "output": res["output"]}
+                _LOGGER.info("土豆片推送 %s: %s (%.1fs)", kind, "成功" if ok else "失败",
+                             res.get("seconds", 0))
+                return {"ok": ok, **entry, "output": out_text}
             except Exception as e:
                 entry = {"ts": int(time.time()), "kind": kind, "file": "",
                          "ok": False, "seconds": 0, "message": str(e)}
@@ -1484,7 +1615,9 @@ class CardService:
                 t.cancel()
                 try:
                     await t
-                except Exception:
+                except (asyncio.CancelledError, Exception):
+                    # CancelledError 继承自 BaseException，光写 except Exception 接不住，
+                    # 退出时会甩一脸 traceback（正常停服不该报错）
                     pass
 
     def _emit(self):
@@ -1565,6 +1698,7 @@ TEMPLATES = {
     "summary": "每日总结",
     "todo": "今日待办",
     "weather": "天气看板",
+    "weather2": "色块天气",
     "progress": "时间进度",
     "energy": "充电统计",
     "quote": "每日一句",
@@ -1588,17 +1722,46 @@ def _retryable(text: str) -> bool:
 
 
 def _friendly_error(out: str) -> str:
-    """把上游 Swift 的英文报错翻译成能直接照做的中文提示。"""
-    low = (out or "").lower()
+    """把发送器的报错翻译成能直接照做的中文提示。"""
+    text = out or ""
+    low = text.lower()
+    # ── Windows / Linux（sender.py 用 bleak，抛的是中文）──
+    if "没看到卡片广播" in text:
+        return "没等到卡片广播：确认蓝牙开着、卡片有电、没被手机 App 连着；再点一次会继续等"
+    if "没扫到卡片" in text:
+        return "没扫到卡片：长按卡片背面按钮唤醒它，离电脑近一点，别被手机 App 连着"
+    if "unreachable" in low or "disconnected" in low or "not connected" in low:
+        return "发送途中链路断了（已连接但卡片不可达）：多半是卡片电量低或休眠了，靠近并充电后再发"
+    if "could not start notify" in low or "start notify" in low:
+        return "连上了但订阅通知失败（链路不稳）：把卡片靠近电脑、充电后重试"
+    if "回执停滞" in text:
+        return "传输中途卡片不回了（多半是缓存被灌满）：离近一点重试，连续失败把 data\\app.log 发出来"
+    if "没找到控制点" in text or "没找到数据点" in text:
+        return "卡片的蓝牙特征值和固件对不上（固件版本可能不同），把 data\\app.log 发出来"
+    if "等不到 block size" in text:
+        return "卡片没回应分块大小，重试一次；还不行把 data\\app.log 发出来"
+    if "没收到显影确认" in text:
+        return "数据写完但卡片没确认刷新，它可能中途休眠了；唤醒后再发一次"
+    if "拒绝" in text:
+        return "卡片拒绝了这次传输，重试一次；连续失败请把 data\\app.log 发出来"
+    if "access is denied" in low or "拒绝访问" in text:
+        return "蓝牙被系统拦了：确认卡片已在 Windows 蓝牙里配对，并关掉其它占用它的程序"
+    if "winerror 2" in low or "找不到指定的文件" in text:
+        return "缺文件（可能是解压不完整）：重新解压一次压缩包再试"
+    if "bluetooth" in low and ("radio" in low or "adapter" in low or "is off" in low):
+        return "系统蓝牙没开或适配器不可用：打开蓝牙再试"
+    if "拒绝" in text or "错误" in text and "0x" in text:
+        return text[-300:]
+    # ── macOS / Swift 分支（英文）──
     if "peer removed pairing" in low:
-        return "配对失效：双击项目里的「修复配对.command」，长按卡片背面按钮 5 秒重新配对"
+        return "配对失效：长按卡片背面按钮 5 秒，在网页里重新配对一次"
     if "timed out connecting" in low:
         return "连不上卡片：它可能睡着了或在被手机占用；长按背面按钮唤醒后重试"
     if "not found" in low or "no matching" in low:
         return "没扫到卡片：确认它在附近并已唤醒（长按背面按钮）"
     if "required 0x05/0x08" in low:
         return "数据写完但没收到显影确认，卡片可能已重启；稍等 30 秒再发一次"
-    return (out or "")[-300:]
+    return text[-300:]
 
 
 def _cover(img, w: int, h: int):
@@ -1615,6 +1778,42 @@ def _cover(img, w: int, h: int):
 def _wx_text(code) -> str:
     """天气代码 → 中文（和天气看板共用一套口径）。"""
     return _wx(code) or ""
+
+
+_WIND_DIRS = ("北", "东北", "东", "东南", "南", "西南", "西", "西北")
+
+
+def _wind_text(deg, kmh) -> str:
+    """风向角度 + 风速 → "东北风 2级"（色块天气卡用）。"""
+    try:
+        d = float(deg) % 360
+        idx = int((d + 22.5) // 45) % 8
+        name = _WIND_DIRS[idx] + "风"
+    except (TypeError, ValueError):
+        name = ""
+    try:
+        v = float(kmh)
+        if v < 1:
+            lvl = 0
+        elif v < 6:
+            lvl = 1
+        elif v < 12:
+            lvl = 2
+        elif v < 20:
+            lvl = 3
+        elif v < 29:
+            lvl = 4
+        elif v < 39:
+            lvl = 5
+        elif v < 50:
+            lvl = 6
+        elif v < 62:
+            lvl = 7
+        else:
+            lvl = 8
+        return f"{name} {lvl}级".strip()
+    except (TypeError, ValueError):
+        return name
 
 
 def _wx(code) -> str:
@@ -1666,6 +1865,29 @@ def make_routes():
         cfg = current().save_cfg(body or {})
         return web.json_response({"ok": True, "card": current().status(), "config": cfg})
 
+    async def _resolve_city(request):
+        """城市名 → 经纬度（在线 geocoding，失败退离线城市库）。"""
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        name = str((body or {}).get("name") or "").strip()
+        svc = current()
+        res = await asyncio.get_running_loop().run_in_executor(None, svc.resolve_city, name)
+        if res.get("ok"):
+            # 解析成功就顺手存进配置，并把旧的天气缓存清掉，预览立刻换城市
+            weather = dict(svc.cfg.get("weather") or {})
+            weather.update({"enabled": True, "name": res["name"],
+                            "lat": res["lat"], "lon": res["lon"]})
+            svc.save_cfg({"weather": weather})
+            try:
+                svc._wx_cache = {"ts": 0, "data": {}}
+                svc._weather_cache = {"ts": 0, "text": ""}
+            except Exception:
+                pass
+        return web.json_response({**res, "card": svc.status()},
+                                 status=200 if res.get("ok") else 404)
+
     async def _preview(request):
         kind = request.query.get("kind", "summary")
         fresh = request.query.get("fresh") == "1"
@@ -1700,6 +1922,10 @@ def make_routes():
         if not dev:
             return web.json_response({"ok": False, "error": "缺少 device_id"}, status=400)
         try:
+            if sys.platform != "darwin":
+                ok = await svc._pair_bleak(str(dev))
+                return web.json_response({"ok": ok, "code": 0 if ok else 1,
+                                          "output": "\n".join(svc._pair_lines[-40:])})
             sender, _ = await asyncio.get_running_loop().run_in_executor(None, svc._ensure_bins)
             r = await asyncio.get_running_loop().run_in_executor(
                 None, lambda: subprocess.run([str(sender), "--pair", "--id", dev],
@@ -1783,6 +2009,41 @@ def make_routes():
 
     async def _scan(request):
         svc = current()
+        if sys.platform != "darwin":
+            # Windows / Linux：没有 Swift 工具，直接用 bleak 扫广播。
+            # 兼容卡的广播里 manufacturer=0x5053（公司 ID 已被 bleak 剥掉），
+            # 名字多半是 TodooCard / TODoo…，所以两个条件任一命中就算候选。
+            def _ble_scan():
+                from bleak import BleakScanner
+
+                async def _go():
+                    devs = await BleakScanner.discover(timeout=10, return_adv=True)
+                    out = []
+                    for addr, (dev, adv) in devs.items():
+                        mfr = adv.manufacturer_data or {}
+                        data = mfr.get(0x5053)
+                        name = dev.name or adv.local_name or ""
+                        if data is None and "todoo" not in name.lower():
+                            continue
+                        pairing = bool(data and len(data) > 1 and (data[1] & 0x02))
+                        out.append({"addr": str(addr), "name": name,
+                                    "manufacturer": data.hex(" ") if data else "",
+                                    "pairing": pairing, "rssi": adv.rssi})
+                    return out
+
+                return asyncio.run(_go())
+
+            try:
+                found = await asyncio.get_running_loop().run_in_executor(None, _ble_scan)
+            except Exception as e:
+                return web.json_response({"ok": False, "error": f"蓝牙扫描失败: {e}"}, status=500)
+            lines = [
+                f"{d['addr']}  name={d['name'] or '-'}  rssi={d['rssi']}"
+                f"{'  manufacturer=0x5053 ' + d['manufacturer'] if d['manufacturer'] else ''}"
+                f"{'  [配对窗口已开]' if d['pairing'] else ''}  id={d['addr']}"
+                for d in found
+            ]
+            return web.json_response({"ok": True, "devices": lines, "found": found, "raw": ""})
         try:
             sender, _ = await asyncio.get_running_loop().run_in_executor(None, svc._ensure_bins)
         except Exception as e:
@@ -1802,6 +2063,7 @@ def make_routes():
         ("POST", "/api/card/ai/generate", _ai_generate),
         ("GET", "/api/card/ai/image", _ai_image),
         ("POST", "/api/card/config", _config),
+        ("POST", "/api/card/weather/resolve", _resolve_city),
         ("GET", "/api/card/preview", _preview),
         ("POST", "/api/card/send", _send),
         ("POST", "/api/card/scan", _scan),

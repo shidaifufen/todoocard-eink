@@ -385,7 +385,7 @@ function renderEditor(){
       <textarea id="e_cd"></textarea>
       <div class="btnrow"><button class="primary" onclick="saveCountdowns()">保存纪念日</button></div>`;
     $('e_cd').value = (STATE.countdowns||[]).map(x=>`${x.date} ${x.name}`).join('\n');
-  } else if (currentTpl === 'weather' || currentTpl === 'summary'){
+  } else if (currentTpl === 'weather' || currentTpl === 'weather2' || currentTpl === 'summary'){
     const w = STATE.weather || {};
     box.innerHTML = `<label class="f">城市</label><input type="text" id="e_city" value="${w.name||''}">
       <div class="grid2"><div><label class="f">纬度</label><input type="text" id="e_lat" value="${w.lat??''}"></div>
