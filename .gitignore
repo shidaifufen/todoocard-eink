@@ -7,3 +7,6 @@ data/bin/
 data/cards/
 !data/cities.json
 .DS_Store
+dist-mac/
+build-mac/
+release/

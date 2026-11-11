@@ -14,8 +14,11 @@ from aiohttp import web
 
 import card
 
-ROOT = Path(__file__).resolve().parent
-WEB_DIR = ROOT / "web"
+# 打包后（PyInstaller）：只读资源在 sys._MEIPASS，可写数据放在 exe 旁边
+FROZEN = bool(getattr(sys, "frozen", False))
+RES_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+ROOT = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent
+WEB_DIR = RES_DIR / "web"
 DATA_DIR = ROOT / "data"
 PORT = int(os.environ.get("PORT", "8199"))
 

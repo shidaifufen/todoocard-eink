@@ -27,6 +27,30 @@
 - **定时计划**：按 cron 式时间点生成并推送，失败进重试队列，卡片一广播就补发
 - **照片卡**：EXIF 拍摄时间/设备/焦段光圈快门 ISO，GPS 离线反查城市（内置 206 城）
 
+
+## 发布（Release）约定
+
+**每个 Release 都必须挂一个「解压即用」的程序包**，用户不需要 Python、不需要联网装依赖。
+
+| 平台 | 产物 | 打包命令 |
+|---|---|---|
+| Windows | `todocard-portable-<版本>.zip` | `pwsh -File packaging\build.ps1`（Windows 上跑） |
+| macOS | `todoocard-eink-<版本>-darwin-<arch>.zip` | `bash packaging/build_release.sh <版本>`（macOS 上跑，需先 `pip install pyinstaller`） |
+
+macOS 包内结构：
+
+```
+todoocard-eink-1.0.10-darwin-arm64/
+├── TodooCardEink/          ← PyInstaller 目录版（启动 1~2s）
+├── start-mac.command       ← 双击启动（英文名，防解压乱码）
+├── 启动（macOS）.command
+└── 使用说明.txt
+```
+
+启动后浏览器自动打开 `http://127.0.0.1:8199/card.html`；数据写在包内 `data/`，删目录即卸载。
+
+> 注意：macOS 包只能在打包它的架构上跑（arm64 / x86_64 分开打）；Windows 包要在 Windows 上打。
+
 ## 快速开始
 
 ```bash
