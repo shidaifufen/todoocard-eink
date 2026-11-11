@@ -33,20 +33,25 @@ jobs:
           Write-Host "版本: $ver"
           pwsh -File packaging/build.ps1 -Version $ver
 
-      - name: 列出产物
+      - name: 重命名为 ASCII（中文名在 Release 上会乱码）
         shell: pwsh
-        run: Get-ChildItem release | Format-Table Name,Length
+        run: |
+          $ver = "${{ github.event.inputs.version }}"
+          if (-not $ver) { $ver = "${{ github.ref_name }}".TrimStart("v").Replace("-windows","") }
+          $zip = Get-ChildItem release/*.zip | Select-Object -First 1
+          Copy-Item $zip.FullName "release/todocard-portable-$ver-windows.zip"
+          Get-ChildItem release | Format-Table Name,Length
 
       - uses: actions/upload-artifact@v4
         with:
           name: todoocard-windows-portable
-          path: release/*.zip
+          path: release/todocard-portable-*-windows.zip
 
       - name: 附加到 Release（tag 触发时）
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: release/*.zip
+          files: release/todocard-portable-*-windows.zip
           tag_name: ${{ github.ref_name }}
           name: Windows 便携版 ${{ github.ref_name }}
           body: |
