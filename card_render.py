@@ -1160,6 +1160,33 @@ def _draw_block(d, img, blk, ctx, y, width, accent):
                 d.text((x, yy), ln, font=f, fill=BLACK)
             yy += int(f.size * 1.35)
         return yy - y + 4
+
+    if t == "qr":
+        # 二维码积木：把链接/文本编成二维码，按六色画成方块
+        try:
+            import qrcode
+        except Exception:
+            d.rectangle([x, y, x + 200, y + 200], outline=BLACK, width=2)
+            d.text((x + 12, y + 12), "（缺少 qrcode 库）", font=font("light", 14), fill=BLACK)
+            return 208
+        txt = str(blk.get("text") or "").strip() or "https://github.com/shidaifufen"
+        qr = qrcode.QRCode(border=1, box_size=1, error_correction=qrcode.constants.ERROR_CORRECT_M)
+        qr.add_data(txt)
+        qr.make(fit=True)
+        mat = qr.get_matrix()
+        n = len(mat)
+        size = min(int(w), int(blk.get("height") or 240), 300)
+        cell = max(1, size // n)
+        size = cell * n
+        ox = x + (w - size) // 2
+        d.rectangle([ox - 6, y - 6, ox + size + 6, y + size + 6], fill=WHITE, outline=BLACK, width=2)
+        for ry, row in enumerate(mat):
+            for rx, v in enumerate(row):
+                if v:
+                    d.rectangle([ox + rx * cell, y + ry * cell,
+                                 ox + (rx + 1) * cell - 1, y + (ry + 1) * cell - 1], fill=BLACK)
+        return size + 12
+
     if t == "rule":
         d.line([x, y + 6, x + w, y + 6], fill=BLACK, width=2)
         return 18
@@ -1397,56 +1424,112 @@ def to_dark_hud(img):
 
 # ── 色块天气（1.0.10 新增模板；这里用现有骨架实现，保持整体风格一致）──
 def render_weather_blocks(ctx: dict):
+    """色块天气：大温度 / AQI 红块 / 三天预报 / 日出日落 / 穿衣参考。"""
     now: datetime = ctx["now"]
     w = ctx.get("weather") or {}
     img = new_canvas()
     from PIL import ImageDraw
     d = ImageDraw.Draw(img)
 
-    _head(d, "今日天气", w.get("city") or now.strftime("%m/%d"))
+    def cell(x0, y0, x1, y1, fill=WHITE, outline=BLACK, width=3):
+        d.rectangle([x0, y0, x1, y1], fill=fill, outline=outline, width=width)
 
-    def cell(x0, y0, x1, y1, title, value, sub="", color=BLACK):
-        d.rectangle([x0, y0, x1, y1], fill=WHITE, outline=BLACK, width=3)
-        d.text((x0 + 14, y0 + 10), title, font=font("light", 15), fill=BLACK)
-        if value:
-            d.text((x0 + 14, y0 + 34), value, font=font("bold", 34), fill=color)
-        if sub:
-            d.text((x0 + 14, y1 - 30), sub, font=font("light", 14), fill=BLACK)
+    def aqi_color(a):
+        try: a = int(a)
+        except Exception: return YELLOW
+        return GREEN if a <= 50 else YELLOW if a <= 100 else RED
 
-    if w.get("temp") is None:
-        d.text((M, 160), "天气获取失败：在网页里点「按城市更新位置」", font=font("bold", 20), fill=BLACK)
+    # ── 顶栏 ──
+    top = M
+    cell(M, top, CARD_W - M, top + 84)
+    d.text((M + 16, top + 12), w.get("city") or "本地", font=font("bold", 34), fill=BLACK)
+    d.text((M + 16, top + 56), "色块天气", font=font("light", 14), fill=BLACK)
+    hdr_w = 210
+    cell(CARD_W - M - hdr_w, top, CARD_W - M, top + 84, fill=YELLOW)
+    d.text((CARD_W - M - hdr_w + 16, top + 20),
+           f"{WEEKDAYS[now.weekday()]} {w.get('clock') or now.strftime('%H:%M')}",
+           font=font("bold", 26), fill=BLACK)
+
+    # ── 主区：左温度 / 右 AQI + 三项 ──
+    y0, y1 = top + 84, top + 84 + 250
+    mid_x = M + int((CARD_W - M * 2) * 0.60)
+    cell(M, y0, mid_x, y1)
+    t = w.get("temp")
+    if t is None:
+        d.text((M + 20, y0 + 40), "天气获取失败", font=font("bold", 26), fill=BLACK)
         return img
+    tf = font("num", 92)
+    d.text((M + 18, y0 + 10), f"{round(t)}", font=tf, fill=BLACK)
+    d.text((M + 18 + text_width(d, f"{round(t)}", tf), y0 + 26), "°C", font=font("num", 34), fill=BLACK)
+    d.text((M + 20, y0 + 146), str(w.get("text", "")), font=font("bold", 38), fill=BLACK)
+    d.text((M + 20, y0 + 196),
+           f"今日 {round(w.get('lo',0))}—{round(w.get('hi',0))}°C",
+           font=font("light", 19), fill=BLACK)
 
-    half = CARD_W // 2
-    # 上排：温度 / 天气词
-    cell(M, 108, half - 8, 236, "当前温度", f"{round(w.get('temp'))}°", "", RED)
-    cell(half + 8, 108, CARD_W - M, 236, "天气", w.get("text", ""), "", BLACK)
-    # 中排：体感 / 风 / 降水
-    third = (CARD_W - M * 2) // 3
-    y0, y1 = 248, 356
-    for i, (title, val, sub) in enumerate((
-        ("体感", f"{round(w.get('feels', w.get('temp')))}°", ""),
-        ("风向风级", str(w.get("wind_text") or ""), ""),
-        ("降水概率", f"{w.get('precip') or 0}%", ""),
-    )):
-        x0 = M + i * third
-        cell(x0, y0, x0 + third - 8, y1, title, val, sub)
-    # 三天预报
+    aq = w.get("aqi")
+    cell(mid_x, y0, CARD_W - M, y0 + 132, fill=aqi_color(aq))
+    if aq is not None:
+        label, _c = _aqi_label(aq)
+        d.text((mid_x + 14, y0 + 8), "空气质量", font=font("bold", 17), fill=WHITE if aqi_color(aq) in (RED, BLUE, BLACK) else BLACK)
+        d.text((mid_x + 14, y0 + 30), str(aq), font=font("num", 54), fill=WHITE if aqi_color(aq) in (RED, BLUE, BLACK) else BLACK)
+        d.text((mid_x + 14, y0 + 96), f"AQI / {label}",
+               font=font("light", 16), fill=WHITE if aqi_color(aq) in (RED, BLUE, BLACK) else BLACK)
+    cell(mid_x, y0 + 132, CARD_W - M, y1)
+    info = [("湿度", f"{round(w.get('hum') or 0)}%"),
+            ("体感", f"{round(w.get('feels') or t)}°")]
+    yy = y0 + 140
+    for k, v in info:
+        d.text((mid_x + 14, yy), f"{k} {v}", font=font("bold", 19), fill=BLACK)
+        yy += 34
+
+    # ── 三天预报 ──
+    y2 = y1
+    cell(M, y2, M + 48, y2 + 156, fill=BLUE)
+    for i, ch in enumerate("3天预报"):
+        d.text((M + 12, y2 + 12 + i * 30), ch, font=font("bold", 20), fill=WHITE)
     days = (w.get("daily3") or [])[:3]
-    y2 = 368
-    if days:
-        cw = (CARD_W - M * 2) // len(days)
-        for i, day in enumerate(days):
-            x0 = M + i * cw
-            d.rectangle([x0, y2, x0 + cw - 8, y2 + 150], outline=BLACK, width=3)
-            d.text((x0 + 12, y2 + 10), str(day.get("label", "")), font=font("light", 15), fill=BLACK)
-            d.text((x0 + 12, y2 + 40), f"{round(day.get('hi', 0))}°", font=font("bold", 30), fill=RED)
-            d.text((x0 + 12, y2 + 82), f"{round(day.get('lo', 0))}°", font=font("bold", 30), fill=BLUE)
-            d.text((x0 + 12, y2 + 120), str(day.get("text", "")), font=font("light", 14), fill=BLACK)
-    # 底部：日出日落
-    d.text((M, CARD_H - 120), f"日出 {w.get('sunrise','--')}   日落 {w.get('sunset','--')}",
-           font=font("light", 16), fill=BLACK)
-    _right_text(d, "土豆片 · 色块天气", CARD_H - 60, 14, "light")
+    colw = (CARD_W - M - (M + 48)) // 3
+    for i in range(3):
+        x0 = M + 48 + i * colw
+        cell(x0, y2, x0 + colw, y2 + 156)
+    for i, day in enumerate(days):
+        x0 = M + 48 + i * colw
+        d.text((x0 + 12, y2 + 12), str(day.get("label", "")), font=font("light", 18), fill=BLACK)
+        d.text((x0 + 12, y2 + 44), str(day.get("text", "")), font=font("bold", 30), fill=BLACK)
+        d.text((x0 + 12, y2 + 100), f"{day.get('lo')}°~{day.get('hi')}°",
+               font=font("bold", 22), fill=BLACK)
+
+    # ── 日出日落 / 明天 ──
+    y3 = y2 + 156
+    cell(M, y3, M + int((CARD_W - M * 2) * 0.5), y3 + 128, fill=BLUE)
+    d.text((M + 14, y3 + 10), "日出 / 日落", font=font("bold", 20), fill=WHITE)
+    d.text((M + 14, y3 + 46), str(w.get("sunrise") or "--"), font=font("num", 34), fill=WHITE)
+    d.text((M + 14, y3 + 92), str(w.get("sunset") or "--"), font=font("num", 34), fill=WHITE)
+    bx = M + int((CARD_W - M * 2) * 0.5)
+    cell(bx, y3, CARD_W - M, y3 + 128)
+    tmr = days[1] if len(days) > 1 else {}
+    d.text((bx + 14, y3 + 10), "明天 " + str(tmr.get("date") or ""), font=font("light", 18), fill=BLACK)
+    d.text((bx + 14, y3 + 42), f"{tmr.get('text','')} {tmr.get('lo')}—{tmr.get('hi')}°C",
+           font=font("bold", 22), fill=BLACK)
+    d.text((bx + 14, y3 + 96), f"今日：{w.get('text','')}", font=font("light", 18), fill=BLACK)
+
+    # ── 穿衣参考 ──
+    y4 = y3 + 128
+    cell(M, y4, CARD_W - M, y4 + 76, fill=YELLOW)
+    tt = float(t)
+    advice = ("气温很低，建议羽绒服、厚毛衣，注意保暖。" if tt < 0 else
+              "气温较低，建议穿厚外套、毛衣，出门戴围巾。" if tt < 10 else
+              "天气偏凉，外套加长袖比较合适。" if tt < 18 else
+              "温度舒适，长袖或薄外套即可。" if tt < 26 else
+              "天气较热，短袖出行，注意补水。")
+    d.text((M + 14, y4 + 10), "穿衣参考", font=font("bold", 20), fill=BLACK)
+    d.text((M + 14, y4 + 42), advice, font=font("light", 17), fill=BLACK)
+
+    # ── 来源 ──
+    y5 = y4 + 76
+    if y5 + 36 <= CARD_H - 16:
+        cell(M, y5, CARD_W - M, y5 + 36)
+    d.text((M + 14, y5 + 12), "来源：Open-Meteo · 非实时更新", font=font("light", 14), fill=BLACK)
     return img
 
 
@@ -1498,3 +1581,14 @@ def palette_errors(img) -> int:
 Y_RULE = 82            # 页眉横线
 Y_FOOT_RULE = 696      # 页脚横线
 Y_SAFE_BOTTOM = 760    # 安全区下边界
+
+
+# ── 版式常量（供 card.py 定位用）──
+Y_HEAD = 82
+Y_META = 52
+Y_HERO = 108
+Y_BODY = 140
+Y_BODY_END = 660
+Y_FOOT = 700
+Y_FOOT_LINE = 696
+FS = 1.0
