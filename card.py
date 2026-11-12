@@ -1555,6 +1555,15 @@ class CardService:
                         None, self._send_blocking, image, wait_sec)
                 # 两个平台的发送器返回字段可能不完全一样，这里统一按"缺了也不炸"处理
                 ok = bool(res.get("ok"))
+                # 照片轮播：确认成功后推进牌堆并解钉，下一次计划就是另一张；
+                # 失败则保留 pin，重试仍然发同一张（避免"没发出去却换了图"）
+                if ok and kind == "photo":
+                    try:
+                        self.pick_photo(consume=True)
+                        self._photo_pin = None
+                        self._save_cfg()
+                    except Exception:
+                        pass
                 out_text = str(res.get("output") or res.get("message") or "")
                 if ok:
                     msg = ("成功" if res.get("acked", True) is not False
