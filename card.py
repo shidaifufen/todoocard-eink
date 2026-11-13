@@ -822,10 +822,14 @@ class CardService:
         date_f = R.font("bold", 22)
         meta_f = R.font("light", 16)
         time_f = R.font("num", 22)
-        _heights = [22] + [16] * len(extra)
-        _gap = 6
+        # 信息带的字号/行距必须跟滑杆走：用字体实际像素算行高，band 才不会被撑高或留白
+        _line_k = float(getattr(R, "_LINE", 1.0) or 1.0)
+        _h_date = int(date_f.size * 1.28)
+        _h_meta = int(meta_f.size * 1.30)
+        _gap = int(6 * _line_k)
+        _pad = int(14 * max(0.8, min(1.4, R.scale())))
+        _heights = [_h_date] + [_h_meta] * len(extra)
         _content = sum(_heights) + _gap * (len(_heights) - 1)
-        _pad = 14
         band = _content + _pad * 2
         photo_h = H - band
         canvas = Image.new("RGB", (W, H), WHITE)
@@ -851,7 +855,7 @@ class CardService:
         tm = taken.strftime("%H:%M")
         d.text((W - MX - d.textlength(tm, font=time_f), y0), tm, font=time_f, fill=BLACK)
 
-        yy = y0 + _heights[0] + _gap
+        yy = y0 + _h_date + _gap
         for i, line in enumerate(extra):
             if line:
                 d.text((MX, yy), line, font=meta_f, fill=BLACK)
