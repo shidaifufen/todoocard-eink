@@ -760,6 +760,40 @@ class CardService:
         return out
 
     # ── 照片卡：等比裁切铺满 + 底部信息带（可选） ──
+
+    def weather_on(self, day) -> str:
+        """照片信息带用：按拍摄日期取当天天气；今天用实时，其他用历史存档。"""
+        try:
+            import urllib.request, json as _json
+            from datetime import date as _date
+            key = day.strftime("%Y-%m-%d")
+            cache = getattr(self, "_wx_hist", None) or {}
+            if key in cache:
+                return cache[key]
+            w = (self.cfg.get("weather") or {})
+            lat, lon = w.get("lat", 39.9), w.get("lon", 116.4)
+            if day == _date.today():
+                wd = self.weather_data() or {}
+                out = f"{round(wd.get('temp', 0))}° {wd.get('text','')}".strip() if wd.get("temp") is not None else ""
+            elif (_date.today() - day).days > 5:
+                url = ("https://archive-api.open-meteo.com/v1/archive?latitude=%s&longitude=%s"
+                       "&start_date=%s&end_date=%s&daily=temperature_2m_mean,weather_code&timezone=auto"
+                       % (lat, lon, key, key))
+                with urllib.request.urlopen(url, timeout=8) as r:
+                    d = _json.loads(r.read().decode())
+                daily = d.get("daily") or {}
+                temps = daily.get("temperature_2m_mean") or [None]
+                codes = daily.get("weather_code") or [None]
+                t = temps[0]
+                out = f"{round(t)}° {_wx_text(codes[0])}".strip() if t is not None else ""
+            else:
+                out = ""
+            cache[key] = out
+            self._wx_hist = cache
+            return out
+        except Exception:
+            return ""
+
     def compose_photo(self, photo_path: Path) -> Path:
         """把照片放进 528×792 画布。开了 overlay 就在底部压一条白色信息带。
 
@@ -808,11 +842,9 @@ class CardService:
             extra.append("  ".join(params))
 
         # 天气放在信息带右侧，补上时间那一行的空白
-        wx_txt = ""
+        # 信息带显示"拍摄当天"的天气（历史日期走存档接口，今天用实时）
         try:
-            wd = self.weather_data() or {}
-            if wd.get("temp") is not None:
-                wx_txt = f"{wd['temp']:.0f}° {wd.get('text','')}".strip()
+            wx_txt = self.weather_on(meta.get("taken").date()) if meta.get("taken") else ""
         except Exception:
             wx_txt = ""
 

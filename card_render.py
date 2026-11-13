@@ -80,7 +80,7 @@ _LINE = 1.0          # 行内行距系数（由 card.py 按 line_gap 传入）
 def set_line(v: float):
     global _LINE
     try:
-        _LINE = max(0.9, min(1.6, float(v)))
+        _LINE = max(0.6, min(1.8, float(v)))
     except (TypeError, ValueError):
         _LINE = 1.0
 
