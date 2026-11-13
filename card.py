@@ -899,6 +899,8 @@ class CardService:
         _k = max(0.8, min(1.4, R.scale()))
         _pad_top = max(8, int(11 * _k))
         _pad_bot = max(6, int(8 * _k))
+        if not extra and wx_txt:
+            extra = [wx_txt]          # 只有天气：单独占一行，别被丢掉
         _heights = [_h_date] + [_h_meta] * len(extra)
         _content = sum(_heights) + _gap * (len(_heights) - 1)
         band = _content + _pad_top + _pad_bot
@@ -928,7 +930,7 @@ class CardService:
 
         yy = y0 + _h_date + _gap
         for i, line in enumerate(extra):
-            if line:
+            if line and line != wx_txt:
                 d.text((MX, yy), line, font=meta_f, fill=BLACK)
             if i == 0 and wx_txt and extra:
                 d.text((W - MX - d.textlength(wx_txt, font=meta_f), yy),
