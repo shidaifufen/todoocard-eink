@@ -762,32 +762,69 @@ class CardService:
     # ── 照片卡：等比裁切铺满 + 底部信息带（可选） ──
 
     def weather_on(self, day) -> str:
-        """照片信息带用：按拍摄日期取当天天气；今天用实时，其他用历史存档。"""
+        """照片信息带用：按拍摄日期取当天天气。
+
+        今天优先实时；取不到就回落到历史存档。历史日期先查存档，
+        存档没有（最近几天常缺）再用预报接口的 past_days 补。
+        """
         try:
             import urllib.request, json as _json
             from datetime import date as _date
+
             key = day.strftime("%Y-%m-%d")
             cache = getattr(self, "_wx_hist", None) or {}
             if key in cache:
                 return cache[key]
+
             w = (self.cfg.get("weather") or {})
             lat, lon = w.get("lat", 39.9), w.get("lon", 116.4)
+
+            def from_archive() -> str:
+                try:
+                    url = ("https://archive-api.open-meteo.com/v1/archive?latitude=%s&longitude=%s"
+                           "&start_date=%s&end_date=%s&daily=temperature_2m_mean,weather_code&timezone=auto"
+                           % (lat, lon, key, key))
+                    with urllib.request.urlopen(url, timeout=8) as r:
+                        d = _json.loads(r.read().decode())
+                    daily = d.get("daily") or {}
+                    t = (daily.get("temperature_2m_mean") or [None])[0]
+                    code = (daily.get("weather_code") or [None])[0]
+                    return f"{round(t)}° {_wx_text(code)}".strip() if t is not None else ""
+                except Exception:
+                    return ""
+
+            def from_forecast_past() -> str:
+                try:
+                    url = ("https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s"
+                           "&daily=temperature_2m_mean,weather_code&past_days=7&forecast_days=1"
+                           "&timezone=auto" % (lat, lon))
+                    with urllib.request.urlopen(url, timeout=8) as r:
+                        d = _json.loads(r.read().decode())
+                    daily = d.get("daily") or {}
+                    times = daily.get("time") or []
+                    if key in times:
+                        i = times.index(key)
+                        t = (daily.get("temperature_2m_mean") or [])[i]
+                        code = (daily.get("weather_code") or [])[i]
+                        if t is not None:
+                            return f"{round(t)}° {_wx_text(code)}".strip()
+                except Exception:
+                    pass
+                return ""
+
+            out = ""
             if day == _date.today():
-                wd = self.weather_data() or {}
-                out = f"{round(wd.get('temp', 0))}° {wd.get('text','')}".strip() if wd.get("temp") is not None else ""
-            elif (_date.today() - day).days > 5:
-                url = ("https://archive-api.open-meteo.com/v1/archive?latitude=%s&longitude=%s"
-                       "&start_date=%s&end_date=%s&daily=temperature_2m_mean,weather_code&timezone=auto"
-                       % (lat, lon, key, key))
-                with urllib.request.urlopen(url, timeout=8) as r:
-                    d = _json.loads(r.read().decode())
-                daily = d.get("daily") or {}
-                temps = daily.get("temperature_2m_mean") or [None]
-                codes = daily.get("weather_code") or [None]
-                t = temps[0]
-                out = f"{round(t)}° {_wx_text(codes[0])}".strip() if t is not None else ""
+                try:
+                    wd = self.weather_data() or {}
+                    if wd.get("temp") is not None:
+                        out = f"{round(wd['temp'])}° {wd.get('text','')}".strip()
+                except Exception:
+                    out = ""
+                if not out:
+                    out = from_archive()
             else:
-                out = ""
+                out = from_archive() or from_forecast_past()
+
             cache[key] = out
             self._wx_hist = cache
             return out
