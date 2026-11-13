@@ -827,10 +827,12 @@ class CardService:
         _h_date = int(date_f.size * 1.28)
         _h_meta = int(meta_f.size * 1.30)
         _gap = int(6 * _line_k)
-        _pad = int(14 * max(0.8, min(1.4, R.scale())))
+        _k = max(0.8, min(1.4, R.scale()))
+        _pad_top = max(8, int(11 * _k))
+        _pad_bot = max(6, int(8 * _k))
         _heights = [_h_date] + [_h_meta] * len(extra)
         _content = sum(_heights) + _gap * (len(_heights) - 1)
-        band = _content + _pad * 2
+        band = _content + _pad_top + _pad_bot
         photo_h = H - band
         canvas = Image.new("RGB", (W, H), WHITE)
         src = Image.open(photo_path)
@@ -850,7 +852,7 @@ class CardService:
                      if taken.year != datetime.now().year
                      else f"{taken.month}月{taken.day}日")
 
-        y0 = photo_h + _pad
+        y0 = photo_h + _pad_top
         d.text((MX, y0), f"{_date_txt} {WEEKDAYS[taken.weekday()]}", font=date_f, fill=BLACK)
         tm = taken.strftime("%H:%M")
         d.text((W - MX - d.textlength(tm, font=time_f), y0), tm, font=time_f, fill=BLACK)
@@ -1310,9 +1312,13 @@ class CardService:
         if kind == "photo":
             # 预览和发送必须是同一张：钉住，成功后再换
             pin = getattr(self, "_photo_pin", None)
-            if fresh or not pin or not Path(pin).exists():
+            if fresh:
+                # 「换一张预览」要真的换：消耗当前这张，牌堆前进
+                pin = self.pick_photo(consume=True)
+                self._save_cfg()
+            if not pin or not Path(pin).exists():
                 pin = self.pick_photo(consume=False)
-                self._photo_pin = pin
+            self._photo_pin = pin
             photo = pin
             if not photo:
                 raise RuntimeError("照片文件夹是空的（在网页里添加目录）")
