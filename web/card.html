@@ -144,6 +144,9 @@
         </div>
         <input type="range" id="gapRange" min="60" max="180" step="5" value="100"
                style="width:100%;margin-top:6px" oninput="onGap(true)" onchange="onGap(false)">
+        <div class="row" style="margin-top:12px"><span><b>自动排版</b><br>
+          <span class="hint">定时发布时按“尽量排满、不越界”自动定字号</span></span>
+          <span class="switch"><input type="checkbox" id="autoFitSw" onchange="toggleAutoFit()"><i></i></span></div>
 
       </div>
     </div>
@@ -391,12 +394,43 @@ function switchPanel(p){
     b.classList.toggle('on', p === 'tpl' && b.dataset.tpl === currentTpl));
   document.querySelectorAll('#setNav button').forEach(b =>
     b.classList.toggle('on', b.dataset.panel === p));
-  if (p === 'tpl'){ $('tplTitle').textContent = TPL_LABEL[currentTpl] || ''; renderEditor(); preview(currentTpl); }
+  if (p === 'tpl'){ $('tplTitle').textContent = TPL_LABEL[currentTpl] || ''; renderEditor(); appendTplTuning(); preview(currentTpl); }
   if (p === 'scenes') renderScenes();
   if (p === 'schedule'){ renderSched(STATE.schedule||[]); renderSchedState(); }
   if (p === 'history') renderHistory(STATE.history||[]);
 }
 document.querySelectorAll('#setNav button').forEach(b => b.onclick = () => switchPanel(b.dataset.panel));
+
+function appendTplTuning(){
+  const box = $('editor');
+  const sc = Math.round(((STATE.tpl_scale || {})[currentTpl] || 1) * 100);
+  const lg = Math.round(((STATE.tpl_line || {})[currentTpl] || 1) * 100);
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <div class="hint" style="margin-top:14px">本模板微调（与全局相乘，只影响「${TPL_LABEL[currentTpl] || currentTpl}」）</div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--sub);margin-top:8px">
+      <span>本模板字号</span><span id="tsVal">${sc}%</span></div>
+    <input type="range" id="tsRange" min="80" max="120" step="5" value="${sc}" style="width:100%">
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--sub);margin-top:8px">
+      <span>本模板行距</span><span id="tlVal">${lg}%</span></div>
+    <input type="range" id="tlRange" min="80" max="120" step="5" value="${lg}" style="width:100%">`;
+  box.appendChild(wrap);
+  const ts = $('tsRange'), tl = $('tlRange');
+  const save = async () => {
+    const tplScale = Object.assign({}, STATE.tpl_scale || {});
+    const tplLine = Object.assign({}, STATE.tpl_line || {});
+    tplScale[currentTpl] = (+ts.value) / 100;
+    tplLine[currentTpl] = (+tl.value) / 100;
+    $('tsVal').textContent = ts.value + '%';
+    $('tlVal').textContent = tl.value + '%';
+    const d = await postJSON('/api/card/config', {tpl_scale: tplScale, tpl_line: tplLine});
+    if (d.ok) STATE = d.card || STATE;
+    preview(currentTpl, false);
+  };
+  ts.oninput = () => { $('tsVal').textContent = ts.value + '%'; };
+  tl.oninput = () => { $('tlVal').textContent = tl.value + '%'; };
+  ts.onchange = save; tl.onchange = save;
+}
 
 function renderEditor(){
   const box = $('editor');

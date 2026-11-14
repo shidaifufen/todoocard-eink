@@ -140,6 +140,9 @@ class CardService:
                         "api_key": "", "model": "deepseek-chat"},
             "standby": False,           # 待机：暂停扫描/补发/定时，把蓝牙让给网页版
             "line_gap": 1.0,            # 行距系数（1.0 = 基准，实际再乘 1.1）
+            "auto_fit": False,          # 自动排版：按"排满且不重叠"自动选字号/行距
+            "tpl_scale": {},            # 单模板字号系数 {kind: 1.0}
+            "tpl_line": {},             # 单模板行距系数 {kind: 1.0}
             "custom": {"title": "我的卡片", "accent": "red",
                        "blocks": [{"type": "bigdate"}, {"type": "todos"},
                                   {"type": "quote"}, {"type": "dots"}]},
@@ -179,7 +182,7 @@ class CardService:
                     "todos", "weather", "cooldown_days", "photo_mode", "photo_overlay",
                     "bing_enabled", "ai", "ai_prompt", "button_photo", "countdowns",
                     "recursive", "scale", "custom", "fill", "theme", "poem_note", "poem_full",
-                    "poem_ai", "standby", "line_gap"):
+                    "poem_ai", "standby", "line_gap", "auto_fit", "tpl_scale", "tpl_line"):
             if key in patch:
                 cur[key] = patch[key]
         if "schedule" in patch:
@@ -975,8 +978,12 @@ class CardService:
     def render_summary(self) -> Path:
         """海报版每日总结：交给 card_render 统一排版。"""
         _sc = float(self.cfg.get("scale", 1.1) or 1.1)
+        # 单模板系数（总结卡走的是独立渲染路径，这里也要乘）
+        _sc *= float(((self.cfg.get("tpl_scale") or {}).get("summary")) or 1.0)
+        _lgm = float(self.cfg.get("line_gap", 1.0) or 1.0) * \
+            float(((self.cfg.get("tpl_line") or {}).get("summary")) or 1.0)
         R.set_scale(_sc * (1.1 if self.cfg.get("theme") == "wo" else 1.0))
-        R.set_line(float(self.cfg.get("line_gap", 1.0) or 1.0))
+        R.set_line(_lgm)
         ctx = {
             "now": datetime.now(),
             "todos": self.cfg.get("todos") or [],
@@ -1373,13 +1380,60 @@ class CardService:
             _LOGGER.warning("免费出图失败: %s", e)
             return None, f"免费出图失败：{e}"
 
+
+    def _auto_scale(self, kind: str, base: float) -> float:
+        """自动排版：挑一个尽量大、又不越界/不贴边的字号系数。
+
+        做法是"渲染—量墨迹边界"：从大到小试，取第一个满足
+        上边距 >= 12、下边距 >= 20、内容高度 >= 页面 55% 的比例。
+        """
+        try:
+            from PIL import Image
+            H = 792
+            best = None
+            for cand in (1.5, 1.35, 1.2, 1.05, 0.95, 0.9):
+                old_scale = self.cfg.get("scale")
+                old_auto = self.cfg.get("auto_fit")
+                self.cfg["scale"] = cand
+                self.cfg["auto_fit"] = False
+                try:
+                    path, _ = self.build_card(kind, consume=False)
+                finally:
+                    self.cfg["scale"] = old_scale
+                    self.cfg["auto_fit"] = old_auto
+                im = Image.open(path).convert("L")
+                # 非白像素的包围盒（255 是白纸）
+                bbox = Image.eval(im, lambda v: 0 if v > 240 else 255).getbbox()
+                if not bbox:
+                    continue
+                top, bottom = bbox[1], bbox[3]
+                fills = (bottom - top) >= H * 0.55
+                if top >= 12 and bottom <= H - 18 and fills:
+                    best = cand
+                    break
+                if best is None and top >= 12 and bottom <= H - 18:
+                    best = cand
+            return best if best else base
+        except Exception:
+            return base
+
     # ── 统一出图 ──
     def build_card(self, kind: str, consume: bool = True, fresh: bool = False):
         """按模板出图，返回 (路径, 展示名)。"""
         _sc = float(self.cfg.get("scale", 1.1) or 1.1)
+        _lg = float(self.cfg.get("line_gap", 1.0) or 1.0)
+        # 单模板系数：与全局相乘
+        try:
+            _sc *= float((self.cfg.get("tpl_scale") or {}).get(kind, 1.0) or 1.0)
+            _lg *= float((self.cfg.get("tpl_line") or {}).get(kind, 1.0) or 1.0)
+        except Exception:
+            pass
+        # 自动排版：定时发布时按"尽量排满且不越界"反推字号（开关控制）
+        if self.cfg.get("auto_fit") and kind not in ("photo", "bing", "ai"):
+            _sc = self._auto_scale(kind, _sc)
         # 深色 HUD 下抗锯齿会被二值化吃掉一圈，字号整体再放大 10% 才看得清
         R.set_scale(_sc * (1.1 if self.cfg.get("theme") == "wo" else 1.0))
-        R.set_line(float(self.cfg.get("line_gap", 1.0) or 1.0))
+        R.set_line(_lg)
         if kind == "photo":
             # 预览和发送必须是同一张：钉住，成功后再换
             pin = getattr(self, "_photo_pin", None)
@@ -1818,6 +1872,9 @@ class CardService:
                            "api_key": "", "model": "deepseek-chat"}, **(self.cfg.get("poem_ai") or {})},
             "standby": bool(self.cfg.get("standby")),
             "line_gap": float(self.cfg.get("line_gap", 1.0) or 1.0),
+            "auto_fit": bool(self.cfg.get("auto_fit")),
+            "tpl_scale": dict(self.cfg.get("tpl_scale") or {}),
+            "tpl_line": dict(self.cfg.get("tpl_line") or {}),
             "custom": self.cfg.get("custom") or {},
             "photo_overlay": bool(self.cfg.get("photo_overlay", True)),
             "photo_count": len(photos),
