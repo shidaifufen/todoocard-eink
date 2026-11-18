@@ -1635,26 +1635,34 @@ class CardService:
         if not dev:
             raise RuntimeError("还没指定土豆片的设备 UUID，先在网页里点「扫描设备」")
         if wait_sec is None:
-            wait_sec = float(self.cfg.get("wait_card_sec", 120))
-        # 不用自己的扫描判断"在不在"：直接让上游发送器去扫（它和固件对齐），
-        # 扫不到就等几秒重来，直到超时——不依赖我这边对广播包的解析。
+            wait_sec = float(self.cfg.get("wait_card_sec", 60))
         deadline = time.time() + wait_sec
-        # 先 probe 一次：实测"直接连上去写"偶尔会卡在
-        # "Timed out preparing the verified TodooCard GATT connection"，
-        # 而 probe 先把加密链路和服务缓存热起来，紧接着再传就稳了。
-        # 地址可能轮换：发送前先按名字/地址重新发现一次，拿到当前 UUID
+
+        # 地址可能轮换：5 分钟内扫到过就直接复用，省掉一次 10~20 秒的扫描
+        rssi = None
+        _cached = getattr(self, "_addr_cache", None)
+        if _cached and time.time() - _cached[1] < 300:
+            dev = _cached[0]
         try:
             found = self._scan_card()
             if found and found.get("addr"):
                 dev = found["addr"]
+                rssi = found.get("rssi")
+                self._addr_cache = (dev, time.time())
         except Exception:
             pass
+
         art = self._build_payload(image_path)
-        try:
-            subprocess.run([art["sender"], "--probe", "--id", dev],
-                           capture_output=True, text=True, timeout=90)
-        except Exception:
-            pass
+
+        # probe 只用来热链路：最近 10 分钟成功过就不再 probe（省 10~20 秒）
+        last_ok = getattr(self, "_probe_ok_at", 0) or 0
+        if time.time() - last_ok > 600:
+            try:
+                subprocess.run([art["sender"], "--probe", "--id", dev],
+                               capture_output=True, text=True, timeout=90)
+            except Exception:
+                pass
+
         cmd = [art["sender"], "--payload", art["payload"], "--legacy-payload", art["legacy"],
                "--raw-payload", art["raw"], "--compressed", "--id", dev]
         out = ""
@@ -1663,16 +1671,31 @@ class CardService:
             attempts += 1
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=420)
             out += (r.stdout or "") + (r.stderr or "")
+            low = out.lower()
             unconfirmed = "required 0x05/0x08 refresh acknowledgement" in out
             ok = r.returncode == 0 or unconfirmed
             if ok:
+                self._probe_ok_at = time.time()
                 break
-            # 只对"扫不到卡片"重试：配对/固件错误重试也没用
-            if "timed out scanning" not in out.lower() or time.time() >= deadline - 40:
+            if time.time() >= deadline - 30 or attempts >= 3:
                 break
-            time.sleep(5)
+            # 可重试的连接类错误：连接超时 / 扫不到 / GATT 准备超时
+            retryable = any(k in low for k in (
+                "timed out connecting", "timed out scanning", "timed out preparing",
+                "connection refused", "peer removed pairing"))
+            if not retryable:
+                break
+            # 连接超时多半是信号弱或卡片刚休眠：等一下再扫一次地址（可能会变）
+            time.sleep(3)
+            try:
+                found = self._scan_card()
+                if found and found.get("addr"):
+                    dev = found["addr"]
+                    cmd[-1] = dev
+            except Exception:
+                pass
         return {"ok": ok, "output": out[-1600:], "seconds": round(time.time() - started, 1),
-                "attempts": attempts}
+                "attempts": attempts, "rssi": rssi}
 
     # ── 对外动作 ──
     async def send(self, kind: str = "summary", requeue: bool = True,
@@ -1705,6 +1728,10 @@ class CardService:
                            else "已写入（没等到显影确认，画面可能已刷新）")
                 else:
                     msg = _friendly_error(out_text)
+                    _rssi = res.get("rssi")
+                    if isinstance(_rssi, int) and _rssi < -75:
+                        msg += f"（信号 {_rssi} dBm 偏弱，把卡片拿近或插上充电再试）"
+                    _LOGGER.warning("土豆片发送失败 kind=%s 原始输出:\n%s", kind, out_text[:1200])
                 entry = {"ts": int(time.time()), "kind": kind, "file": label,
                          "ok": ok, "seconds": res.get("seconds", 0), "message": msg}
                 if not ok and requeue and _retryable(out_text):
@@ -1994,7 +2021,16 @@ def _friendly_error(out: str) -> str:
         return "没扫到卡片：确认它在附近并已唤醒（长按背面按钮）"
     if "required 0x05/0x08" in low:
         return "数据写完但没收到显影确认，卡片可能已重启；稍等 30 秒再发一次"
-    return text[-300:]
+    # 兜底：别把 payload 路径这种噪声当错误信息，挑真正像报错的那一行
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    bad = [ln for ln in lines if any(k in ln.lower() for k in
+           ("error", "fail", "timeout", "timed out", "exception", "denied",
+            "could not", "cannot", "can't", "unable", "0x", "已断开", "失败"))]
+    if bad:
+        return "发送失败：" + bad[-1][:160]
+    # 全是日志（比如只有 payload/scanning 那种），给一句能照做的
+    return ("发送失败：发送器没有返回明确原因（常见是卡片休眠或蓝牙被占用）。"
+            "长按卡片背面按钮唤醒、靠近电脑后重试；连续失败把 data/app.log 发出来")
 
 
 def _cover(img, w: int, h: int):
