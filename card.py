@@ -1417,6 +1417,22 @@ class CardService:
         except Exception:
             return base
 
+
+    def send_raw_image(self, path: Path) -> dict:
+        """把一张已经排好版的图直接推上去（不抖动，只做调色板吸附）。
+
+        校准图用它：抖动会把色块打散，测出来的颜色就不准了。
+        """
+        from PIL import Image
+        import card_render as _R
+        img = Image.open(path).convert("RGB")
+        if img.size != (528, 792):
+            img = img.resize((528, 792), Image.LANCZOS)
+        img = _R.snap_palette(img)
+        out = self.cards_dir / "raw.png"
+        img.save(out)
+        return self._send_blocking(out, None)
+
     # ── 统一出图 ──
     def build_card(self, kind: str, consume: bool = True, fresh: bool = False):
         """按模板出图，返回 (路径, 展示名)。"""
