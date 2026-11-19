@@ -1638,19 +1638,22 @@ class CardService:
             wait_sec = float(self.cfg.get("wait_card_sec", 60))
         deadline = time.time() + wait_sec
 
-        # 地址可能轮换：5 分钟内扫到过就直接复用，省掉一次 10~20 秒的扫描
+        # 地址：优先用缓存。发送前不再自己扫一遍——发送器内部会扫，
+        # 两个扫描同时开会让 CoreBluetooth 忙不过来，直接导致它 "Timed out scanning"。
         rssi = None
         _cached = getattr(self, "_addr_cache", None)
-        if _cached and time.time() - _cached[1] < 300:
+        if _cached and time.time() - _cached[1] < 900:
             dev = _cached[0]
-        try:
-            found = self._scan_card()
-            if found and found.get("addr"):
-                dev = found["addr"]
-                rssi = found.get("rssi")
-                self._addr_cache = (dev, time.time())
-        except Exception:
-            pass
+            rssi = _cached[2] if len(_cached) > 2 else None
+        else:
+            try:
+                found = self._scan_card()
+                if found and found.get("addr"):
+                    dev = found["addr"]
+                    rssi = found.get("rssi")
+                    self._addr_cache = (dev, time.time(), rssi)
+            except Exception:
+                pass
 
         art = self._build_payload(image_path)
 
@@ -1685,15 +1688,8 @@ class CardService:
                 "connection refused", "peer removed pairing"))
             if not retryable:
                 break
-            # 连接超时多半是信号弱或卡片刚休眠：等一下再扫一次地址（可能会变）
+            # 重试时不再自己扫（扫描会和发送器抢射频），只等一会儿重试命令
             time.sleep(3)
-            try:
-                found = self._scan_card()
-                if found and found.get("addr"):
-                    dev = found["addr"]
-                    cmd[-1] = dev
-            except Exception:
-                pass
         return {"ok": ok, "output": out[-1600:], "seconds": round(time.time() - started, 1),
                 "attempts": attempts, "rssi": rssi}
 
