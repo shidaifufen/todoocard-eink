@@ -143,6 +143,8 @@ class CardService:
             "auto_fit": False,          # 自动排版：按"排满且不重叠"自动选字号/行距
             "tpl_scale": {},            # 单模板字号系数 {kind: 1.0}
             "tpl_line": {},             # 单模板行距系数 {kind: 1.0}
+            "photo_fields": {"date": True, "time": True, "camera": True,
+                             "params": True, "weather": True},
             "custom": {"title": "我的卡片", "accent": "red",
                        "blocks": [{"type": "bigdate"}, {"type": "todos"},
                                   {"type": "quote"}, {"type": "dots"}]},
@@ -182,7 +184,7 @@ class CardService:
                     "todos", "weather", "cooldown_days", "photo_mode", "photo_overlay",
                     "bing_enabled", "ai", "ai_prompt", "button_photo", "countdowns",
                     "recursive", "scale", "custom", "fill", "theme", "poem_note", "poem_full",
-                    "poem_ai", "standby", "line_gap", "auto_fit", "tpl_scale", "tpl_line"):
+                    "poem_ai", "standby", "line_gap", "auto_fit", "tpl_scale", "tpl_line", "photo_fields"):
             if key in patch:
                 cur[key] = patch[key]
         if "schedule" in patch:
@@ -871,20 +873,26 @@ class CardService:
         if not place and gps:
             place = f"{gps[0]:.2f}, {gps[1]:.2f}"
 
-        line2_parts = [x for x in (place, meta.get("camera"), meta.get("lens")) if x]
+        _pf = self.cfg.get("photo_fields") or {}
+        _on = lambda k: bool(_pf.get(k, True))
+        _show_date, _show_time = _on("date"), _on("time")
+        _show_cam, _show_params, _show_wx = _on("camera"), _on("params"), _on("weather")
+        line2_parts = [x for x in ((place if _show_cam else ""),
+                                   (meta.get("camera") if _show_cam else ""),
+                                   (meta.get("lens") if _show_cam else "")) if x]
         params = [meta.get(k) for k in ("focal", "aperture", "shutter", "iso")]
         params = [x for x in params if x]
 
         extra = []
         if line2_parts:
             extra.append(" · ".join(line2_parts))
-        if params:
+        if params and _show_params:
             extra.append("  ".join(params))
 
         # 天气放在信息带右侧，补上时间那一行的空白
         # 信息带显示"拍摄当天"的天气（历史日期走存档接口，今天用实时）
         try:
-            wx_txt = self.weather_on(meta.get("taken").date()) if meta.get("taken") else ""
+            wx_txt = self.weather_on(meta.get("taken").date()) if (meta.get("taken") and _show_wx) else ""
         except Exception:
             wx_txt = ""
 
@@ -903,7 +911,16 @@ class CardService:
         _single = not extra
         _pad_top = max(7, int((8 if _single else 11) * _k))
         _pad_bot = max(5, int((6 if _single else 8) * _k))
-        _heights = [_h_date] + [_h_meta] * len(extra)
+        if not (_show_date or _show_time or extra or wx_txt):
+            # 全都关掉：直接铺满，不留信息带
+            canvas = Image.new("RGB", (W, H), WHITE)
+            src = Image.open(photo_path)
+            src = ImageOps.exif_transpose(src).convert("RGB")
+            canvas.paste(_cover(src, W, H), (0, 0))
+            out = self.cards_dir / "photo.png"
+            canvas.save(out)
+            return out
+        _heights = ([_h_date] if (_show_date or _show_time) else []) + [_h_meta] * len(extra)
         _content = sum(_heights) + _gap * (len(_heights) - 1)
         band = _content + _pad_top + _pad_bot
         photo_h = H - band
@@ -926,10 +943,14 @@ class CardService:
                      else f"{taken.month}月{taken.day}日")
 
         y0 = photo_h + _pad_top
-        d.text((MX, y0), f"{_date_txt} {WEEKDAYS[taken.weekday()]}", font=date_f, fill=BLACK)
+        _has_head = _show_date or _show_time
+        if _show_date:
+            d.text((MX, y0), f"{_date_txt} {WEEKDAYS[taken.weekday()]}", font=date_f, fill=BLACK)
         tm = taken.strftime("%H:%M")
         # 没有机身信息时把天气并到时间这一行，整条带子只留一行，少占照片高度
-        if wx_txt and not extra:
+        if not _show_time:
+            pass
+        elif wx_txt and not extra:
             _rf = R.font("light", 18)
             _right = f"{tm}  {wx_txt}"
             d.text((W - MX - d.textlength(_right, font=_rf), y0 + int(_h_date * 0.28)),
@@ -937,7 +958,7 @@ class CardService:
         else:
             d.text((W - MX - d.textlength(tm, font=time_f), y0), tm, font=time_f, fill=BLACK)
 
-        yy = y0 + _h_date + _gap
+        yy = y0 + ((_h_date + _gap) if _has_head else 0)
         for i, line in enumerate(extra):
             if line and line != wx_txt:
                 d.text((MX, yy), line, font=meta_f, fill=BLACK)
@@ -1920,6 +1941,7 @@ class CardService:
             "auto_fit": bool(self.cfg.get("auto_fit")),
             "tpl_scale": dict(self.cfg.get("tpl_scale") or {}),
             "tpl_line": dict(self.cfg.get("tpl_line") or {}),
+            "photo_fields": dict(self.cfg.get("photo_fields") or {}),
             "custom": self.cfg.get("custom") or {},
             "photo_overlay": bool(self.cfg.get("photo_overlay", True)),
             "photo_count": len(photos),

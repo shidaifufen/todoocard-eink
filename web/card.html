@@ -346,6 +346,14 @@
           <button class="primary" onclick="confirmSend()">确认推送</button>
           <button onclick="closeSend()">再等等</button>
         </div>
+        <div id="photoFields" style="display:none;margin-top:14px">
+          <div class="hint" style="margin-bottom:6px">信息带显示哪些内容（勾掉就不占高度）</div>
+          <label><input type="checkbox" data-pf="date"> 日期</label>
+          <label style="margin-left:12px"><input type="checkbox" data-pf="time"> 时间</label>
+          <label style="margin-left:12px"><input type="checkbox" data-pf="camera"> 机身</label><br>
+          <label style="margin-top:6px;display:inline-block"><input type="checkbox" data-pf="params"> 拍摄参数</label>
+          <label style="margin-left:12px"><input type="checkbox" data-pf="weather"> 天气</label>
+        </div>
         <div id="sendHint" class="hint"></div>
       </div>
     </div>
@@ -443,6 +451,21 @@ function openSend(){
   $('sendScaleVal').textContent = $('sendScale').value + '%';
   $('sendGapVal').textContent = $('sendGap').value + '%';
   $('sendHint').textContent = '';
+  const pf = $('photoFields');
+  pf.style.display = (SEND_TPL === 'photo') ? 'block' : 'none';
+  if (SEND_TPL === 'photo') {
+    const cur = STATE.photo_fields || {};
+    document.querySelectorAll('#photoFields input[data-pf]').forEach(cb => {
+      cb.checked = (cur[cb.dataset.pf] !== false);
+      cb.onchange = async () => {
+        const next = {};
+        document.querySelectorAll('#photoFields input[data-pf]').forEach(x => next[x.dataset.pf] = x.checked);
+        const r = await postJSON('/api/card/config', {photo_fields: next});
+        if (r.ok && r.card) STATE = r.card;
+        refreshSendImg();
+      };
+    });
+  }
   refreshSendImg();
 }
 function closeSend(){ $('sendMask').style.display = 'none'; }
