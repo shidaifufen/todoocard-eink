@@ -900,10 +900,9 @@ class CardService:
         _h_meta = int(meta_f.size * 1.30)
         _gap = int(6 * _line_k)
         _k = max(0.8, min(1.4, R.scale()))
-        _pad_top = max(8, int(11 * _k))
-        _pad_bot = max(6, int(8 * _k))
-        if not extra and wx_txt:
-            extra = [wx_txt]          # 只有天气：单独占一行，别被丢掉
+        _single = not extra
+        _pad_top = max(7, int((8 if _single else 11) * _k))
+        _pad_bot = max(5, int((6 if _single else 8) * _k))
         _heights = [_h_date] + [_h_meta] * len(extra)
         _content = sum(_heights) + _gap * (len(_heights) - 1)
         band = _content + _pad_top + _pad_bot
@@ -929,7 +928,14 @@ class CardService:
         y0 = photo_h + _pad_top
         d.text((MX, y0), f"{_date_txt} {WEEKDAYS[taken.weekday()]}", font=date_f, fill=BLACK)
         tm = taken.strftime("%H:%M")
-        d.text((W - MX - d.textlength(tm, font=time_f), y0), tm, font=time_f, fill=BLACK)
+        # 没有机身信息时把天气并到时间这一行，整条带子只留一行，少占照片高度
+        if wx_txt and not extra:
+            _rf = R.font("light", 18)
+            _right = f"{tm}  {wx_txt}"
+            d.text((W - MX - d.textlength(_right, font=_rf), y0 + int(_h_date * 0.28)),
+                   _right, font=_rf, fill=BLACK)
+        else:
+            d.text((W - MX - d.textlength(tm, font=time_f), y0), tm, font=time_f, fill=BLACK)
 
         yy = y0 + _h_date + _gap
         for i, line in enumerate(extra):
