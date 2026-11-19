@@ -173,7 +173,7 @@
             <div class="pl">生成中…</div>
           </div>
           <div class="btnrow">
-            <button class="primary" onclick="send(currentTpl)">发送这个模板</button>
+            <button class="primary" onclick="openSend()">发送这个模板</button>
             <button onclick="preview(currentTpl, true)">换一张预览</button>
           </div>
           <div class="hint" id="tplHint">发送会覆盖卡片画面；失败会进队列，卡片一出现就自动补发。</div>
@@ -324,6 +324,35 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div id="sendMask" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);
+     z-index:50;align-items:center;justify-content:center;padding:24px">
+  <div style="background:#15171c;border:1px solid #2a2d35;border-radius:16px;
+       padding:18px;max-width:760px;width:100%;max-height:92vh;overflow:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <b id="sendTitle">发送前确认</b>
+      <button onclick="closeSend()">取消</button>
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      <img id="sendImg" style="width:300px;border-radius:10px;border:1px solid #2a2d35">
+      <div style="flex:1;min-width:240px">
+        <div class="hint">最后微调只影响这一张，确认后再推送。</div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#8b90a0;margin-top:10px">
+          <span>字号</span><span id="sendScaleVal"></span></div>
+        <input type="range" id="sendScale" min="90" max="160" step="5" style="width:100%">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#8b90a0;margin-top:10px">
+          <span>行距</span><span id="sendGapVal"></span></div>
+        <input type="range" id="sendGap" min="60" max="180" step="5" style="width:100%">
+        <div class="btnrow" style="margin-top:16px">
+          <button class="primary" onclick="confirmSend()">确认推送</button>
+          <button onclick="closeSend()">再等等</button>
+        </div>
+        <div id="sendHint" class="hint"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
 
 <script>
 const API = '';
@@ -400,6 +429,49 @@ function switchPanel(p){
   if (p === 'history') renderHistory(STATE.history||[]);
 }
 document.querySelectorAll('#setNav button').forEach(b => b.onclick = () => switchPanel(b.dataset.panel));
+
+
+// ── 发送前确认：出图 + 最后微调 ──
+let SEND_TPL = null;
+function openSend(){
+  SEND_TPL = currentTpl;
+  const mask = $('sendMask');
+  mask.style.display = 'flex';
+  $('sendTitle').textContent = '发送前确认 · ' + (TPL_LABEL[SEND_TPL] || SEND_TPL);
+  $('sendScale').value = Math.round((STATE.scale || 1) * 100);
+  $('sendGap').value = Math.round((STATE.line_gap || 1) * 100);
+  $('sendScaleVal').textContent = $('sendScale').value + '%';
+  $('sendGapVal').textContent = $('sendGap').value + '%';
+  $('sendHint').textContent = '';
+  refreshSendImg();
+}
+function closeSend(){ $('sendMask').style.display = 'none'; }
+async function refreshSendImg(){
+  const img = $('sendImg');
+  const d = await (await fetch(`${API}/api/card/preview?kind=${SEND_TPL}&fresh=0&t=${Date.now()}`)).blob();
+  img.src = URL.createObjectURL(d);
+}
+async function applySendTuning(){
+  const sc = (+$('sendScale').value) / 100;
+  const lg = (+$('sendGap').value) / 100;
+  $('sendScaleVal').textContent = $('sendScale').value + '%';
+  $('sendGapVal').textContent = $('sendGap').value + '%';
+  const r = await postJSON('/api/card/config', {scale: sc, line_gap: lg});
+  if (r.ok && r.card) STATE = r.card;
+  refreshSendImg();
+}
+async function confirmSend(){
+  $('sendHint').textContent = '已提交，正在推送…（进度看顶部状态）';
+  const r = await postJSON('/api/card/send', {kind: SEND_TPL});
+  if (!r.ok) { $('sendHint').textContent = r.error || '提交失败'; return; }
+  setTimeout(closeSend, 800);
+}
+if ($('sendScale')) {
+  $('sendScale').onchange = applySendTuning;
+  $('sendGap').onchange = applySendTuning;
+  $('sendScale').oninput = () => $('sendScaleVal').textContent = $('sendScale').value + '%';
+  $('sendGap').oninput = () => $('sendGapVal').textContent = $('sendGap').value + '%';
+}
 
 function appendTplTuning(){
   const box = $('editor');
