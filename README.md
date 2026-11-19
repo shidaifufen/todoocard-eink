@@ -1,98 +1,196 @@
 # 土豆片 · 六色墨水屏卡片工坊
 
-面向 TodooCard / T3（528×792，六色电子墨水屏）的服务端渲染与推送工具：13 个模板、服务端 Pillow 渲染、定时推送、Web 控制台。
+面向 **TodooCard / T3**（528×792，六色电子墨水屏）的服务端渲染与推送工具：14 个模板、Pillow 服务端出图、定时推送、Web 控制台、蓝牙直传。
 
-> 状态：**渲染与 Web 控制台可用；BLE 发送目前仅 macOS 已验证，Windows 适配进行中。**
+> macOS 与 Windows 都已验证；网页版（纯浏览器，Web Bluetooth）见 [todoocard-web](https://github.com/shidaifufen/todoocard-web)。
 
+---
 
-## 直接下载就能用（推荐）
+## 直接下载就能用
 
 不用装 Python、不用命令行，**下载解压 → 双击 → 浏览器自动打开**。
 
-1. 打开 [Releases](https://github.com/shidaifufen/todoocard-eink/releases) 或点绿色 `Code` → `Download ZIP`
-2. 解压到任意文件夹（路径别带特殊符号）
-3. 双击对应系统的一键启动：
-   - Windows：`启动（Windows）.bat`
-   - macOS：`启动（macOS）.command`（首次可能要右键 → 打开）
-4. 浏览器会自动打开 `http://127.0.0.1:8199/card.html`
+| 平台 | 下载 |
+|---|---|
+| macOS (arm64) | [Releases](https://github.com/shidaifufen/todoocard-eink/releases) 里的 `todoocard-eink-<版本>-darwin-arm64.zip` |
+| Windows (x64) | 同一页的 `todocard-portable-<版本>-windows.zip` |
 
-第一次运行会自动创建独立环境并安装依赖（需要联网，约 1 分钟），之后秒开。
-如果提示找不到 Python，脚本会帮你打开下载页——**安装时记得勾选 "Add Python to PATH"**。
+1. 解压到任意文件夹（路径别带特殊符号）
+2. macOS 双击 `start-mac.command`（首次右键 → 打开）；Windows 双击 `土豆片卡片工坊.exe`
+3. 浏览器自动打开 `http://127.0.0.1:8199/card.html`
+
+数据都存在程序旁的 `data/`（`card.json`、照片缓存、日志），删目录即卸载。
+
+---
 
 ## 能做什么
 
-- **13 个模板**：每日总结 / 待办 / 天气 / 月历 / 每日一句 / 诗词（带赏析）/ 时间进度 / 充电统计 / 倒计时 / 照片轮播 / Bing 壁纸 / AI 生图 / 自定义积木
-- **服务端渲染**：Pillow 直出 528×792，只用调色板里那 6 个精确色，文字经过抖动仍是实的
-- **Web 控制台**：左侧模板 + 右侧设置，所见即所得预览，字号 100%~130% 全局缩放
-- **定时计划**：按 cron 式时间点生成并推送，失败进重试队列，卡片一广播就补发
-- **照片卡**：EXIF 拍摄时间/设备/焦段光圈快门 ISO，GPS 离线反查城市（内置 206 城）
+**14 个模板**
 
+每日总结 / 今日待办 / 天气看板 / 色块天气 / 时间进度 / 充电统计 / 每日一句 / 月历 / 倒计时 / 每日诗词 / 照片轮播 / Bing 壁纸 / AI 生图 / 自定义卡片
+
+- **每日总结**：日期、天气、待办、本月进度、全年点阵、底部引文
+- **色块天气**：大温度、AQI 色块、三天预报、日出日落、穿衣参考
+- **每日诗词**：诗句 + 自动赏析（可接 DeepSeek，也支持手写）
+- **照片轮播**：EXIF 信息带、GPS 离线反查城市、按拍摄日期显示当天天气
+- **自定义卡片**：积木拼接（标题/日期/天气/待办/引文/点阵/图片/二维码/文本/分割线）
+
+**渲染**
+
+- Pillow 直出 528×792，只用调色板里的 6 个精确色（黑/白/黄/红/蓝/绿）
+- 出图后统一吸附调色板，白底不会抖出彩色噪点
+- 文字用真实字重，Floyd–Steinberg 误差 0，抖动后仍是实心
+
+**推送**
+
+- 蓝牙直传，QuickLZ level-3 压缩（约 21 KB/张）
+- 失败进重试队列，卡片一广播就自动补发
+- 定时计划按时间点触发，支持"今日已发"判断与补跑窗口
+
+**Web 控制台**
+
+- 左侧模板列表 + 中间实时预览 + 右侧参数
+- 每张卡片都可单独调参数（城市、赏析、积木…）
+
+---
+
+## 字号与行距（三层）
+
+```
+实际字号 = 1.1(基准) × 全局滑杆 × 本模板滑杆
+实际行距 = 1.1(基准) × 全局滑杆 × 本模板滑杆
+```
+
+| 控制 | 位置 | 范围 | 说明 |
+|---|---|---|---|
+| 全局字号 | 控制台左下「显示」 | 90%~160% | 所有模板 |
+| 全局行距 | 上面那个分组 | **60%**~180% | 影响行内行高、块间距、信息带 |
+| 本模板字号/行距 | 每个模板的「本模板设置」底部 | 80%~120% | 只影响当前模板，与全局相乘 |
+| 自动排版 | 显示分组开关 | 开/关 | 定时发布时按"尽量排满、不越界"自动定字号 |
+
+自动排版的判定：从 1.5 往下试字号，取第一个满足「上边距 ≥12px、下边距 ≥18px、内容高度 ≥ 页面 55%」的值；全都不满足就退回手动值。
+
+**诗词**另有一个「整首优先」开关：关掉时大字优先、放不下就截断补 `……`；打开则字号自动缩到整首放得下。
+
+---
+
+## 照片卡规则
+
+| 情况 | 行为 |
+|---|---|
+| 有 EXIF（时间/机型/参数） | 底部压一条白色信息带：日期、机身镜头、焦段光圈快门 ISO、拍摄当天天气 |
+| 完全没有任何拍摄信息 | **不留信息带，照片铺满整张卡** |
+| 信息带高度 | 跟随字号/行距与行数变化，照片区自动让位 |
+
+信息带的天气是**拍摄当天**的天气，不是今天的：
+
+- 今天 → 实时天气
+- 近 7 天 → 历史存档，缺数据时用预报接口的 `past_days`
+- 更早 → Open-Meteo 历史存档
+
+轮播规则：发送成功后推进牌堆并解钉（下次换图）；失败保留 pin（重试仍发同一张）；「换一张预览」会消耗当前这张，所以确实会换。
+
+---
+
+## 需要你自己准备的
+
+- **TodooCard 卡片**：开机、有电、已配对
+- **蓝牙**：macOS 系统蓝牙打开；Windows 需在系统蓝牙里配对卡片
+- **网络**：天气/城市/Bing 壁纸/AI 出图需要联网；离线也能用日历、待办、进度、自定义
+
+---
+
+## 常见问题
+
+**发送失败 / 一直 `Timed out scanning`、`Timed out connecting`**
+
+macOS 的 CoreBluetooth 一次只允许一个扫描会话。本程序早期版本会在发送前自己扫一遍，和发送器抢射频，导致连接超时——已在 v1.0.13 修复（发送前不再扫描，改用 15 分钟地址缓存）。若仍失败：
+
+1. 卡片拿到电脑 1 米内（RSSI 优于 -70）
+2. 长按卡片背面按钮 5 秒唤醒（休眠时广播功率低）
+3. 关掉手机上连着卡片的 App
+4. 看 `data/app.log` 里的 `土豆片发送失败 ... 原始输出`，会包含 RSSI 与失败原因
+
+**网页打不开 / 提示地址被占用**
+
+端口 8199 被别的程序占了。启动日志会显示实际端口；也可以先 `pkill -f ha_server.py` 再启动。
+
+**卡片显示"缺字"或彩色噪点**
+
+- 检查 `data/app.log` 是否报字体缺失（需要系统中文字体）
+- 彩色噪点：出图已做调色板吸附，若仍出现，把该卡参数发出来
+
+**定时任务没触发**
+
+- 定时只在程序运行时生效（网页版需要页面保持打开）
+- 检查「每日计划」里的时间有没有被保存（保存后列表会刷新一次）
+- 失败会进重试队列，卡片可连时自动补发
+
+**换了电脑/重装后设备 ID 变了**
+
+macOS 的 BLE UUID 是按机器生成的，换机后要在控制台重新「扫描设备」并保存。
+
+---
+
+## 六色与抖动
+
+调色板只有 6 色，所有内容最终会被量化到：
+
+```
+黑 (0,0,0)  白 (255,255,255)  黄 (255,255,0)
+红 (255,0,0) 蓝 (0,0,255)     绿 (0,255,0)
+```
+
+- 照片用 Floyd–Steinberg 抖动（误差 0），远看是连续调，近看是网点
+- 文字/线条走"吸附"而不是抖动，边缘干净
+- 深色 HUD 主题会把字号再放大 10%，因为二值化会吃掉一圈抗锯齿
+
+---
+
+## 开发
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/python server.py            # 起服务，默认 8199
+.venv/bin/python tools/check_cards.py # 版式自检（输出问题清单）
+```
+
+目录：
+
+```
+card.py           核心：配置、出图调度、发送、定时、天气/诗词/照片
+card_render.py    14 个模板的 Pillow 渲染
+sender.py         Windows/Linux 的 bleak 发送器
+payload.py        载荷构建（4bpp 打包、面板校准）
+quicklz_payload.py QuickLZ level-3 打包
+server.py         aiohttp 壳：静态页 + REST API
+web/              控制台（card.html）、场景广场（scenes.html）
+packaging/        PyInstaller 规格与打包脚本
+tools/            自检、调试脚本
+docs/             静态展示页（GitHub Pages）
+```
+
+---
 
 ## 发布（Release）约定
 
 **每个 Release 都必须挂一个「解压即用」的程序包**，用户不需要 Python、不需要联网装依赖。
 
-| 平台 | 产物 | 打包命令 |
+| 平台 | 产物 | 打包方式 |
 |---|---|---|
-| Windows | `todocard-portable-<版本>.zip` | `pwsh -File packaging\build.ps1`（Windows 上跑） |
-| macOS | `todoocard-eink-<版本>-darwin-<arch>.zip` | `bash packaging/build_release.sh <版本>`（macOS 上跑，需先 `pip install pyinstaller`） |
+| macOS | `todoocard-eink-<版本>-darwin-<arch>.zip` | `PYTHON=.venv/bin/python bash packaging/build_release.sh <版本>` |
+| Windows | `todocard-portable-<版本>-windows.zip` | 打 tag `v<版本>-windows`，由 GitHub Actions 在 `windows-latest` 构建 |
 
-macOS 包内结构：
-
-```
-todoocard-eink-1.0.10-darwin-arm64/
-├── TodooCardEink/          ← PyInstaller 目录版（启动 1~2s）
-├── start-mac.command       ← 双击启动（英文名，防解压乱码）
-├── 启动（macOS）.command
-└── 使用说明.txt
-```
-
-启动后浏览器自动打开 `http://127.0.0.1:8199/card.html`；数据写在包内 `data/`，删目录即卸载。
-
-> 注意：macOS 包只能在打包它的架构上跑（arm64 / x86_64 分开打）；Windows 包要在 Windows 上打。
-
-## 快速开始
+Windows 走 CI（PyInstaller 不能交叉编译），工作流在 `.github/workflows/build-windows.yml`：
 
 ```bash
-./run.command          # macOS / Linux
-run.bat                # Windows
+git tag v1.0.14-windows && git push origin v1.0.14-windows
 ```
 
-打开 <http://127.0.0.1:8199/card.html>。
+约 2 分钟出包并自动挂到同名 Release（产物重命名为 ASCII，避免中文名在 Release 上乱码）。
 
-## 需要你自己准备的
-
-1. **卡片设备**：先在系统蓝牙里配对 TodooCard（否则会报 `Peer removed pairing information`）
-2. **发送通道**：
-   - macOS：需要 `data/bin/mac-image-transfer`（Swift 编译，见上游 `Sunbelife/TodooCard_Skills`）
-   - Windows：暂未提供，见下方「Windows 适配」
-3. **字体**：现在用系统中文字体（macOS 用 `STHeiti`/`PingFang`）。Windows 会自动找 `msyh.ttc`，如果渲染出方块，把字体放到 `assets/fonts/` 并在 `card_render.py` 的 `FONT_CANDIDATES` 里加路径
-
-## Windows 适配进度
-
-| 项 | 状态 |
-|---|---|
-| Web 服务 / 渲染 | ✅ 已可运行（与平台无关） |
-| 选文件夹 | ⬜ 待做：Windows 用 `tkinter.filedialog` 或 PowerShell `FolderBrowserDialog` |
-| 发送（BLE 写入） | ⬜ 待做：Swift 二进制只有 macOS 版，需要用 `bleak` 重写分包/确认逻辑 |
-| 字体 | ⬜ 待验证：`msyh.ttc` 下的字宽与 macOS 不同，模板可能需微调 |
-
-## 六色与抖动
-
-调色板只有：黑 `(0,0,0)`、白、黄 `(255,255,0)`、红 `(255,0,0)`、蓝 `(0,0,255)`、绿 `(0,255,0)`。
-
-**文字必须用精确的调色板色**，Floyd–Steinberg 的误差才为 0；用近似色会被抖动成噪点。照片才需要真正的抖动。
-
-## 目录
-
-```
-card.py           发送队列 / 定时计划 / 照片池 / AI
-card_render.py    13 个模板的绘制
-server.py         aiohttp 壳（页面 + /api/card*）
-web/              card.html（控制台）scenes.html（场景广场）
-data/cities.json  离线城市库
-```
+---
 
 ## 许可
 
-MIT。上游思路参考 `XDS9314/todoocard` 与 `Sunbelife/TodooCard_Skills`，协议实现请遵循其许可证。
+个人使用自由；转载/二次分发请保留出处。
