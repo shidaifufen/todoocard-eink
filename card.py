@@ -143,6 +143,8 @@ class CardService:
             "auto_fit": False,          # 自动排版：按"排满且不重叠"自动选字号/行距
             "tpl_scale": {},            # 单模板字号系数 {kind: 1.0}
             "tpl_line": {},             # 单模板行距系数 {kind: 1.0}
+            "intervals": [],            # 间隔任务：每 N 分钟推送一次（可限工作日/周末/时段）
+            "fav": [],                  # 收藏的照片路径
             "photo_fields": {"date": True, "time": True, "camera": True,
                              "params": True, "weather": True},
             "custom": {"title": "我的卡片", "accent": "red",
@@ -184,7 +186,7 @@ class CardService:
                     "todos", "weather", "cooldown_days", "photo_mode", "photo_overlay",
                     "bing_enabled", "ai", "ai_prompt", "button_photo", "countdowns",
                     "recursive", "scale", "custom", "fill", "theme", "poem_note", "poem_full",
-                    "poem_ai", "standby", "line_gap", "auto_fit", "tpl_scale", "tpl_line", "photo_fields"):
+                    "poem_ai", "standby", "line_gap", "auto_fit", "tpl_scale", "tpl_line", "photo_fields", "intervals", "fav"):
             if key in patch:
                 cur[key] = patch[key]
         if "schedule" in patch:
@@ -568,6 +570,11 @@ class CardService:
         if not photos:
             return None
         mode = (self.cfg.get("photo_mode") or "shuffle").lower()
+        if mode == "fav":
+            favs = [f for f in (self.cfg.get("fav") or []) if f in photos]
+            if favs:
+                return random.choice(favs)
+            mode = "shuffle"   # 收藏空了就退回普通轮播
         deck = self.cfg.setdefault("deck", {})
 
         if mode == "random":
@@ -1801,6 +1808,75 @@ class CardService:
                 return self.render_placeholder("还没有可用的照片\n在网页里添加文件夹，或开启 Bing 壁纸")
             return self.render_placeholder(f"「{TEMPLATES.get(kind, kind)}」暂时生成失败")
 
+
+    # ── 间隔任务 ──
+    def _interval_slots(self, job: dict, now: datetime) -> list[tuple[int, str]]:
+        """返回今天已经到点的槽位 [(ts, key)]，key 里带槽位时间戳。"""
+        try:
+            every = max(5, int(job.get("every_min") or 60))
+            days = (job.get("days") or "all").lower()
+            wd = now.weekday()
+            if days == "workday" and wd >= 5:
+                return []
+            if days == "weekend" and wd < 5:
+                return []
+            start = str(job.get("start") or "07:00")
+            end = str(job.get("end") or "23:00")
+            sh, sm = (int(x) for x in start.split(":"))
+            eh, em = (int(x) for x in end.split(":"))
+            base = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
+            stop = now.replace(hour=eh, minute=em, second=0, microsecond=0)
+            if stop <= base:
+                stop = stop + timedelta(days=1)
+            out = []
+            t = base
+            jid = str(job.get("id") or f"{job.get('kind')}-{every}")
+            while t <= min(now, stop):
+                out.append((int(t.timestamp()), f"itv:{jid}:{int(t.timestamp())}"))
+                t = t + timedelta(minutes=every)
+            return out[-1:]
+        except Exception:
+            return []
+
+    def timeline(self, hours: int = 48) -> dict:
+        """未来 N 小时的计划 + 最近历史，给前端画时间轴。"""
+        now = datetime.now()
+        out = []
+        for item in (self.cfg.get("schedule") or []):
+            if not item.get("enabled", True):
+                continue
+            try:
+                hh, mm = (int(x) for x in item["time"].split(":"))
+            except Exception:
+                continue
+            for d in range(0, max(1, hours // 24) + 1):
+                t = (now + timedelta(days=d)).replace(hour=hh, minute=mm, second=0, microsecond=0)
+                if t >= now and (t - now).total_seconds() <= hours * 3600:
+                    out.append({"ts": int(t.timestamp()), "kind": item["kind"],
+                                "label": TEMPLATES.get(item["kind"], item["kind"]),
+                                "source": "每日计划"})
+        for job in (self.cfg.get("intervals") or []):
+            if not job.get("enabled", True):
+                continue
+            every = max(5, int(job.get("every_min") or 60))
+            start = str(job.get("start") or "07:00")
+            end = str(job.get("end") or "23:00")
+            sh, sm = (int(x) for x in start.split(":"))
+            eh, em = (int(x) for x in end.split(":"))
+            for d in range(0, max(1, hours // 24) + 1):
+                day = now + timedelta(days=d)
+                t = day.replace(hour=sh, minute=sm, second=0, microsecond=0)
+                stop = day.replace(hour=eh, minute=em, second=0, microsecond=0)
+                while t <= stop:
+                    if t >= now and (t - now).total_seconds() <= hours * 3600:
+                        out.append({"ts": int(t.timestamp()), "kind": job.get("kind", "photo"),
+                                    "label": TEMPLATES.get(job.get("kind", "photo"), job.get("kind")),
+                                    "source": f"每 {every} 分钟"})
+                    t = t + timedelta(minutes=every)
+        out.sort(key=lambda x: x["ts"])
+        hist = list(getattr(self, "history", []) or [])[:40]
+        return {"ok": True, "planned": out, "history": hist}
+
     # ── 调度 ──
     async def _loop(self):
         """调度：到点跑一次；失败自动退避重试（墨水屏可能睡着，喊一次不一定醒）。
@@ -1820,6 +1896,24 @@ class CardService:
                     now = datetime.now()
                     runs = self.cfg.setdefault("last_runs", {})
                     retry = self.cfg.setdefault("retry", {})
+                    # ── 间隔任务（每 N 分钟）──
+                    for _job in (self.cfg.get("intervals") or []):
+                        if not _job.get("enabled", True):
+                            continue
+                        for _ts, _key in self._interval_slots(_job, now):
+                            if int(runs.get(_key, 0)) >= _ts:
+                                continue
+                            _win = max(1, int(self.cfg.get("catch_up_min", 30) or 30))
+                            if now.timestamp() > _ts + _win * 60:
+                                continue
+                            if _job.get("kind") == "photo" and not self._scan_photos():
+                                continue
+                            res = await self.send(_job.get("kind", "photo"), requeue=True, wait_sec=45)
+                            if res.get("ok"):
+                                runs[_key] = int(now.timestamp())
+                                self._save_cfg()
+                            break   # 一次循环只处理一个槽位，避免堆积
+
                     for idx, item in enumerate(self.cfg.get("schedule") or []):
                         if not item.get("enabled", True):
                             continue
@@ -1942,6 +2036,8 @@ class CardService:
             "tpl_scale": dict(self.cfg.get("tpl_scale") or {}),
             "tpl_line": dict(self.cfg.get("tpl_line") or {}),
             "photo_fields": dict(self.cfg.get("photo_fields") or {}),
+            "intervals": list(self.cfg.get("intervals") or []),
+            "fav": list(self.cfg.get("fav") or []),
             "custom": self.cfg.get("custom") or {},
             "photo_overlay": bool(self.cfg.get("photo_overlay", True)),
             "photo_count": len(photos),
@@ -2185,6 +2281,29 @@ def make_routes():
         lines = [ln.strip(" 　-·") for ln in text.splitlines() if ln.strip()][:5]
         return web.json_response({"ok": True, "lines": lines})
 
+    async def _timeline(request):
+        hours = int(request.query.get("hours", "48") or 48)
+        return web.json_response(current().timeline(hours))
+
+    async def _fav(request):
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        svc = current()
+        action = (body or {}).get("action", "add")
+        path = (body or {}).get("path") or getattr(svc, "_photo_pin", None)
+        fav = list(svc.cfg.get("fav") or [])
+        if not path:
+            return web.json_response({"ok": False, "error": "没有可收藏的照片"}, status=400)
+        if action == "add" and path not in fav:
+            fav.append(path)
+        elif action == "remove" and path in fav:
+            fav.remove(path)
+        svc.cfg["fav"] = fav
+        svc._save_cfg()
+        return web.json_response({"ok": True, "fav": fav, "is_fav": path in fav})
+
     async def _status(request):
         return web.json_response({"ok": True, "card": current().status()})
 
@@ -2385,6 +2504,8 @@ def make_routes():
     return [
         ("GET", "/api/card", _status),
         ("POST", "/api/card/ai/write", _ai_write),
+        ("GET", "/api/card/timeline", _timeline),
+        ("POST", "/api/card/fav", _fav),
         ("GET", "/api/card/templates", _templates),
         ("GET", "/api/card/quote", _quote),
         ("GET", "/api/card/bing", _bing),

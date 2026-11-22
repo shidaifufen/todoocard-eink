@@ -220,6 +220,19 @@
         <button id="restoreBtn" onclick="restoreSched()" style="display:none">恢复上次计划</button>
       </div>
       <div class="hint">到点自动生成并推送；Mac 睡眠错过时，唤醒后 6 小时内补发。</div>
+
+      <h3 style="margin-top:22px">间隔推送</h3>
+      <div id="itvList"></div>
+      <div class="btnrow">
+        <button onclick="addItv()">+ 加一条间隔</button>
+        <button class="primary" onclick="saveItv()">保存间隔</button>
+      </div>
+      <div class="hint">按“每 N 分钟”在时段内推送；可限定工作日 / 周末，周末和工作日可以配不同的起止时间。</div>
+
+      <h3 style="margin-top:22px">时间轴（未来 48 小时）</h3>
+      <div id="timeline" style="position:relative;height:54px;margin:10px 0 6px;
+           background:#1a1d24;border:1px solid var(--line);border-radius:8px;overflow:hidden"></div>
+      <div id="tlList" class="hint"></div>
     </section>
 
     <section class="card hide" id="panel-photos">
@@ -237,6 +250,7 @@
             <option value="shuffle">洗牌（一轮不重复）</option>
             <option value="random">纯随机</option>
             <option value="sequential">按顺序</option>
+            <option value="fav">只推收藏</option>
           </select>
         </div>
         <div><label class="f">Bing 每日壁纸</label>
@@ -353,6 +367,9 @@
           <label style="margin-left:12px"><input type="checkbox" data-pf="camera"> 机身</label><br>
           <label style="margin-top:6px;display:inline-block"><input type="checkbox" data-pf="params"> 拍摄参数</label>
           <label style="margin-left:12px"><input type="checkbox" data-pf="weather"> 天气</label>
+          <div class="btnrow" style="margin-top:8px">
+            <button onclick="favCurrent()">☆ 收藏当前照片</button>
+          </div>
         </div>
         <div id="sendHint" class="hint"></div>
       </div>
@@ -433,7 +450,7 @@ function switchPanel(p){
     b.classList.toggle('on', b.dataset.panel === p));
   if (p === 'tpl'){ $('tplTitle').textContent = TPL_LABEL[currentTpl] || ''; renderEditor(); appendTplTuning(); preview(currentTpl); }
   if (p === 'scenes') renderScenes();
-  if (p === 'schedule'){ renderSched(STATE.schedule||[]); renderSchedState(); }
+  if (p === 'schedule'){ renderItv(); loadTimeline();  renderSched(STATE.schedule||[]); renderSchedState(); }
   if (p === 'history') renderHistory(STATE.history||[]);
 }
 document.querySelectorAll('#setNav button').forEach(b => b.onclick = () => switchPanel(b.dataset.panel));
@@ -748,6 +765,93 @@ function renderSched(list){
     box.appendChild(div);
   });
 }
+async function loadTimeline(){
+  const box = $('timeline'); if (!box) return;
+  const d = await (await fetch(API + '/api/card/timeline?hours=48')).json();
+  if (!d.ok) return;
+  const now = Date.now() / 1000, end = now + 48 * 3600;
+  box.innerHTML = '';
+  // 每 6 小时一条刻度
+  for (let i = 0; i <= 8; i++) {
+    const x = (i / 8) * 100;
+    const tick = document.createElement('div');
+    tick.style.cssText = `position:absolute;left:${x}%;top:0;bottom:0;width:1px;background:#2a2d35`;
+    box.appendChild(tick);
+  }
+  (d.planned || []).forEach(p => {
+    const t = p.ts, left = ((t - now) / (end - now)) * 100;
+    const el = document.createElement('div');
+    el.title = `${new Date(t * 1000).toLocaleString('zh-CN')} · ${p.label} · ${p.source}`;
+    el.style.cssText = `position:absolute;left:${left}%;top:14px;width:3px;height:26px;background:#4f7cff;border-radius:2px;cursor:pointer`;
+    el.onclick = () => toast(el.title);
+    box.appendChild(el);
+  });
+  (d.history || []).slice(0, 60).forEach(h => {
+    const left = ((h.ts - now) / (end - now)) * 100;
+    if (left < 0 || left > 100) return;
+    const el = document.createElement('div');
+    el.title = `${new Date(h.ts * 1000).toLocaleString('zh-CN')} · ${TPL_LABEL[h.kind] || h.kind} · ${h.ok ? '成功' : '失败'}`;
+    el.style.cssText = `position:absolute;left:${left}%;bottom:6px;width:3px;height:10px;background:${h.ok ? '#2fbf71' : '#d9534f'};border-radius:2px;cursor:pointer`;
+    el.onclick = () => toast(el.title);
+    box.appendChild(el);
+  });
+  const next = (d.planned || []).slice(0, 6).map(p =>
+    `${new Date(p.ts * 1000).toLocaleString('zh-CN', {hour12:false, month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'})} · ${p.label}`).join('　｜　');
+  $('tlList').textContent = '下一个：' + (next || '（暂无计划）') + '　（蓝=计划，绿/红=历史成功/失败，悬停看详情）';
+  STATE._timeline = d;
+}
+
+function renderItv(){
+  const box = $('itvList'); if (!box) return;
+  const list = STATE.intervals || [];
+  box.innerHTML = '';
+  list.forEach((it, i) => {
+    const div = document.createElement('div');
+    div.className = 'sched';
+    const opts = Object.keys(TPL_LABEL).map(k =>
+      `<option value="${k}"${it.kind===k?' selected':''}>${TPL_LABEL[k]}</option>`).join('');
+    const days = [['all','每天'],['workday','工作日'],['weekend','周末']].map(([v,n]) =>
+      `<option value="${v}"${(it.days||'all')===v?' selected':''}>${n}</option>`).join('');
+    div.innerHTML = `
+      <select class="i-kind">${opts}</select>
+      <span class="hint" style="margin:0 4px">每</span>
+      <input class="i-every" type="number" min="5" step="5" value="${it.every_min||60}" style="width:76px">
+      <span class="hint" style="margin:0 4px">分钟</span>
+      <input class="i-start" type="time" value="${it.start||'07:00'}">
+      <span class="hint">～</span>
+      <input class="i-end" type="time" value="${it.end||'23:00'}">
+      <select class="i-days">${days}</select>
+      <label style="margin-left:6px"><input class="i-on" type="checkbox"${it.enabled!==false?' checked':''}> 启用</label>
+      <button onclick="this.parentNode.remove(); saveItv()">删</button>`;
+    box.appendChild(div);
+  });
+}
+function addItv(){
+  STATE.intervals = STATE.intervals || [];
+  STATE.intervals.push({kind:'photo', every_min:60, start:'07:00', end:'23:00', days:'all', enabled:true});
+  renderItv();
+}
+async function saveItv(){
+  const items = [...document.querySelectorAll('#itvList .sched')].map((el, i) => ({
+    id: 'itv' + i,
+    kind: el.querySelector('.i-kind').value,
+    every_min: +el.querySelector('.i-every').value || 60,
+    start: el.querySelector('.i-start').value || '07:00',
+    end: el.querySelector('.i-end').value || '23:00',
+    days: el.querySelector('.i-days').value,
+    enabled: el.querySelector('.i-on').checked,
+  }));
+  const d = await postJSON('/api/card/config', {intervals: items});
+  if (d.ok && d.card) STATE = d.card;
+  toast('间隔任务已保存（' + items.length + ' 条）');
+  loadTimeline();
+}
+
+async function favCurrent(){
+  const d = await postJSON('/api/card/fav', {action: 'add'});
+  toast(d.ok ? '已收藏当前照片' : (d.error || '收藏失败'));
+}
+
 function renderSchedState(){
   const el = $('schedState'); if (!el) return;
   const t = STATE.last_tick ? new Date(STATE.last_tick*1000).toLocaleTimeString('zh-CN',{hour12:false}) : '—';
