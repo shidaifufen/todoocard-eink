@@ -854,7 +854,8 @@ async function loadTimeline(){
     box.appendChild(line);
     const badge = document.createElement('div');
     badge.textContent = '现在 ' + new Date().toLocaleTimeString('zh-CN',{hour12:false}).slice(0,5);
-    badge.style.cssText = `position:absolute;left:${pct}%;top:2px;transform:translateX(-50%);
+    const bx = Math.min(Math.max(pct, 4), 96);
+    badge.style.cssText = `position:absolute;left:${bx}%;top:2px;transform:translateX(-50%);
       background:#ffffff;color:#111;font-size:10px;line-height:14px;padding:0 4px;border-radius:4px;white-space:nowrap`;
     box.appendChild(badge);
   }
@@ -913,9 +914,13 @@ async function loadTimeline(){
     const el = document.createElement('div');
     el.style.cssText = `position:absolute;left:${left}%;top:12px;width:${w}%;height:28px;
       background:${conflicts.some(c => c.ts === p.ts && p.source === '每日计划') ? '#d9534fdd' : '#4f7cffcc'};border-radius:3px;cursor:pointer`;
+    const _futureImg = (p.kind === 'photo')
+      ? null                       // 未来轮播到时才抽，不拿当前这张冒充
+      : `${API}/api/card/preview?kind=${p.kind}&fresh=0&t=${p.ts}`;
+    const _extra = (p.kind === 'photo') ? ' · 届时轮播下一张' : '';
     el.onmouseenter = (e) => showTip(e,
-      `${new Date(p.ts*1000).toLocaleString('zh-CN')} · ${p.label} · ${p.source} · 预计 ${Math.round(avg)}s`,
-      `${API}/api/card/preview?kind=${p.kind}&fresh=0&t=${p.ts}`, p.kind);
+      `${new Date(p.ts*1000).toLocaleString('zh-CN')} · ${p.label} · ${p.source}${_extra} · 预计 ${Math.round(avg)}s`,
+      _futureImg, p.kind);
     el.onmouseleave = hideTipSoon;
     el.onclick = () => toast(`${p.label} · ${new Date(p.ts*1000).toLocaleString('zh-CN')}`);
     box.appendChild(el);
