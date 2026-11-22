@@ -43,6 +43,37 @@ private val TEMPLATES = listOf(
     "custom" to "自定义卡片",
 )
 
+
+    /** 处理系统分享 / 荣耀传送门传来的图片或文字 */
+    private fun handleIntent(ctx: android.content.Context, intent: android.content.Intent?,
+                             onPhoto: (Bitmap?) -> Unit, onText: (String) -> Unit) {
+        if (intent == null) return
+        when (intent.action) {
+            android.content.Intent.ACTION_SEND -> {
+                val uri = if (android.os.Build.VERSION.SDK_INT >= 33)
+                    intent.getParcelableExtra(android.content.Intent.EXTRA_STREAM, android.net.Uri::class.java)
+                else @Suppress("DEPRECATION") intent.getParcelableExtra(android.content.Intent.EXTRA_STREAM)
+                if (uri != null) {
+                    runCatching {
+                        ctx.contentResolver.openInputStream(uri)?.use { onPhoto(BitmapFactory.decodeStream(it)) }
+                    }
+                } else {
+                    intent.getStringExtra(android.content.Intent.EXTRA_TEXT)?.let(onText)
+                }
+            }
+            android.content.Intent.ACTION_VIEW -> {
+                intent.data?.let { uri ->
+                    runCatching {
+                        ctx.contentResolver.openInputStream(uri)?.use { onPhoto(BitmapFactory.decodeStream(it)) }
+                    }
+                }
+            }
+            android.content.Intent.ACTION_PROCESS_TEXT -> {
+                intent.getCharSequenceExtra(android.content.Intent.EXTRA_PROCESS_TEXT)?.let { onText(it.toString()) }
+            }
+        }
+    }
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,6 +106,17 @@ private fun App() {
         }
     }
     LaunchedEffect(kind, card, photo) { refreshPreview() }
+
+    // 系统分享 / 荣耀传送门：把图片或文字直接带进来
+    LaunchedEffect(Unit) {
+        handleIntent(ctx, (ctx as? android.app.Activity)?.intent,
+            onPhoto = { bmp -> if (bmp != null) { photo = bmp; kind = "photo"; tab = 0; status = "已从分享导入照片" } },
+            onText = { text -> if (text.isNotBlank()) {
+                card = card.copy(kind = "custom", customTitle = "分享内容",
+                                 customLines = text.lines().filter { it.isNotBlank() })
+                kind = "custom"; tab = 0; status = "已从分享导入文字"
+            } })
+    }
 
 
     fun scan() {
