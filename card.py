@@ -2338,9 +2338,10 @@ def make_routes():
             for h in (getattr(current(), "history", []) or []):
                 if str(h.get("ts")) == str(ts) and h.get("img") and (base / h["img"]).exists():
                     return web.FileResponse(base / h["img"])
-            for g in sorted(base.glob(f"*_{kind}.png")):
-                if g.stat().st_mtime:
-                    return web.FileResponse(g)
+            # 老记录：历史上是按 <ts>_<kind>.png 存的
+            legacy = base / f"{ts}_{kind}.png"
+            if legacy.exists():
+                return web.FileResponse(legacy)
         except Exception:
             pass
         raise web.HTTPNotFound()
