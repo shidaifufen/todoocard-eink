@@ -23,7 +23,7 @@
 
     <application
         android:label="土豆片"
-        android:theme="@style/Theme.Material3.DayNight.NoActionBar"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:allowBackup="true">
 
         <activity
