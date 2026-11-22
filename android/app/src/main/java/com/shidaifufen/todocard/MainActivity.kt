@@ -20,6 +20,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -79,6 +82,150 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent { MaterialTheme(colorScheme = darkColorScheme()) { App() } }
     }
+}
+
+
+/** 每日计划 + 间隔推送 + 时间轴 */
+@Composable
+private fun PlanScreen(ctx: android.content.Context) {
+    PlanStore.init(ctx)
+    var fixed by remember { mutableStateOf(PlanStore.fixed(ctx)) }
+    var itvs by remember { mutableStateOf(PlanStore.intervals(ctx)) }
+    var hist by remember { mutableStateOf(PlanStore.history(ctx)) }
+    var tick by remember { mutableStateOf(0) }
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        Text("时间轴（前 24h ~ 后 24h）", fontWeight = FontWeight.Bold)
+        androidx.compose.foundation.Canvas(
+            Modifier.fillMaxWidth().height(64.dp).padding(vertical = 8.dp)
+        ) {
+            val now = System.currentTimeMillis()
+            val start = now - 24 * 3600_000L
+            val span = 48 * 3600_000f
+            fun xOf(ts: Long) = ((ts - start) / span) * size.width
+            drawRect(Color(0xFF1A1D24), size = size)
+            // 现在线
+            val nx = xOf(now)
+            drawLine(Color.White, androidx.compose.ui.geometry.Offset(nx, 0f),
+                androidx.compose.ui.geometry.Offset(nx, size.height), strokeWidth = 2f)
+            // 历史
+            hist.forEach { h ->
+                val x = xOf(h.ts)
+                if (x in 0f..size.width) {
+                    drawLine(if (h.ok) Color(0xFF2FBF71) else Color(0xFFD9534F),
+                        androidx.compose.ui.geometry.Offset(x, size.height * 0.72f),
+                        androidx.compose.ui.geometry.Offset(x, size.height), strokeWidth = 4f)
+                }
+            }
+            // 未来计划
+            planNext(fixed, itvs, now, 48).forEach { ts ->
+                val x = xOf(ts)
+                if (x in 0f..size.width) {
+                    drawLine(Color(0xFF4F7CFF),
+                        androidx.compose.ui.geometry.Offset(x, size.height * 0.12f),
+                        androidx.compose.ui.geometry.Offset(x, size.height * 0.62f), strokeWidth = 4f)
+                }
+            }
+        }
+        val next = planNext(fixed, itvs, System.currentTimeMillis(), 48).take(4)
+            .joinToString("  ") {
+                java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.CHINA).format(java.util.Date(it))
+            }
+        Text("接下来：${next.ifEmpty { "无" }}", fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        HorizontalDivider(Modifier.padding(vertical = 10.dp))
+        Text("每日计划", fontWeight = FontWeight.Bold)
+        fixed.forEachIndexed { i, f ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(f.time, { v ->
+                    fixed = fixed.toMutableList().also { it[i] = f.copy(time = v) }
+                }, Modifier.width(110.dp), singleLine = true, label = { Text("时间") })
+                Spacer(Modifier.width(8.dp))
+                Text(templateName(f.template), Modifier.weight(1f), fontSize = 13.sp)
+                Switch(f.enabled, { v -> fixed = fixed.toMutableList().also { it[i] = f.copy(enabled = v) } })
+                TextButton({ fixed = fixed.toMutableList().also { it.removeAt(i) } }) { Text("删") }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton({
+                fixed = fixed + PlanStore.Fixed("08:00", "summary")
+            }) { Text("+ 加一条") }
+            Button({
+                PlanStore.saveFixed(ctx, fixed); SchedulerWorker.schedule(ctx)
+            }) { Text("保存计划") }
+        }
+
+        HorizontalDivider(Modifier.padding(vertical = 10.dp))
+        Text("间隔推送", fontWeight = FontWeight.Bold)
+        itvs.forEachIndexed { i, it ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(it.everyMin.toString(), { v ->
+                    itvs = itvs.toMutableList().also { l -> l[i] = it.copy(everyMin = v.toIntOrNull() ?: 60) }
+                }, Modifier.width(78.dp), singleLine = true, label = { Text("分钟") })
+                Spacer(Modifier.width(8.dp))
+                Text("${it.start}~${it.end} ${when (it.days) { "workday" -> "工作日"; "weekend" -> "周末"; else -> "每天" }}",
+                    Modifier.weight(1f), fontSize = 12.sp)
+                Switch(it.enabled, { v -> itvs = itvs.toMutableList().also { l -> l[i] = it.copy(enabled = v) } })
+                TextButton({ itvs = itvs.toMutableList().also { l -> l.removeAt(i) } }) { Text("删") }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton({ itvs = itvs + PlanStore.Interval(60, "09:00", "22:00", "all", "summary") }) { Text("+ 加一条间隔") }
+            Button({ PlanStore.saveIntervals(ctx, itvs); SchedulerWorker.schedule(ctx) }) { Text("保存间隔") }
+        }
+
+        HorizontalDivider(Modifier.padding(vertical = 10.dp))
+        Row {
+            Text("发送历史", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            TextButton({ hist = PlanStore.history(ctx) }) { Text("刷新") }
+        }
+        hist.takeLast(12).reversed().forEach { h ->
+            Text("${java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.CHINA).format(java.util.Date(h.ts))}  " +
+                 "${templateName(h.template)}  ${if (h.ok) "✓" else "✕"}  ${h.seconds}s",
+                fontSize = 12.sp, color = if (h.ok) MaterialTheme.colorScheme.onSurface else Color(0xFFD9534F))
+        }
+    }
+}
+
+private fun templateName(k: String): String = TEMPLATES.firstOrNull { it.first == k }?.second ?: k
+
+/** 计算未来 hours 小时内的计划时间点（固定 + 间隔） */
+private fun planNext(fixed: List<PlanStore.Fixed>, itvs: List<PlanStore.Interval>,
+                     now: Long, hours: Int): List<Long> {
+    val out = mutableListOf<Long>()
+    val cal = java.util.Calendar.getInstance()
+    for (f in fixed.filter { it.enabled }) {
+        val p = f.time.split(":")
+        repeat(hours / 24 + 2) { d ->
+            cal.timeInMillis = now
+            cal.add(java.util.Calendar.DAY_OF_YEAR, d)
+            cal.set(java.util.Calendar.HOUR_OF_DAY, p.getOrNull(0)?.toIntOrNull() ?: 8)
+            cal.set(java.util.Calendar.MINUTE, p.getOrNull(1)?.toIntOrNull() ?: 0)
+            cal.set(java.util.Calendar.SECOND, 0)
+            if (cal.timeInMillis > now) out.add(cal.timeInMillis)
+        }
+    }
+    for (it in itvs.filter { it.enabled }) {
+        val s = it.start.split(":"); val e = it.end.split(":")
+        repeat(hours / 24 + 2) { d ->
+            cal.timeInMillis = now
+            cal.add(java.util.Calendar.DAY_OF_YEAR, d)
+            cal.set(java.util.Calendar.HOUR_OF_DAY, s.getOrNull(0)?.toIntOrNull() ?: 9)
+            cal.set(java.util.Calendar.MINUTE, s.getOrNull(1)?.toIntOrNull() ?: 0)
+            val dayStart = cal.timeInMillis
+            val endCal = (cal.clone() as java.util.Calendar).apply {
+                set(java.util.Calendar.HOUR_OF_DAY, e.getOrNull(0)?.toIntOrNull() ?: 22)
+                set(java.util.Calendar.MINUTE, e.getOrNull(1)?.toIntOrNull() ?: 0)
+            }
+            var t = dayStart
+            while (t <= endCal.timeInMillis) {
+                if (t > now) out.add(t)
+                t += maxOf(5, it.everyMin) * 60_000L
+            }
+        }
+    }
+    return out.sorted()
 }
 
 @Composable
@@ -191,7 +338,8 @@ private fun App() {
             NavigationBar {
                 NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, icon = { Text("▦") }, label = { Text("卡片") })
                 NavigationBarItem(selected = tab == 1, onClick = { tab = 1 }, icon = { Text("▤") }, label = { Text("相册") })
-                NavigationBarItem(selected = tab == 2, onClick = { tab = 2 }, icon = { Text("⚙") }, label = { Text("设置") })
+                NavigationBarItem(selected = tab == 2, onClick = { tab = 2 }, icon = { Text("◷") }, label = { Text("计划") })
+                NavigationBarItem(selected = tab == 3, onClick = { tab = 3 }, icon = { Text("⚙") }, label = { Text("设置") })
             }
         }
     ) { pad ->
@@ -248,6 +396,7 @@ private fun App() {
                     Text("选照片后会自动切到「照片」模板。批量与收藏在后续版本。",
                         fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
                 }
+                2 -> PlanScreen(ctx)
                 else -> Column(Modifier.fillMaxSize().padding(top = 12.dp).verticalScroll(rememberScrollState())) {
                     Text("设备", fontWeight = FontWeight.Bold)
                     found.forEach { r ->
