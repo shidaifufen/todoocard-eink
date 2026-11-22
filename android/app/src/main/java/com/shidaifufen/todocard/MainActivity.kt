@@ -76,6 +76,7 @@ private fun App() {
     }
     LaunchedEffect(kind, card, photo) { refreshPreview() }
 
+
     fun scan() {
         scope.launch {
             status = "扫描中…（长按卡片背面按钮唤醒）"
@@ -131,6 +132,16 @@ private fun App() {
                 status = "失败：${e.message}"
             } finally { busy = false }
         }
+    }
+
+    // 调试用：adb 带 --ez auto true 启动时，自动扫描+连接+推送
+    val auto = (ctx as? android.app.Activity)?.intent?.getBooleanExtra("auto", false) == true
+    LaunchedEffect(auto) {
+        if (!auto) return@LaunchedEffect
+        kotlinx.coroutines.delay(1500)
+        scan()
+        kotlinx.coroutines.delay(12_000)
+        if (device != null) doSend()
     }
 
     Scaffold(

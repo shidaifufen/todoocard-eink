@@ -11,6 +11,7 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.util.Log
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -154,6 +155,7 @@ class BleClient(private val ctx: Context) {
         }
         delay(300)
         onLog("MTU 已请求（实际 ${g.device.name ?: ""}）")
+        Log.i("BleClient", "mtu requested; blockSize=$blockSize")
 
         // 2) 问块大小：设备回 [0x01, blockSize, 0x00]
         blockSize = 0
@@ -165,6 +167,7 @@ class BleClient(private val ctx: Context) {
         if (!ok) throw IllegalStateException("等不到 block size 响应（通知没订阅成功？）")
         val bs = blockSize
         onLog("block payload = $bs")
+        Log.i("BleClient", "cmd01 ack: blockSize=$blockSize payload=$bs length=${legacy.size}")
 
         // 3) 补齐到块大小整数倍，报长度，再开始
         var body = legacy
@@ -177,6 +180,7 @@ class BleClient(private val ctx: Context) {
         delay(200)
         write(c, byteArrayOf(0x03))
         onLog("共 $nBlocks 块")
+        Log.i("BleClient", "cmd02 len=${body.size} cmd03 start nBlocks=$nBlocks")
 
         // 4) 数据阶段：流水线写 + 回执滑窗
         var acked = -1
@@ -203,6 +207,7 @@ class BleClient(private val ctx: Context) {
                 }
             }
             onProgress(sent * 100 / nBlocks)
+            if (sent % 32 == 0) Log.i("BleClient", "sent=$sent/$nBlocks acked=$acked")
             if (acked >= 0 && sent - acked > 40) delay(4)
         }
 
@@ -215,6 +220,7 @@ class BleClient(private val ctx: Context) {
             @Suppress("UNREACHABLE_CODE") false
         } ?: false
         onLog(if (refreshed) "已完成并收到显影确认" else "数据写完，但没等到显影确认")
+        Log.i("BleClient", "send done nBlocks=$nBlocks sent=$sent acked=$acked refreshed=$refreshed")
     }
 
     @SuppressLint("MissingPermission")
