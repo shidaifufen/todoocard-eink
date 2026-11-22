@@ -829,10 +829,34 @@ async function loadTimeline(){
   const end = win.end || (now + 48 * 3600);
   const span = Math.max(60, end - now);
   box.innerHTML = '';
+  const ticks = $('tlTicks');
+  if (ticks) ticks.innerHTML = '';
   for (let i = 0; i <= 8; i++) {
+    const pct = (i/8)*100;
     const tick = document.createElement('div');
-    tick.style.cssText = `position:absolute;left:${(i/8)*100}%;top:0;bottom:0;width:1px;background:#2a2d35`;
+    tick.style.cssText = `position:absolute;left:${pct}%;top:0;bottom:0;width:1px;background:#2a2d35`;
     box.appendChild(tick);
+    if (ticks) {
+      const t = new Date((now + (span * i) / 8) * 1000);
+      const lab = document.createElement('div');
+      lab.textContent = `${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')} ${String(t.getHours()).padStart(2,'0')}:00`;
+      lab.style.cssText = `position:absolute;left:${pct}%;transform:translateX(-50%);white-space:nowrap;${i===0?'transform:none':''}${i===8?';transform:translateX(-100%)':''}`;
+      ticks.appendChild(lab);
+    }
+  }
+
+  // 现在时刻标记：窗口包含当前时间时才画
+  const realNow = Date.now() / 1000;
+  if (realNow >= now && realNow <= end) {
+    const pct = ((realNow - now) / span) * 100;
+    const line = document.createElement('div');
+    line.style.cssText = `position:absolute;left:${pct}%;top:0;bottom:0;width:2px;background:#ffffff99`;
+    box.appendChild(line);
+    const badge = document.createElement('div');
+    badge.textContent = '现在 ' + new Date().toLocaleTimeString('zh-CN',{hour12:false}).slice(0,5);
+    badge.style.cssText = `position:absolute;left:${pct}%;top:2px;transform:translateX(-50%);
+      background:#ffffff;color:#111;font-size:10px;line-height:14px;padding:0 4px;border-radius:4px;white-space:nowrap`;
+    box.appendChild(badge);
   }
   // 每个计划的块宽：用历史平均耗时（秒）折算，最小 0.6% 让能点到
   const hist = d.history || [];
