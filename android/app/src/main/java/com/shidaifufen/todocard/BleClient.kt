@@ -232,7 +232,7 @@ class BleClient(private val ctx: Context) {
             @Suppress("UNREACHABLE_CODE") false
         } ?: false
         onLog(if (refreshed) "已完成并收到显影确认" else "数据写完，但没等到显影确认")
-        Log.i("BleClient", "send done nBlocks=$nBlocks sent=$sent acked=$acked refreshed=$refreshed")
+        Log.i("BleClient", "send done nBlocks=$nBlocks sent=$sent lastAck=${ackOf[0]} refreshed=$refreshed")
     }
 
     @SuppressLint("MissingPermission")
