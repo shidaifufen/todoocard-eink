@@ -230,8 +230,16 @@
       <div class="hint">按“每 N 分钟”在时段内推送；可限定工作日 / 周末，周末和工作日可以配不同的起止时间。</div>
 
       <h3 style="margin-top:22px">时间轴（未来 48 小时）</h3>
-      <div id="timeline" style="position:relative;height:54px;margin:10px 0 6px;
-           background:#1a1d24;border:1px solid var(--line);border-radius:8px;overflow:hidden"></div>
+      <div style="position:relative">
+        <div id="timeline" style="position:relative;height:54px;margin:10px 0 6px;
+             background:#1a1d24;border:1px solid var(--line);border-radius:8px;overflow:hidden"></div>
+        <div id="tlTip" style="display:none;position:absolute;z-index:20;width:200px;padding:8px;
+             background:#0f1116;border:1px solid var(--line);border-radius:10px;pointer-events:none;
+             box-shadow:0 8px 24px rgba(0,0,0,.5)">
+          <img id="tlTipImg" style="width:100%;border-radius:6px;display:none">
+          <div id="tlTipTxt" class="hint" style="margin-top:6px"></div>
+        </div>
+      </div>
       <div id="tlList" class="hint"></div>
     </section>
 
@@ -441,6 +449,7 @@ function renderNav(){
     b.classList.toggle('on', b.dataset.panel === panel));
 }
 function switchPanel(p){
+  window.__panel = p;
   panel = p;
   ['tpl','scenes','device','schedule','photos','ai','history'].forEach(x =>
     $('panel-'+x).classList.toggle('hide', x !== p));
@@ -450,7 +459,7 @@ function switchPanel(p){
     b.classList.toggle('on', b.dataset.panel === p));
   if (p === 'tpl'){ $('tplTitle').textContent = TPL_LABEL[currentTpl] || ''; renderEditor(); appendTplTuning(); preview(currentTpl); }
   if (p === 'scenes') renderScenes();
-  if (p === 'schedule'){ renderItv(); loadTimeline();  renderSched(STATE.schedule||[]); renderSchedState(); }
+  if (p === 'schedule'){ renderItv(); loadTimeline(); clearInterval(window.__tlTimer); window.__tlTimer = setInterval(() => { if (window.__panel === 'schedule') loadTimeline(); }, 60000);  renderSched(STATE.schedule||[]); renderSchedState(); }
   if (p === 'history') renderHistory(STATE.history||[]);
 }
 document.querySelectorAll('#setNav button').forEach(b => b.onclick = () => switchPanel(b.dataset.panel));
@@ -769,36 +778,68 @@ async function loadTimeline(){
   const box = $('timeline'); if (!box) return;
   const d = await (await fetch(API + '/api/card/timeline?hours=48')).json();
   if (!d.ok) return;
-  const now = Date.now() / 1000, end = now + 48 * 3600;
+  STATE._timeline = d;
+  const now = Date.now() / 1000, end = now + 48 * 3600, span = end - now;
   box.innerHTML = '';
-  // 每 6 小时一条刻度
   for (let i = 0; i <= 8; i++) {
-    const x = (i / 8) * 100;
     const tick = document.createElement('div');
-    tick.style.cssText = `position:absolute;left:${x}%;top:0;bottom:0;width:1px;background:#2a2d35`;
+    tick.style.cssText = `position:absolute;left:${(i/8)*100}%;top:0;bottom:0;width:1px;background:#2a2d35`;
     box.appendChild(tick);
   }
+  // 每个计划的块宽：用历史平均耗时（秒）折算，最小 0.6% 让能点到
+  const hist = d.history || [];
+  const avg = hist.length
+    ? hist.reduce((a, h) => a + (h.seconds || 30), 0) / hist.length
+    : 30;
+  const tip = $('tlTip'), tipImg = $('tlTipImg'), tipTxt = $('tlTipTxt');
+  function showTip(ev, text, imgUrl) {
+    tipTxt.textContent = text;
+    if (imgUrl) {
+      tipImg.onerror = () => { tipImg.style.display = 'none'; };
+      tipImg.src = imgUrl; tipImg.style.display = 'block';
+    }
+    else { tipImg.style.display = 'none'; }
+    const r = box.getBoundingClientRect();
+    tip.style.display = 'block';
+    const x = Math.min(Math.max(ev.clientX - r.left - 100, 4), r.width - 204);
+    tip.style.left = x + 'px';
+    tip.style.top = (ev.clientY - r.top - 200) + 'px';
+  }
+  function hideTip() { tip.style.display = 'none'; }
+
   (d.planned || []).forEach(p => {
-    const t = p.ts, left = ((t - now) / (end - now)) * 100;
+    const left = ((p.ts - now) / span) * 100;
+    const w = Math.max(0.6, (avg / span) * 100);
     const el = document.createElement('div');
-    el.title = `${new Date(t * 1000).toLocaleString('zh-CN')} · ${p.label} · ${p.source}`;
-    el.style.cssText = `position:absolute;left:${left}%;top:14px;width:3px;height:26px;background:#4f7cff;border-radius:2px;cursor:pointer`;
-    el.onclick = () => toast(el.title);
+    el.style.cssText = `position:absolute;left:${left}%;top:12px;width:${w}%;height:28px;
+      background:#4f7cffcc;border-radius:3px;cursor:pointer`;
+    el.onmouseenter = (e) => showTip(e,
+      `${new Date(p.ts*1000).toLocaleString('zh-CN')} · ${p.label} · ${p.source} · 预计 ${Math.round(avg)}s`,
+      `${API}/api/card/preview?kind=${p.kind}&fresh=0&t=${p.ts}`);
+    el.onmouseleave = hideTip;
+    el.onclick = () => toast(`${p.label} · ${new Date(p.ts*1000).toLocaleString('zh-CN')}`);
     box.appendChild(el);
   });
+
   (d.history || []).slice(0, 60).forEach(h => {
-    const left = ((h.ts - now) / (end - now)) * 100;
+    const left = ((h.ts - now) / span) * 100;
     if (left < 0 || left > 100) return;
+    const w = Math.max(0.6, ((h.seconds || 30) / span) * 100);
     const el = document.createElement('div');
-    el.title = `${new Date(h.ts * 1000).toLocaleString('zh-CN')} · ${TPL_LABEL[h.kind] || h.kind} · ${h.ok ? '成功' : '失败'}`;
-    el.style.cssText = `position:absolute;left:${left}%;bottom:6px;width:3px;height:10px;background:${h.ok ? '#2fbf71' : '#d9534f'};border-radius:2px;cursor:pointer`;
-    el.onclick = () => toast(el.title);
+    el.style.cssText = `position:absolute;left:${left}%;bottom:8px;width:${w}%;height:10px;
+      background:${h.ok ? '#2fbf71' : '#d9534f'};border-radius:3px;cursor:pointer`;
+    el.onmouseenter = (e) => showTip(e,
+      `${new Date(h.ts*1000).toLocaleString('zh-CN')} · ${TPL_LABEL[h.kind] || h.kind} · ${h.ok ? '成功' : '失败'} · ${Math.round(h.seconds||0)}s`,
+      h.ok ? `${API}/api/card/history/img?ts=${h.ts}&kind=${h.kind}` : null);
+    el.onmouseleave = hideTip;
+    el.onclick = () => toast(el.onmouseenter ? '悬停看缩略图' : '');
     box.appendChild(el);
   });
+
   const next = (d.planned || []).slice(0, 6).map(p =>
     `${new Date(p.ts * 1000).toLocaleString('zh-CN', {hour12:false, month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'})} · ${p.label}`).join('　｜　');
-  $('tlList').textContent = '下一个：' + (next || '（暂无计划）') + '　（蓝=计划，绿/红=历史成功/失败，悬停看详情）';
-  STATE._timeline = d;
+  $('tlList').textContent = '下一个：' + (next || '（暂无计划）')
+    + '　（蓝=未来计划，绿/红=历史成功/失败，悬停看缩略图与耗时）';
 }
 
 function renderItv(){
@@ -812,17 +853,20 @@ function renderItv(){
       `<option value="${k}"${it.kind===k?' selected':''}>${TPL_LABEL[k]}</option>`).join('');
     const days = [['all','每天'],['workday','工作日'],['weekend','周末']].map(([v,n]) =>
       `<option value="${v}"${(it.days||'all')===v?' selected':''}>${n}</option>`).join('');
+    div.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px;'
+      + 'border:1px solid var(--line);border-radius:10px;margin-bottom:8px';
     div.innerHTML = `
-      <select class="i-kind">${opts}</select>
-      <span class="hint" style="margin:0 4px">每</span>
-      <input class="i-every" type="number" min="5" step="5" value="${it.every_min||60}" style="width:76px">
-      <span class="hint" style="margin:0 4px">分钟</span>
-      <input class="i-start" type="time" value="${it.start||'07:00'}">
-      <span class="hint">～</span>
-      <input class="i-end" type="time" value="${it.end||'23:00'}">
-      <select class="i-days">${days}</select>
-      <label style="margin-left:6px"><input class="i-on" type="checkbox"${it.enabled!==false?' checked':''}> 启用</label>
-      <button onclick="this.parentNode.remove(); saveItv()">删</button>`;
+      <select class="i-kind" style="width:150px">${opts}</select>
+      <span class="hint" style="margin:0">每</span>
+      <input class="i-every" type="number" min="5" step="5" value="${it.every_min||60}" style="width:70px">
+      <span class="hint" style="margin:0">分钟</span>
+      <input class="i-start" type="time" value="${it.start||'07:00'}" style="width:112px">
+      <span class="hint" style="margin:0">～</span>
+      <input class="i-end" type="time" value="${it.end||'23:00'}" style="width:112px">
+      <select class="i-days" style="width:110px">${days}</select>
+      <label style="display:flex;align-items:center;gap:4px;margin:0">
+        <input class="i-on" type="checkbox"${it.enabled!==false?' checked':''}> 启用</label>
+      <button style="margin-left:auto;padding:2px 10px" onclick="this.parentNode.remove(); saveItv()">删</button>`;
     box.appendChild(div);
   });
 }

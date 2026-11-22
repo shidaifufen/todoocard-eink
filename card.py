@@ -1759,6 +1759,17 @@ class CardService:
                         None, self._send_blocking, image, wait_sec)
                 # 两个平台的发送器返回字段可能不完全一样，这里统一按"缺了也不炸"处理
                 ok = bool(res.get("ok"))
+                if ok:
+                    try:
+                        import shutil as _sh
+                        _hd = self.base / "history"
+                        _hd.mkdir(exist_ok=True)
+                        _sh.copy2(image, _hd / f"{int(time.time())}_{kind}.png")
+                        _files = sorted(_hd.glob("*.png"))
+                        for _f in _files[:-60]:
+                            _f.unlink(missing_ok=True)
+                    except Exception:
+                        pass
                 # 照片轮播：确认成功后推进牌堆并解钉，下一次计划就是另一张；
                 # 失败则保留 pin，重试仍然发同一张（避免"没发出去却换了图"）
                 if ok and kind == "photo":
@@ -2281,6 +2292,20 @@ def make_routes():
         lines = [ln.strip(" 　-·") for ln in text.splitlines() if ln.strip()][:5]
         return web.json_response({"ok": True, "lines": lines})
 
+    async def _hist_img(request):
+        try:
+            ts = request.query.get("ts", "")
+            kind = request.query.get("kind", "")
+            f = (current().base / "history" / f"{ts}_{kind}.png")
+            if f.exists():
+                return web.FileResponse(f)
+            # 兜底：按时间戳前缀找
+            for g in sorted((current().base / "history").glob(f"{ts}_*.png")):
+                return web.FileResponse(g)
+        except Exception:
+            pass
+        raise web.HTTPNotFound()
+
     async def _timeline(request):
         hours = int(request.query.get("hours", "48") or 48)
         return web.json_response(current().timeline(hours))
@@ -2505,6 +2530,7 @@ def make_routes():
         ("GET", "/api/card", _status),
         ("POST", "/api/card/ai/write", _ai_write),
         ("GET", "/api/card/timeline", _timeline),
+        ("GET", "/api/card/history/img", _hist_img),
         ("POST", "/api/card/fav", _fav),
         ("GET", "/api/card/templates", _templates),
         ("GET", "/api/card/quote", _quote),
