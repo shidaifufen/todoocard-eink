@@ -194,13 +194,13 @@ class BleClient(private val ctx: Context) {
         // 4) 数据阶段：窗口流控（与 sender.py 一致：设备回执是"进度"，不是逐块确认）
         var acked = -1
         var lastAckAt = System.currentTimeMillis()
-        val window = 16
+        val window = 64   // 设备每 32 块才回一次 checkpoint，窗口要放宽
         while (sent < nBlocks) {
             // 领先设备太多就等回执
             while (sent - acked > window) {
                 val v = withTimeoutOrNull(200) { acks.receive() }
                 if (v != null && v >= 0) { acked = v; lastAckAt = System.currentTimeMillis() }
-                if (System.currentTimeMillis() - lastAckAt > 15000) {
+                if (System.currentTimeMillis() - lastAckAt > 30000) {
                     onLog("回执停滞：已发 $sent/$nBlocks，设备回到第 ${acked + 1} 块")
                     Log.w("BleClient", "stall sent=$sent acked=$acked")
                     postWait(c, false, onLog)
@@ -220,7 +220,7 @@ class BleClient(private val ctx: Context) {
                 write(d, pkt)
                 withTimeoutOrNull(500) { writeOk.receive() }
             } else {
-                delay(6)
+                delay(4)
             }
             sent++
             onProgress(sent * 100 / nBlocks)
