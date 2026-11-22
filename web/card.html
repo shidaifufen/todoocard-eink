@@ -825,9 +825,9 @@ function renderSched(list){
     box.appendChild(div);
   });
 }
-let TL_OFFSET = 0;
+let TL_OFFSET = -24;   // 默认让"现在"落在时间轴中间
 function shiftTimeline(delta){
-  TL_OFFSET = delta === 0 ? 0 : TL_OFFSET + delta;
+  TL_OFFSET = delta === 0 ? -24 : TL_OFFSET + delta;
   loadTimeline();
 }
 async function loadTimeline(){

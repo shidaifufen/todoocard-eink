@@ -1875,10 +1875,13 @@ class CardService:
         except Exception:
             return []
 
-    def timeline(self, hours: int = 48, offset: int = 0) -> dict:
-        """以 offset 小时为起点的 hours 小时窗口：计划 + 历史。"""
-        now = datetime.now() + timedelta(hours=offset)
+    def timeline(self, hours: int = 48, offset: int = -24) -> dict:
+        """窗口 [now+offset, now+offset+hours]：未来计划 + 落在窗口内的历史。"""
+        real = datetime.now()
+        start = real + timedelta(hours=offset)
+        end = start + timedelta(hours=hours)
         out = []
+
         for item in (self.cfg.get("schedule") or []):
             if not item.get("enabled", True):
                 continue
@@ -1886,36 +1889,43 @@ class CardService:
                 hh, mm = (int(x) for x in item["time"].split(":"))
             except Exception:
                 continue
-            for d in range(0, max(1, hours // 24) + 1):
-                t = (now + timedelta(days=d)).replace(hour=hh, minute=mm, second=0, microsecond=0)
-                if t >= now and (t - now).total_seconds() <= hours * 3600:
+            d = real.date()
+            while True:
+                t = datetime.combine(d, datetime.min.time()).replace(hour=hh, minute=mm)
+                if t > end:
+                    break
+                if t >= real and t >= start:
                     out.append({"ts": int(t.timestamp()), "kind": item["kind"],
                                 "label": TEMPLATES.get(item["kind"], item["kind"]),
                                 "source": "每日计划"})
+                d = d + timedelta(days=1)
+                if d > end.date():
+                    break
+
         for job in (self.cfg.get("intervals") or []):
             if not job.get("enabled", True):
                 continue
             every = max(5, int(job.get("every_min") or 60))
-            start = str(job.get("start") or "07:00")
-            end = str(job.get("end") or "23:00")
-            sh, sm = (int(x) for x in start.split(":"))
-            eh, em = (int(x) for x in end.split(":"))
-            for d in range(0, max(1, hours // 24) + 1):
-                day = now + timedelta(days=d)
-                t = day.replace(hour=sh, minute=sm, second=0, microsecond=0)
-                stop = day.replace(hour=eh, minute=em, second=0, microsecond=0)
+            sh, sm = (int(x) for x in str(job.get("start") or "07:00").split(":"))
+            eh, em = (int(x) for x in str(job.get("end") or "23:00").split(":"))
+            d = start.date()
+            while d <= end.date():
+                t = datetime.combine(d, datetime.min.time()).replace(hour=sh, minute=sm)
+                stop = datetime.combine(d, datetime.min.time()).replace(hour=eh, minute=em)
                 while t <= stop:
-                    if t >= now and (t - now).total_seconds() <= hours * 3600:
+                    if t >= real and start <= t <= end:
                         out.append({"ts": int(t.timestamp()), "kind": job.get("kind", "photo"),
                                     "label": TEMPLATES.get(job.get("kind", "photo"), job.get("kind")),
                                     "source": f"每 {every} 分钟"})
                     t = t + timedelta(minutes=every)
+                d = d + timedelta(days=1)
+
         out.sort(key=lambda x: x["ts"])
-        hist = list(getattr(self, "history", []) or [])[:40]
-        start_ts = int((now - timedelta(minutes=1)).timestamp())
-        end_ts = int((now + timedelta(hours=hours)).timestamp())
+        hist = [h for h in (getattr(self, "history", []) or [])
+                if start.timestamp() <= h.get("ts", 0) <= end.timestamp()][:100]
         return {"ok": True, "planned": out, "history": hist,
-                "window": {"start": start_ts, "end": end_ts}}
+                "window": {"start": int(start.timestamp()), "end": int(end.timestamp()),
+                           "now": int(real.timestamp())}}
 
     # ── 调度 ──
     async def _loop(self):
@@ -2364,7 +2374,7 @@ def make_routes():
 
     async def _timeline(request):
         hours = int(request.query.get("hours", "48") or 48)
-        offset = int(request.query.get("offset", "0") or 0)
+        offset = int(request.query.get("offset", "-24") or -24)
         return web.json_response(current().timeline(hours, offset))
 
 
