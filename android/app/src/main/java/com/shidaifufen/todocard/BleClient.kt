@@ -71,6 +71,17 @@ class BleClient(private val ctx: Context) {
 
     @SuppressLint("MissingPermission")
     suspend fun connect(result: ScanResult): Boolean {
+        repeat(2) { attempt ->
+            if (tryConnect(result)) return true
+            if (attempt == 1) return false
+            kotlinx.coroutines.delay(1200)
+            close()
+        }
+        return false
+    }
+
+    @SuppressLint("MissingPermission")
+    private suspend fun tryConnect(result: ScanResult): Boolean {
         ready = CompletableDeferred()
         gatt = result.device.connectGatt(ctx, false, object : BluetoothGattCallback() {
             override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
@@ -86,7 +97,10 @@ class BleClient(private val ctx: Context) {
                 val desc = notify.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"))
                 desc?.value = android.bluetooth.BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
                 desc?.let { g.writeDescriptor(it) }
-                if (!ready.isCompleted) ready.complete(ctrl != null && data != null)
+                if (desc == null && !ready.isCompleted) ready.complete(ctrl != null && data != null)
+            }
+            override fun onDescriptorWrite(g: BluetoothGatt, d: android.bluetooth.BluetoothGattDescriptor, status: Int) {
+                if (!ready.isCompleted) ready.complete(status == android.bluetooth.BluetoothGatt.GATT_SUCCESS && ctrl != null && data != null)
             }
             override fun onCharacteristicChanged(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray) {
                 if (value.size >= 3 && value[0].toInt() == 0x01) {

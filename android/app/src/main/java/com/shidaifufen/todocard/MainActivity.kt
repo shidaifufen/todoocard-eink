@@ -52,9 +52,24 @@ private fun Screen() {
         }
     }
 
+    val scanNow: () -> Unit = {
+        scope.launch {
+            status = "扫描中…（长按卡片背面按钮可唤醒）"
+            val ble = BleClient(ctx)
+            val r = withContext(Dispatchers.IO) { ble.scan(15_000) }
+            device = r
+            status = if (r != null) "找到：${r.device.name ?: r.device.address}（RSSI ${r.rssi}）"
+                     else "没扫到卡片：确认已唤醒、没被手机 App 占用"
+        }
+    }
+    var pendingScan by remember { mutableStateOf(false) }
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { }
+    ) { granted ->
+        val ok = granted.values.all { it }
+        if (!ok) status = "蓝牙权限被拒绝，无法扫描"
+        else if (pendingScan) { pendingScan = false; scanNow() }
+    }
 
     Column(
         Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
@@ -76,14 +91,8 @@ private fun Screen() {
             val perms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
                 arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
             else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+            pendingScan = true
             permLauncher.launch(perms)
-            scope.launch {
-                status = "扫描中…"
-                val ble = BleClient(ctx)
-                val r = withContext(Dispatchers.IO) { ble.scan() }
-                device = r
-                status = if (r != null) "找到：${r.device.name ?: r.device.address}" else "没扫到卡片"
-            }
         }) { Text("扫描卡片") }
 
         Button(enabled = bitmap != null && device != null, onClick = {
