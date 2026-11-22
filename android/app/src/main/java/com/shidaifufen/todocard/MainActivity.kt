@@ -111,7 +111,7 @@ private fun App() {
             try {
                 status = "打包中…"
                 val payload = withContext(Dispatchers.Default) {
-                    QuickLz.buildPayload(Payload.quantize(Payload.cover(bmp)))
+                    QuickLz.buildPayload(Payload.build(bmp).controller)
                 }
                 val d = device ?: run { status = "先扫描并选中卡片"; return@launch }
                 status = "连接中…"
