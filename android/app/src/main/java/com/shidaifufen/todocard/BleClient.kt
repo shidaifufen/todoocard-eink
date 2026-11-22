@@ -43,6 +43,7 @@ class BleClient(private val ctx: Context) {
     private var ctrl: BluetoothGattCharacteristic? = null
     private var data: BluetoothGattCharacteristic? = null
     private val acks = Channel<Int>(Channel.UNLIMITED)
+    private val writeOk = Channel<Unit>(Channel.CONFLATED)
     private var ready = CompletableDeferred<Boolean>()
     private var blockSize = 0
     private var lastAckAt = 0L
@@ -110,6 +111,9 @@ class BleClient(private val ctx: Context) {
                 desc?.value = android.bluetooth.BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
                 desc?.let { g.writeDescriptor(it) }
                 if (desc == null && !ready.isCompleted) ready.complete(ctrl != null && data != null)
+            }
+            override fun onCharacteristicWrite(g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) {
+                writeOk.trySend(Unit)
             }
             override fun onDescriptorWrite(g: BluetoothGatt, d: android.bluetooth.BluetoothGattDescriptor, status: Int) {
                 if (!ready.isCompleted) ready.complete(status == android.bluetooth.BluetoothGatt.GATT_SUCCESS && ctrl != null && data != null)
@@ -188,6 +192,7 @@ class BleClient(private val ctx: Context) {
             pkt[3] = (idx shr 24 and 0xFF).toByte()
             body.copyInto(pkt, 4, idx * bs, idx * bs + bs)
             write(d, pkt)
+            withTimeoutOrNull(1500) { writeOk.receive() }
             sent++
             if (sent % 16 == 0) {
                 withTimeoutOrNull(3000) {
@@ -202,7 +207,7 @@ class BleClient(private val ctx: Context) {
         }
 
         // 5) 等收尾确认 05 08
-        val refreshed = withTimeoutOrNull(20_000) {
+        val refreshed = withTimeoutOrNull(45_000) {
             while (true) {
                 val v = acks.receive()
                 if (v < 0) return@withTimeoutOrNull true
