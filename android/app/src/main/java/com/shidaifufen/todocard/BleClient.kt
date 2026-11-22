@@ -187,7 +187,6 @@ class BleClient(private val ctx: Context) {
         var acked = -1
         var lastAckAt = System.currentTimeMillis()
         val window = 16
-        var sent = 0
         while (sent < nBlocks) {
             // 领先设备太多就等回执
             while (sent - acked > window) {
@@ -196,7 +195,8 @@ class BleClient(private val ctx: Context) {
                 if (System.currentTimeMillis() - lastAckAt > 8000) {
                     onLog("回执停滞：已发 $sent/$nBlocks，设备回到第 ${acked + 1} 块")
                     Log.w("BleClient", "stall sent=$sent acked=$acked")
-                    return postWait(c, refreshed = false, onLog)
+                    postWait(c, false, onLog)
+                    return
                 }
             }
             val pkt = ByteArray(4 + bs)
