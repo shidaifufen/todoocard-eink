@@ -375,6 +375,17 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div id="pickMask" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);
+     z-index:70;align-items:center;justify-content:center;padding:24px">
+  <div style="background:#15171c;border:1px solid var(--line);border-radius:14px;padding:16px;
+       width:min(900px,94vw);max-height:88vh;overflow:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <b id="pickTitle">指定这张计划发送的照片</b>
+      <button onclick="closePicker()">取消</button>
+    </div>
+    <div id="pickGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px"></div>
+  </div>
+</div>
 <div id="imgView" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);
      z-index:80;align-items:center;justify-content:center;padding:24px" onclick="closeImgView()">
   <img id="imgViewImg" style="max-width:92vw;max-height:92vh;border-radius:10px">
@@ -914,15 +925,21 @@ async function loadTimeline(){
     const el = document.createElement('div');
     el.style.cssText = `position:absolute;left:${left}%;top:12px;width:${w}%;height:28px;
       background:${conflicts.some(c => c.ts === p.ts && p.source === '每日计划') ? '#d9534fdd' : '#4f7cffcc'};border-radius:3px;cursor:pointer`;
+    const _assigned = (STATE.plan_photo || {})[String(p.ts)];
     const _futureImg = (p.kind === 'photo')
-      ? null                       // 未来轮播到时才抽，不拿当前这张冒充
+      ? (_assigned ? `${API}/api/card/photo?path=${encodeURIComponent(_assigned)}` : null)
       : `${API}/api/card/preview?kind=${p.kind}&fresh=0&t=${p.ts}`;
-    const _extra = (p.kind === 'photo') ? ' · 届时轮播下一张' : '';
+    const _extra = (p.kind === 'photo')
+      ? (_assigned ? ' · 已指定照片（点击可换）' : ' · 届时轮播下一张（点击可指定）')
+      : '';
     el.onmouseenter = (e) => showTip(e,
       `${new Date(p.ts*1000).toLocaleString('zh-CN')} · ${p.label} · ${p.source}${_extra} · 预计 ${Math.round(avg)}s`,
       _futureImg, p.kind);
     el.onmouseleave = hideTipSoon;
-    el.onclick = () => toast(`${p.label} · ${new Date(p.ts*1000).toLocaleString('zh-CN')}`);
+    el.onclick = () => {
+      if (p.kind === 'photo') openPicker(p.ts);
+      else toast(`${p.label} · ${new Date(p.ts*1000).toLocaleString('zh-CN')}`);
+    };
     box.appendChild(el);
   });
 
@@ -1288,6 +1305,27 @@ async function unfav(path){
   const d = await postJSON('/api/card/fav', {action: 'remove', path});
   toast(d.ok ? '已取消收藏' : '操作失败');
   renderFav();
+}
+
+let PICK_TS = null;
+async function openPicker(ts){
+  PICK_TS = ts;
+  const d = await (await fetch(API + '/api/card/photos?limit=48')).json();
+  const box = $('pickGrid');
+  const items = d.photos || [];
+  box.innerHTML = items.length ? items.map(p => `
+    <img src="${API}/api/card/photo?path=${encodeURIComponent(p)}"
+         onclick="choosePhoto('${p.replace(/'/g, "\\'")}')"
+         style="width:100%;height:150px;object-fit:cover;border-radius:8px;cursor:pointer;border:1px solid var(--line)">`
+  ).join('') : '<div class="hint">照片库是空的，先在「照片与壁纸」里添加文件夹</div>';
+  $('pickMask').style.display = 'flex';
+}
+function closePicker(){ $('pickMask').style.display = 'none'; }
+async function choosePhoto(path){
+  const d = await postJSON('/api/card/plan_photo', {ts: PICK_TS, path});
+  toast(d.ok ? '已指定这张' : (d.error || '指定失败'));
+  closePicker();
+  loadTimeline();
 }
 
 function openImgView(src){ $('imgViewImg').src = src; $('imgView').style.display = 'flex'; }

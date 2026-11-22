@@ -143,6 +143,7 @@ class CardService:
             "auto_fit": False,          # 自动排版：按"排满且不重叠"自动选字号/行距
             "tpl_scale": {},            # 单模板字号系数 {kind: 1.0}
             "tpl_line": {},             # 单模板行距系数 {kind: 1.0}
+            "plan_photo": {},           # {计划时间戳: 指定照片路径}
             "history_keep": 100,       # 历史保留条数（同时决定缩略图数量）
             "intervals": [],            # 间隔任务：每 N 分钟推送一次（可限工作日/周末/时段）
             "fav": [],                  # 收藏的照片路径
@@ -187,7 +188,7 @@ class CardService:
                     "todos", "weather", "cooldown_days", "photo_mode", "photo_overlay",
                     "bing_enabled", "ai", "ai_prompt", "button_photo", "countdowns",
                     "recursive", "scale", "custom", "fill", "theme", "poem_note", "poem_full",
-                    "poem_ai", "standby", "line_gap", "auto_fit", "tpl_scale", "tpl_line", "photo_fields", "intervals", "fav", "history_keep"):
+                    "poem_ai", "standby", "line_gap", "auto_fit", "tpl_scale", "tpl_line", "photo_fields", "intervals", "fav", "history_keep", "plan_photo"):
             if key in patch:
                 cur[key] = patch[key]
         if "schedule" in patch:
@@ -1746,11 +1747,20 @@ class CardService:
 
     # ── 对外动作 ──
     async def send(self, kind: str = "summary", requeue: bool = True,
-                   wait_sec: float | None = None) -> dict:
+                   wait_sec: float | None = None, plan_ts: int | None = None) -> dict:
         # 发送可能超过 30s 的 HTTP 请求上限（编译/传输/落盘确认），所以 API 侧是
         # "点了就返回、进度走轮询"，这里用 busy 标志挡住重复点击。
         async with self._lock:
             self._busy = True
+            # 时间轴上给这次计划指定的照片：优先用它
+            if kind == "photo" and plan_ts:
+                _plan = self.cfg.get("plan_photo") or {}
+                _pick = _plan.get(str(plan_ts))
+                if _pick and Path(_pick).exists():
+                    self._photo_pin = _pick
+                    _plan.pop(str(plan_ts), None)
+                    self.cfg["plan_photo"] = _plan
+                    self._save_cfg()
             self._emit()
             try:
                 image, label = await asyncio.get_running_loop().run_in_executor(
@@ -1949,7 +1959,8 @@ class CardService:
                                 continue
                             if _job.get("kind") == "photo" and not self._scan_photos():
                                 continue
-                            res = await self.send(_job.get("kind", "photo"), requeue=True, wait_sec=45)
+                            res = await self.send(_job.get("kind", "photo"), requeue=True,
+                                                  wait_sec=45, plan_ts=_ts)
                             if res.get("ok"):
                                 runs[_key] = int(now.timestamp())
                                 self._save_cfg()
@@ -1988,7 +1999,8 @@ class CardService:
 
                         # 单次等待压到 45 秒：调度循环还在跑，失败交给重试队列，
                         # 不会因为一张卡连不上把后面几个计划全堵死。
-                        res = await self.send(item["kind"], requeue=True, wait_sec=45)
+                        res = await self.send(item["kind"], requeue=True, wait_sec=45,
+                                              plan_ts=int(due.timestamp()))
                         attempts = int(rt.get("n", 0)) + 1
                         if res.get("ok"):
                             runs[key] = int(now.timestamp())
@@ -2084,6 +2096,7 @@ class CardService:
             "tpl_line": dict(self.cfg.get("tpl_line") or {}),
             "photo_fields": dict(self.cfg.get("photo_fields") or {}),
             "history_keep": int(self.cfg.get("history_keep", 100) or 100),
+            "plan_photo": dict(self.cfg.get("plan_photo") or {}),
             "intervals": list(self.cfg.get("intervals") or []),
             "fav": list(self.cfg.get("fav") or []),
             "custom": self.cfg.get("custom") or {},
@@ -2354,6 +2367,37 @@ def make_routes():
         offset = int(request.query.get("offset", "0") or 0)
         return web.json_response(current().timeline(hours, offset))
 
+
+    async def _photos_pick(request):
+        svc = current()
+        limit = int(request.query.get("limit", "48") or 48)
+        try:
+            photos = svc._scan_photos()
+        except Exception:
+            photos = []
+        random.shuffle(photos)
+        return web.json_response({"ok": True, "photos": photos[:limit]})
+
+    async def _plan_photo(request):
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        svc = current()
+        ts = str((body or {}).get("ts") or "")
+        path = (body or {}).get("path") or ""
+        if not ts:
+            return web.json_response({"ok": False, "error": "缺少时间戳"}, status=400)
+        plan = dict(svc.cfg.get("plan_photo") or {})
+        if path:
+            if not Path(path).is_file():
+                return web.json_response({"ok": False, "error": "照片不存在"}, status=400)
+            plan[ts] = path
+        else:
+            plan.pop(ts, None)
+        svc.cfg["plan_photo"] = plan
+        svc._save_cfg()
+        return web.json_response({"ok": True, "plan": plan})
 
     async def _cleanup(request):
         svc = current()
@@ -2672,6 +2716,8 @@ def make_routes():
         ("POST", "/api/card/fav", _fav),
         ("GET", "/api/card/fav/list", _fav_list),
         ("POST", "/api/card/schedule/cleanup", _cleanup),
+        ("GET", "/api/card/photos", _photos_pick),
+        ("POST", "/api/card/plan_photo", _plan_photo),
         ("GET", "/api/card/photo", _photo_thumb),
         ("POST", "/api/card/fav/push", _fav_push),
         ("GET", "/api/card/templates", _templates),
