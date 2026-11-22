@@ -58,7 +58,7 @@ object Render {
         drawText(title, M, 74f, paint(40f, BLACK, bold = true))
         val p = paint(24f, BLACK)
         drawText(right, W - M - p.measureText(right), 66f, p)
-        drawRect(M, 96f, W - M, 99f, RED)
+        fill(M, 96f, W - M, 99f, RED)
     }
 
     private fun Canvas.foot(tag: String = "土豆片") {
@@ -66,7 +66,11 @@ object Render {
         drawText(tag, W - M - p.measureText(tag), H - 40f, p)
     }
 
-    private fun Canvas.rule(y: Float) = drawRect(M, y, W - M, y + 2f, BLACK)
+    private fun Canvas.fill(x1: Float, y1: Float, x2: Float, y2: Float, color: Int) {
+        drawRect(x1, y1, x2, y2, Paint().apply { this.color = color; isAntiAlias = false; style = Paint.Style.FILL })
+    }
+
+    private fun Canvas.rule(y: Float) = fill(M, y, W - M, y + 2f, BLACK)
 
     fun render(card: Card): Bitmap {
         val bmp = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888)
@@ -94,7 +98,7 @@ object Render {
             M, 260f, paint(150f, RED, bold = true))
         drawText(String.format(Locale.CHINA, "%d月", cal.get(Calendar.MONTH) + 1),
             M + 4f, 300f, paint(26f, BLACK, bold = true))
-        drawRect(M, 320f, W - M, 328f, YELLOW)
+        fill(M, 320f, W - M, 328f, YELLOW)
 
         drawText("今日待办", M, 390f, paint(30f, BLACK, bold = true))
         val first = card.todos.firstOrNull() ?: "今天还没有安排"
@@ -109,12 +113,12 @@ object Render {
         drawText("本月", M, 528f, paint(26f, BLACK, bold = true))
         val p = paint(26f, BLACK)
         drawText("$pct%", W - M - p.measureText("$pct%"), 528f, p)
-        drawRect(M, 540f, W - M, 556f, BLACK)
-        drawRect(M + 3f, 543f, M + 3f + (W - 2 * M - 6f) * pct / 100f, 553f, GREEN)
+        fill(M, 540f, W - M, 556f, BLACK)
+        fill(M + 3f, 543f, M + 3f + (W - 2 * M - 6f) * pct / 100f, 553f, GREEN)
 
         rule(600f)
         val qp = paint(24f)
-        val lines = wrap(c, "“${card.quote}”", qp, W - 2 * M)
+        val lines = wrap(this, "“${card.quote}”", qp, W - 2 * M)
         var y = 640f
         lines.take(2).forEach { drawText(it, M, y, qp); y += 34f }
         foot(card.quoteBy)
@@ -128,14 +132,14 @@ object Render {
         val p = paint(40f, BLACK, bold = true)
         val lines = wrap(this, card.quote, p, W - 2 * M - 40f)
         var y = 280f
-        drawRect(M + 6f, y - 46f, M + 12f, y + 34f * lines.size - 10f, RED)
+        fill(M + 6f, y - 46f, M + 12f, y + 34f * lines.size - 10f, RED)
         lines.take(6).forEach { drawText(it, M + 40f, y, p); y += 58f }
         drawText("— ${card.quoteBy}", M + 40f, y + 10f, paint(22f))
         foot()
     }
 
     private fun Canvas.drawTodo(card: Card) {
-        drawRect(0f, 0f, W.toFloat(), 150f, YELLOW)
+        fill(0f, 0f, W.toFloat(), 150f, YELLOW)
         drawText("今日待办", M, 74f, paint(40f, BLACK, bold = true))
         drawText(String.format(Locale.CHINA, "%d/%d",
             Calendar.getInstance().get(Calendar.MONTH) + 1,
@@ -146,8 +150,8 @@ object Render {
         val line = paint(24f)
         repeat(6) { i ->
             val text = card.todos.getOrNull(i) ?: ""
-            drawRect(M, y - 18f, M + 18f, y, BLACK)
-            drawRect(M + 30f, y - 3f, W - M, y - 1f, BLACK)
+            fill(M, y - 18f, M + 18f, y, BLACK)
+            fill(M + 30f, y - 3f, W - M, y - 1f, BLACK)
             if (text.isNotEmpty()) drawText(text, M + 32f, y - 6f, line)
             y += 74f
         }
@@ -177,8 +181,9 @@ object Render {
         var y = 410f
         rows.forEach { (label, v) ->
             drawText(label, M, y, paint(22f, BLACK, bold = true))
-            drawRect(M + 90f, y - 16f, W - M, y - 4f, BLACK)
-            drawRect(M + 92f, y - 14f, M + 92f + (W - 2 * M - 94f) * (v.coerceIn(0, 100)) / 100f, y - 6f,
+            fill(M + 90f, y - 16f, W - M, y - 4f, BLACK)
+            fill(M + 92f, y - 14f,
+                M + 92f + (W - 2 * M - 94f) * (v.coerceIn(0, 100)) / 100f, y - 6f,
                 if (label == "今年") RED else GREEN)
             val vp = paint(20f)
             drawText("$v%", W - M - vp.measureText("$v%"), y, vp)

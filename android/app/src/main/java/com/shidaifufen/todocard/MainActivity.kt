@@ -136,9 +136,9 @@ private fun App() {
     Scaffold(
         bottomBar = {
             NavigationBar {
-                NavigationBarItem(tab == 0, { tab = 0 }, { Text("卡片") }, icon = { Text("▦") })
-                NavigationBarItem(tab == 1, { tab = 1 }, { Text("相册") }, icon = { Text("▤") })
-                NavigationBarItem(tab == 2, { tab = 2 }, { Text("设置") }, icon = { Text("⚙") })
+                NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, icon = { Text("▦") }, label = { Text("卡片") })
+                NavigationBarItem(selected = tab == 1, onClick = { tab = 1 }, icon = { Text("▤") }, label = { Text("相册") })
+                NavigationBarItem(selected = tab == 2, onClick = { tab = 2 }, icon = { Text("⚙") }, label = { Text("设置") })
             }
         }
     ) { pad ->
