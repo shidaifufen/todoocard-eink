@@ -183,56 +183,60 @@ class BleClient(private val ctx: Context) {
         onLog("共 $nBlocks 块")
         Log.i("BleClient", "cmd02 len=${body.size} cmd03 start nBlocks=$nBlocks")
 
-        // 4) 数据阶段：逐块确认（可靠优先）。设备回执里若要求重发某块，就补发。
-        val ackOf = IntArray(1) { -1 }
-        var idx = 0
-        while (idx < nBlocks) {
+        // 4) 数据阶段：窗口流控（与 sender.py 一致：设备回执是"进度"，不是逐块确认）
+        var acked = -1
+        var lastAckAt = System.currentTimeMillis()
+        val window = 16
+        var sent = 0
+        while (sent < nBlocks) {
+            // 领先设备太多就等回执
+            while (sent - acked > window) {
+                val v = withTimeoutOrNull(200) { acks.receive() }
+                if (v != null && v >= 0) { acked = v; lastAckAt = System.currentTimeMillis() }
+                if (System.currentTimeMillis() - lastAckAt > 8000) {
+                    onLog("回执停滞：已发 $sent/$nBlocks，设备回到第 ${acked + 1} 块")
+                    Log.w("BleClient", "stall sent=$sent acked=$acked")
+                    return postWait(c, refreshed = false, onLog)
+                }
+            }
             val pkt = ByteArray(4 + bs)
-            pkt[0] = (idx and 0xFF).toByte()
-            pkt[1] = (idx shr 8 and 0xFF).toByte()
-            pkt[2] = (idx shr 16 and 0xFF).toByte()
-            pkt[3] = (idx shr 24 and 0xFF).toByte()
-            body.copyInto(pkt, 4, idx * bs, idx * bs + bs)
-
-            var ok = false
-            var attempt = 0
-            while (!ok && attempt < 3) {
-                attempt++
-                write(d, pkt)
-                withTimeoutOrNull(1500) { writeOk.receive() }
-                val got = withTimeoutOrNull(2500) {
-                    while (true) {
-                        val v = acks.receive()
-                        if (v >= 0) return@withTimeoutOrNull v
-                    }
-                    @Suppress("UNREACHABLE_CODE") -1
-                }
-                if (got != null) {
-                    ackOf[0] = got
-                    if (got >= idx) ok = true
-                }
-            }
-            if (!ok) {
-                onLog("第 $idx 块没有回执，停止（已发 $sent/$nBlocks）")
-                Log.w("BleClient", "no ack for block $idx, abort")
-                break
-            }
-            idx++
-            sent = idx
+            pkt[0] = (sent and 0xFF).toByte()
+            pkt[1] = (sent shr 8 and 0xFF).toByte()
+            pkt[2] = (sent shr 16 and 0xFF).toByte()
+            pkt[3] = (sent shr 24 and 0xFF).toByte()
+            body.copyInto(pkt, 4, sent * bs, sent * bs + bs)
+            write(d, pkt)
+            withTimeoutOrNull(300) { writeOk.receive() }
+            sent++
             onProgress(sent * 100 / nBlocks)
-            if (sent % 32 == 0) Log.i("BleClient", "sent=$sent/$nBlocks acked=${ackOf[0]}")
+            if (sent % 32 == 0) Log.i("BleClient", "sent=$sent/$nBlocks acked=$acked")
+            // 顺手把已到的回执读掉
+            while (true) {
+                val v = try { acks.tryReceive().getOrNull() } catch (e: Exception) { null }
+                if (v == null) break
+                if (v >= 0) { acked = v; lastAckAt = System.currentTimeMillis() }
+            }
         }
+        Log.i("BleClient", "all blocks written sent=$sent acked=$acked, waiting refresh")
 
         // 5) 等收尾确认 05 08
-        val refreshed = withTimeoutOrNull(45_000) {
+        val refreshed = postWait(c, true, onLog)
+        Log.i("BleClient", "send done nBlocks=$nBlocks sent=$sent lastAck=$acked refreshed=$refreshed")
+    }
+
+
+    /** 数据写完后等显影确认 */
+    private suspend fun postWait(c: BluetoothGattCharacteristic, refreshed: Boolean, onLog: (String) -> Unit): Boolean {
+        val got = withTimeoutOrNull(60_000) {
             while (true) {
                 val v = acks.receive()
                 if (v < 0) return@withTimeoutOrNull true
             }
             @Suppress("UNREACHABLE_CODE") false
         } ?: false
-        onLog(if (refreshed) "已完成并收到显影确认" else "数据写完，但没等到显影确认")
-        Log.i("BleClient", "send done nBlocks=$nBlocks sent=$sent lastAck=${ackOf[0]} refreshed=$refreshed")
+        onLog(if (got) "已完成并收到显影确认" else "数据写完，但没等到显影确认")
+        Log.i("BleClient", "postWait refreshed=$got")
+        return got
     }
 
     @SuppressLint("MissingPermission")
