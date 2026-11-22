@@ -143,6 +143,7 @@ class CardService:
             "auto_fit": False,          # 自动排版：按"排满且不重叠"自动选字号/行距
             "tpl_scale": {},            # 单模板字号系数 {kind: 1.0}
             "tpl_line": {},             # 单模板行距系数 {kind: 1.0}
+            "history_keep": 100,       # 历史保留条数（同时决定缩略图数量）
             "intervals": [],            # 间隔任务：每 N 分钟推送一次（可限工作日/周末/时段）
             "fav": [],                  # 收藏的照片路径
             "photo_fields": {"date": True, "time": True, "camera": True,
@@ -186,7 +187,7 @@ class CardService:
                     "todos", "weather", "cooldown_days", "photo_mode", "photo_overlay",
                     "bing_enabled", "ai", "ai_prompt", "button_photo", "countdowns",
                     "recursive", "scale", "custom", "fill", "theme", "poem_note", "poem_full",
-                    "poem_ai", "standby", "line_gap", "auto_fit", "tpl_scale", "tpl_line", "photo_fields", "intervals", "fav"):
+                    "poem_ai", "standby", "line_gap", "auto_fit", "tpl_scale", "tpl_line", "photo_fields", "intervals", "fav", "history_keep"):
             if key in patch:
                 cur[key] = patch[key]
         if "schedule" in patch:
@@ -1759,17 +1760,24 @@ class CardService:
                         None, self._send_blocking, image, wait_sec)
                 # 两个平台的发送器返回字段可能不完全一样，这里统一按"缺了也不炸"处理
                 ok = bool(res.get("ok"))
+                _img_name = ""
                 if ok:
                     try:
+                        import hashlib as _hash
                         import shutil as _sh
                         _hd = self.base / "history"
                         _hd.mkdir(exist_ok=True)
-                        _sh.copy2(image, _hd / f"{int(time.time())}_{kind}.png")
-                        _files = sorted(_hd.glob("*.png"))
-                        for _f in _files[:-60]:
+                        _md5 = _hash.md5(Path(image).read_bytes()).hexdigest()[:16]
+                        _img_name = f"{_md5}_{kind}.png"
+                        _dst = _hd / _img_name
+                        if not _dst.exists():
+                            _sh.copy2(image, _dst)
+                        _keep = max(10, int(self.cfg.get("history_keep", 100) or 100))
+                        _files = sorted(_hd.glob("*.png"), key=lambda f: f.stat().st_mtime)
+                        for _f in _files[:-_keep]:
                             _f.unlink(missing_ok=True)
                     except Exception:
-                        pass
+                        _img_name = ""
                 # 照片轮播：确认成功后推进牌堆并解钉，下一次计划就是另一张；
                 # 失败则保留 pin，重试仍然发同一张（避免"没发出去却换了图"）
                 if ok and kind == "photo":
@@ -1789,7 +1797,7 @@ class CardService:
                     if isinstance(_rssi, int) and _rssi < -75:
                         msg += f"（信号 {_rssi} dBm 偏弱，把卡片拿近或插上充电再试）"
                     _LOGGER.warning("土豆片发送失败 kind=%s 原始输出:\n%s", kind, out_text[:1200])
-                entry = {"ts": int(time.time()), "kind": kind, "file": label,
+                entry = {"ts": int(time.time()), "kind": kind, "file": label, "img": _img_name,
                          "ok": ok, "seconds": res.get("seconds", 0), "message": msg}
                 if not ok and requeue and _retryable(out_text):
                     self._enqueue(kind)
@@ -1821,6 +1829,14 @@ class CardService:
 
 
     # ── 间隔任务 ──
+
+    def _history_size(self) -> int:
+        try:
+            d = self.base / "history"
+            return sum(f.stat().st_size for f in d.glob("*.png")) if d.exists() else 0
+        except Exception:
+            return 0
+
     def _interval_slots(self, job: dict, now: datetime) -> list[tuple[int, str]]:
         """返回今天已经到点的槽位 [(ts, key)]，key 里带槽位时间戳。"""
         try:
@@ -1849,9 +1865,9 @@ class CardService:
         except Exception:
             return []
 
-    def timeline(self, hours: int = 48) -> dict:
-        """未来 N 小时的计划 + 最近历史，给前端画时间轴。"""
-        now = datetime.now()
+    def timeline(self, hours: int = 48, offset: int = 0) -> dict:
+        """以 offset 小时为起点的 hours 小时窗口：计划 + 历史。"""
+        now = datetime.now() + timedelta(hours=offset)
         out = []
         for item in (self.cfg.get("schedule") or []):
             if not item.get("enabled", True):
@@ -2047,6 +2063,7 @@ class CardService:
             "tpl_scale": dict(self.cfg.get("tpl_scale") or {}),
             "tpl_line": dict(self.cfg.get("tpl_line") or {}),
             "photo_fields": dict(self.cfg.get("photo_fields") or {}),
+            "history_keep": int(self.cfg.get("history_keep", 100) or 100),
             "intervals": list(self.cfg.get("intervals") or []),
             "fav": list(self.cfg.get("fav") or []),
             "custom": self.cfg.get("custom") or {},
@@ -2059,7 +2076,8 @@ class CardService:
             "last_tick_text": self._last_tick_text,
             "todos": self.cfg.get("todos") or [],
             "weather": self.cfg.get("weather") or {},
-            "history": self.history[-20:],
+            "history": self.history[-int(self.cfg.get("history_keep", 100) or 100):],
+            "history_size": self._history_size(),
             "outbox": self.cfg.get("outbox") or [],
             "auto_pair": bool(self.cfg.get("auto_pair", True)),
             "bing_enabled": bool(self.cfg.get("bing_enabled", True)),
@@ -2296,19 +2314,24 @@ def make_routes():
         try:
             ts = request.query.get("ts", "")
             kind = request.query.get("kind", "")
-            f = (current().base / "history" / f"{ts}_{kind}.png")
-            if f.exists():
-                return web.FileResponse(f)
-            # 兜底：按时间戳前缀找
-            for g in sorted((current().base / "history").glob(f"{ts}_*.png")):
-                return web.FileResponse(g)
+            name = request.query.get("name", "")
+            base = current().base / "history"
+            if name and (base / name).exists():
+                return web.FileResponse(base / name)
+            for h in (getattr(current(), "history", []) or []):
+                if str(h.get("ts")) == str(ts) and h.get("img") and (base / h["img"]).exists():
+                    return web.FileResponse(base / h["img"])
+            for g in sorted(base.glob(f"*_{kind}.png")):
+                if g.stat().st_mtime:
+                    return web.FileResponse(g)
         except Exception:
             pass
         raise web.HTTPNotFound()
 
     async def _timeline(request):
         hours = int(request.query.get("hours", "48") or 48)
-        return web.json_response(current().timeline(hours))
+        offset = int(request.query.get("offset", "0") or 0)
+        return web.json_response(current().timeline(hours, offset))
 
     async def _fav(request):
         try:

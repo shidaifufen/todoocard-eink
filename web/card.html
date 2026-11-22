@@ -229,7 +229,14 @@
       </div>
       <div class="hint">按“每 N 分钟”在时段内推送；可限定工作日 / 周末，周末和工作日可以配不同的起止时间。</div>
 
-      <h3 style="margin-top:22px">时间轴（未来 48 小时）</h3>
+      <h3 style="margin-top:22px">时间轴
+        <span style="float:right;display:flex;gap:8px">
+          <button onclick="shiftTimeline(-48)">← 前 48 小时</button>
+          <button onclick="shiftTimeline(48)">后 48 小时 →</button>
+          <button onclick="shiftTimeline(0)">回到现在</button>
+        </span>
+      </h3>
+      <div id="tlConflict" class="hint" style="margin:6px 0 0;color:var(--danger)"></div>
       <div style="position:relative">
         <div id="timeline" style="position:relative;height:54px;margin:10px 0 6px;
              background:#1a1d24;border:1px solid var(--line);border-radius:8px;overflow:hidden"></div>
@@ -319,6 +326,14 @@
 
     <section class="card hide" id="panel-history">
       <h3>发送历史</h3>
+      <div class="row" style="margin-bottom:10px">
+        <span>保留条数</span>
+        <span style="display:flex;gap:8px;align-items:center">
+          <input id="histKeep" type="number" min="10" step="10" style="width:90px">
+          <span class="hint" id="histSize">—</span>
+          <button onclick="saveHistKeep()">保存</button>
+        </span>
+      </div>
       <div id="history"></div>
     </section>
   </main>
@@ -527,6 +542,11 @@ function appendTplTuning(){
   const sc = Math.round(((STATE.tpl_scale || {})[currentTpl] || 1) * 100);
   const lg = Math.round(((STATE.tpl_line || {})[currentTpl] || 1) * 100);
   const wrap = document.createElement('div');
+  const imgBtns = (currentTpl === 'photo' || currentTpl === 'bing') ? `
+    <div class="btnrow" style="margin-top:12px">
+      <button class="primary" onclick="openSend()">立即推送这张</button>
+      ${currentTpl === 'photo' ? '<button onclick="favCurrent()">☆ 收藏当前照片</button>' : ''}
+    </div>` : '';
   wrap.innerHTML = `
     <div class="hint" style="margin-top:14px">本模板微调（与全局相乘，只影响「${TPL_LABEL[currentTpl] || currentTpl}」）</div>
     <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--sub);margin-top:8px">
@@ -534,7 +554,8 @@ function appendTplTuning(){
     <input type="range" id="tsRange" min="80" max="120" step="5" value="${sc}" style="width:100%">
     <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--sub);margin-top:8px">
       <span>本模板行距</span><span id="tlVal">${lg}%</span></div>
-    <input type="range" id="tlRange" min="80" max="120" step="5" value="${lg}" style="width:100%">`;
+    <input type="range" id="tlRange" min="80" max="120" step="5" value="${lg}" style="width:100%">
+    ${imgBtns}`;
   box.appendChild(wrap);
   const ts = $('tsRange'), tl = $('tlRange');
   const save = async () => {
@@ -774,9 +795,14 @@ function renderSched(list){
     box.appendChild(div);
   });
 }
+let TL_OFFSET = 0;
+function shiftTimeline(delta){
+  TL_OFFSET = delta === 0 ? 0 : TL_OFFSET + delta;
+  loadTimeline();
+}
 async function loadTimeline(){
   const box = $('timeline'); if (!box) return;
-  const d = await (await fetch(API + '/api/card/timeline?hours=48')).json();
+  const d = await (await fetch(API + `/api/card/timeline?hours=48&offset=${TL_OFFSET}`)).json();
   if (!d.ok) return;
   STATE._timeline = d;
   const now = Date.now() / 1000, end = now + 48 * 3600, span = end - now;
@@ -803,7 +829,8 @@ async function loadTimeline(){
     tip.style.display = 'block';
     const x = Math.min(Math.max(ev.clientX - r.left - 100, 4), r.width - 204);
     tip.style.left = x + 'px';
-    tip.style.top = (ev.clientY - r.top - 200) + 'px';
+    // 固定在时间轴上方，不遮挡轴条和下面的「下一个」
+    tip.style.top = (-tip.offsetHeight - 10) + 'px';
   }
   function hideTip() { tip.style.display = 'none'; }
 
@@ -812,7 +839,7 @@ async function loadTimeline(){
     const w = Math.max(0.6, (avg / span) * 100);
     const el = document.createElement('div');
     el.style.cssText = `position:absolute;left:${left}%;top:12px;width:${w}%;height:28px;
-      background:#4f7cffcc;border-radius:3px;cursor:pointer`;
+      background:${conflicts.some(c => c.ts === p.ts) ? '#d9534fdd' : '#4f7cffcc'};border-radius:3px;cursor:pointer`;
     el.onmouseenter = (e) => showTip(e,
       `${new Date(p.ts*1000).toLocaleString('zh-CN')} · ${p.label} · ${p.source} · 预计 ${Math.round(avg)}s`,
       `${API}/api/card/preview?kind=${p.kind}&fresh=0&t=${p.ts}`);
@@ -836,6 +863,18 @@ async function loadTimeline(){
     box.appendChild(el);
   });
 
+  const pl = (d.planned || []);
+  const conflicts = [];
+  for (let i = 1; i < pl.length; i++) {
+    if (pl[i].ts - pl[i-1].ts < 60) conflicts.push(pl[i]);
+  }
+  const cbox = $('tlConflict');
+  if (cbox) {
+    cbox.textContent = conflicts.length
+      ? `⚠ 有 ${conflicts.length} 处时间冲突（两条计划相隔不到 60 秒）：` +
+        conflicts.slice(0,3).map(c => new Date(c.ts*1000).toLocaleTimeString('zh-CN',{hour12:false})).join('、')
+      : '';
+  }
   const next = (d.planned || []).slice(0, 6).map(p =>
     `${new Date(p.ts * 1000).toLocaleString('zh-CN', {hour12:false, month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'})} · ${p.label}`).join('　｜　');
   $('tlList').textContent = '下一个：' + (next || '（暂无计划）')
@@ -1135,12 +1174,29 @@ async function showBing(){
 function renderHistory(list){
   const box = $('history'); if (!box) return;
   if (!list.length){ box.innerHTML = '<div class="hint">还没有发送记录</div>'; return; }
-  box.innerHTML = list.slice().reverse().map(h=>`
-    <div class="hist"><span class="${h.ok?'ok':'bad'}">${h.ok?'✓':'✕'}</span>
+  box.innerHTML = list.slice().reverse().map(h=>{
+    const img = h.ok ? `${API}/api/card/history/img?ts=${h.ts}&kind=${h.kind}&name=${encodeURIComponent(h.img||'')}` : '';
+    return `<div class="hist" style="align-items:center">
+      <span class="${h.ok?'ok':'bad'}">${h.ok?'✓':'✕'}</span>
+      ${img ? `<img src="${img}" style="width:34px;height:50px;object-fit:cover;border-radius:4px;border:1px solid var(--line)" onerror="this.style.display='none'">` : '<span style="width:34px"></span>'}
       <span style="width:130px;color:var(--dim)">${fmtTime(h.ts)}</span>
       <span style="width:80px">${TPL_LABEL[h.kind]||h.kind}</span>
       <span style="flex:1;word-break:break-all">${(h.file||h.message||'').slice(0,70)}</span>
-      <span style="color:var(--dim)">${h.seconds?h.seconds+'s':''}</span></div>`).join('');
+      <span style="color:var(--dim)">${h.seconds?h.seconds+'s':''}</span></div>`;
+  }).join('');
+  if ($('histKeep')) { $('histKeep').value = STATE.history_keep || 100; }
+  if ($('histSize')) {
+    const mb = (STATE.history_size || 0) / 1048576;
+    $('histSize').textContent = mb < 1 ? `${Math.round((STATE.history_size||0)/1024)} KB` : `${mb.toFixed(1)} MB`;
+  }
+}
+
+async function saveHistKeep(){
+  const n = Math.max(10, parseInt($('histKeep').value, 10) || 100);
+  const d = await postJSON('/api/card/config', {history_keep: n});
+  if (d.ok && d.card) STATE = d.card;
+  toast('已设置保留 ' + n + ' 条');
+  renderHistory(STATE.history || []);
 }
 
 async function boot(){
