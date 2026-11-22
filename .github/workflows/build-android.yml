@@ -18,6 +18,10 @@ jobs:
         run: |
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
           ls $ANDROID_SDK_ROOT/platforms | tail -3 || true
+      - name: 安装需要的 SDK 平台
+        run: |
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
+          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0" > /dev/null
       - uses: gradle/actions/setup-gradle@v3
       - name: Build debug APK
         working-directory: android
