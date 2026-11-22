@@ -1,6 +1,7 @@
 package com.shidaifufen.todocard
 
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /** 用 Python 版 quicklz_payload.py 生成的向量做回归，保证逐字节一致。 */
@@ -23,6 +24,25 @@ class QuickLzTest {
             val got = QuickLz.encodeBlock(hex(c.raw))
             assertArrayEquals("case ${c.name}", hex(c.expected), got)
         }
+    }
+
+    @Test
+    fun realisticPayloadHash() {
+        // 与 Python 版同一确定性数据：payload=141666B, sha256=9840894e8ca9...
+        val raw = ByteArray(209088)
+        var seed = 12345
+        for (i in raw.indices) {
+            raw[i] = if ((i / 4096) % 3 == 0) 0x11
+            else {
+                seed = (seed * 1103515245 + 12345) and 0x7FFFFFFF
+                ((seed shr 16) and 0xFF).toByte()
+            }
+        }
+        val payload = QuickLz.buildPayload(raw)
+        assertEquals(141666, payload.size)
+        val hex = java.security.MessageDigest.getInstance("SHA-256").digest(payload)
+            .joinToString("") { "%02x".format(it) }
+        assertEquals("9840894e8ca90ef7ad3459ab964f1d10c1f6ad082ae38c47dda2a23df3ab4c54", hex)
     }
 
     @Test

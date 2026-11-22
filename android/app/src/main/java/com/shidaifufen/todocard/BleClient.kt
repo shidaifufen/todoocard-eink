@@ -175,6 +175,7 @@ class BleClient(private val ctx: Context) {
             body = body + ByteArray(bs - body.size % bs)
         }
         val nBlocks = body.size / bs
+        var sent = 0
         write(c, byteArrayOf(0x02, (body.size and 0xFF).toByte(),
             (body.size shr 8 and 0xFF).toByte(), (body.size shr 16 and 0xFF).toByte()))
         delay(200)
@@ -182,33 +183,44 @@ class BleClient(private val ctx: Context) {
         onLog("共 $nBlocks 块")
         Log.i("BleClient", "cmd02 len=${body.size} cmd03 start nBlocks=$nBlocks")
 
-        // 4) 数据阶段：流水线写 + 回执滑窗
-        var acked = -1
-        var sent = 0
-        var stalled = 0L
-        lastAckAt = System.currentTimeMillis()
-        while (sent < nBlocks) {
-            val idx = sent
+        // 4) 数据阶段：逐块确认（可靠优先）。设备回执里若要求重发某块，就补发。
+        val ackOf = IntArray(1) { -1 }
+        var idx = 0
+        while (idx < nBlocks) {
             val pkt = ByteArray(4 + bs)
             pkt[0] = (idx and 0xFF).toByte()
             pkt[1] = (idx shr 8 and 0xFF).toByte()
             pkt[2] = (idx shr 16 and 0xFF).toByte()
             pkt[3] = (idx shr 24 and 0xFF).toByte()
             body.copyInto(pkt, 4, idx * bs, idx * bs + bs)
-            write(d, pkt)
-            withTimeoutOrNull(1500) { writeOk.receive() }
-            sent++
-            if (sent % 16 == 0) {
-                withTimeoutOrNull(3000) {
+
+            var ok = false
+            var attempt = 0
+            while (!ok && attempt < 3) {
+                attempt++
+                write(d, pkt)
+                withTimeoutOrNull(1500) { writeOk.receive() }
+                val got = withTimeoutOrNull(2500) {
                     while (true) {
                         val v = acks.receive()
-                        if (v >= 0) { acked = v; lastAckAt = System.currentTimeMillis() }
+                        if (v >= 0) return@withTimeoutOrNull v
                     }
+                    @Suppress("UNREACHABLE_CODE") -1
+                }
+                if (got != null) {
+                    ackOf[0] = got
+                    if (got >= idx) ok = true
                 }
             }
+            if (!ok) {
+                onLog("第 $idx 块没有回执，停止（已发 $sent/$nBlocks）")
+                Log.w("BleClient", "no ack for block $idx, abort")
+                break
+            }
+            idx++
+            sent = idx
             onProgress(sent * 100 / nBlocks)
-            if (sent % 32 == 0) Log.i("BleClient", "sent=$sent/$nBlocks acked=$acked")
-            if (acked >= 0 && sent - acked > 40) delay(4)
+            if (sent % 32 == 0) Log.i("BleClient", "sent=$sent/$nBlocks acked=${ackOf[0]}")
         }
 
         // 5) 等收尾确认 05 08
