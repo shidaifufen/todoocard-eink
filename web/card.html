@@ -218,6 +218,7 @@
       <div class="btnrow">
         <button onclick="addSched()">+ 加一条</button>
         <button class="primary" onclick="saveSched()">保存计划</button>
+        <button onclick="cleanupSched()">一键清理冲突</button>
         <button id="restoreBtn" onclick="restoreSched()" style="display:none">恢复上次计划</button>
       </div>
       <div class="hint">到点自动生成并推送；Mac 睡眠错过时，唤醒后 6 小时内补发。</div>
@@ -374,6 +375,10 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div id="imgView" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);
+     z-index:80;align-items:center;justify-content:center;padding:24px" onclick="closeImgView()">
+  <img id="imgViewImg" style="max-width:92vw;max-height:92vh;border-radius:10px">
+</div>
 <div id="sendMask" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);
      z-index:50;align-items:center;justify-content:center;padding:24px">
   <div style="background:#15171c;border:1px solid #2a2d35;border-radius:16px;
@@ -1204,7 +1209,7 @@ function renderHistory(list){
     const img = h.ok ? `${API}/api/card/history/img?ts=${h.ts}&kind=${h.kind}&name=${encodeURIComponent(h.img||'')}` : '';
     return `<div class="hist" style="align-items:center">
       <span class="${h.ok?'ok':'bad'}">${h.ok?'✓':'✕'}</span>
-      ${img ? `<img src="${img}" style="width:34px;height:50px;object-fit:cover;border-radius:4px;border:1px solid var(--line)" onerror="this.style.display='none'">` : '<span style="width:34px"></span>'}
+      ${img ? `<img src="${img}" onclick="openImgView('${img}')" style="cursor:zoom-in;width:34px;height:50px;object-fit:cover;border-radius:4px;border:1px solid var(--line)" onerror="this.style.display='none'">` : '<span style="width:34px"></span>'}
       <span style="width:130px;color:var(--dim)">${fmtTime(h.ts)}</span>
       <span style="width:80px">${TPL_LABEL[h.kind]||h.kind}</span>
       <span style="flex:1;word-break:break-all">${(h.file||h.message||'').slice(0,70)}</span>
@@ -1248,6 +1253,15 @@ async function unfav(path){
   const d = await postJSON('/api/card/fav', {action: 'remove', path});
   toast(d.ok ? '已取消收藏' : '操作失败');
   renderFav();
+}
+
+function openImgView(src){ $('imgViewImg').src = src; $('imgView').style.display = 'flex'; }
+function closeImgView(){ $('imgView').style.display = 'none'; }
+
+async function cleanupSched(){
+  const d = await postJSON('/api/card/schedule/cleanup', {});
+  toast(d.ok ? `已清理 ${d.removed} 条重复计划` : '清理失败');
+  await load(); loadTimeline(); renderSched(STATE.schedule || []);
 }
 
 async function saveHistKeep(){

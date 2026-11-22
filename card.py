@@ -1927,7 +1927,18 @@ class CardService:
                     for _job in (self.cfg.get("intervals") or []):
                         if not _job.get("enabled", True):
                             continue
+                        _fixed_minutes = set()
+                        for _it in (self.cfg.get("schedule") or []):
+                            try:
+                                _hh, _mm = (int(x) for x in _it["time"].split(":"))
+                                _fixed_minutes.add(_hh * 60 + _mm)
+                            except Exception:
+                                pass
                         for _ts, _key in self._interval_slots(_job, now):
+                            _d = datetime.fromtimestamp(_ts)
+                            if (_d.hour * 60 + _d.minute) in _fixed_minutes:
+                                _LOGGER.info("间隔任务与每日计划同一分钟，跳过 %s", _d.strftime("%H:%M"))
+                                continue
                             if int(runs.get(_key, 0)) >= _ts:
                                 continue
                             _win = max(1, int(self.cfg.get("catch_up_min", 30) or 30))
@@ -1941,6 +1952,7 @@ class CardService:
                                 self._save_cfg()
                             break   # 一次循环只处理一个槽位，避免堆积
 
+                    _fired_this_tick = set()
                     for idx, item in enumerate(self.cfg.get("schedule") or []):
                         if not item.get("enabled", True):
                             continue
@@ -1959,6 +1971,11 @@ class CardService:
                         rt = retry.get(key) or {}
                         if rt.get("next_ts", 0) > now.timestamp():
                             continue                     # 还在退避期内
+
+                        if (item["time"], due.hour, due.minute) in _fired_this_tick:
+                            _LOGGER.info("计划冲突：%s 与更早的任务同一分钟，跳过", item["kind"])
+                            continue
+                        _fired_this_tick.add((item["time"], due.hour, due.minute))
 
                         if item["kind"] == "photo" and not self._scan_photos():
                             runs[key] = int(now.timestamp())
@@ -2334,6 +2351,20 @@ def make_routes():
         return web.json_response(current().timeline(hours, offset))
 
 
+    async def _cleanup(request):
+        svc = current()
+        seen, kept, removed = set(), [], []
+        for it in (svc.cfg.get("schedule") or []):
+            key = (it.get("time"), it.get("kind"))
+            if key in seen:
+                removed.append(it)
+                continue
+            seen.add(key)
+            kept.append(it)
+        svc.cfg["schedule"] = sorted(kept, key=lambda x: x.get("time", "00:00"))
+        svc._save_cfg()
+        return web.json_response({"ok": True, "removed": len(removed), "left": len(kept)})
+
     async def _fav_list(request):
         svc = current()
         favs = [f for f in (svc.cfg.get("fav") or []) if Path(f).is_file()]
@@ -2604,6 +2635,7 @@ def make_routes():
         ("GET", "/api/card/history/img", _hist_img),
         ("POST", "/api/card/fav", _fav),
         ("GET", "/api/card/fav/list", _fav_list),
+        ("POST", "/api/card/schedule/cleanup", _cleanup),
         ("GET", "/api/card/photo", _photo_thumb),
         ("POST", "/api/card/fav/push", _fav_push),
         ("GET", "/api/card/templates", _templates),
