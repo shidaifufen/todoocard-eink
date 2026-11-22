@@ -47,26 +47,38 @@ class BleClient(private val ctx: Context) {
     private var blockSize = 0
     private var lastAckAt = 0L
 
+    /** 扫描 timeout 毫秒，返回**全部**设备（按 RSSI 排序），由界面让用户挑。 */
     @SuppressLint("MissingPermission")
-    suspend fun scan(timeoutMs: Long = 12_000): ScanResult? {
-        val scanner = adapter?.bluetoothLeScanner ?: return null
-        val found = CompletableDeferred<ScanResult?>()
+    suspend fun scanAll(timeoutMs: Long = 12_000, onLog: (String) -> Unit = {}): List<ScanResult> {
+        val scanner = adapter?.bluetoothLeScanner ?: run { onLog("蓝牙未开启"); return emptyList() }
+        val found = java.util.concurrent.ConcurrentHashMap<String, ScanResult>()
         val cb = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
-                val name = result.device.name ?: result.scanRecord?.deviceName ?: ""
-                val manu = result.scanRecord?.manufacturerSpecificData
-                val hasVendor = (0 until (manu?.size() ?: 0)).any { manu!!.get(it) != null }
-                if (name.contains("Todoo", true) || name.contains("T3", true) || hasVendor) {
-                    if (!found.isCompleted) found.complete(result)
-                }
+                found[result.device.address] = result
             }
-            override fun onScanFailed(errorCode: Int) { if (!found.isCompleted) found.complete(null) }
+            override fun onBatchScanResults(results: MutableList<ScanResult>) {
+                results.forEach { found[it.device.address] = it }
+            }
+            override fun onScanFailed(errorCode: Int) {
+                onLog("扫描失败 code=$errorCode")
+            }
         }
+        onLog("开始扫描 ${timeoutMs / 1000}s…")
         scanner.startScan(null, ScanSettings.Builder()
-            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(), cb)
-        return try {
-            withTimeout(timeoutMs) { found.await() }
-        } catch (e: Exception) { null } finally { scanner.stopScan(cb) }
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build(), cb)
+        kotlinx.coroutines.delay(timeoutMs)
+        scanner.stopScan(cb)
+        onLog("扫到 ${found.size} 台设备")
+        return found.values.sortedByDescending { it.rssi }
+    }
+
+    fun isLikelyCard(r: ScanResult): Boolean {
+        val name = (r.device.name ?: r.scanRecord?.deviceName ?: "").lowercase()
+        if (name.contains("todoo") || name.contains("potato") || name.contains("t3")) return true
+        val manu = r.scanRecord?.manufacturerSpecificData ?: return false
+        for (i in 0 until manu.size()) if (manu.keyAt(i) == 0x5053) return true
+        return false
     }
 
     @SuppressLint("MissingPermission")

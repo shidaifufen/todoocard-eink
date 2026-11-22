@@ -40,6 +40,7 @@ private fun Screen() {
     var status by remember { mutableStateOf("选一张照片开始") }
     var progress by remember { mutableStateOf(0) }
     var device by remember { mutableStateOf<android.bluetooth.le.ScanResult?>(null) }
+    var found by remember { mutableStateOf<List<android.bluetooth.le.ScanResult>>(emptyList()) }
 
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -54,12 +55,14 @@ private fun Screen() {
 
     val scanNow: () -> Unit = {
         scope.launch {
-            status = "扫描中…（长按卡片背面按钮可唤醒）"
+            status = "扫描中…（长按卡片背面按钮唤醒，10 秒）"
+            found = emptyList()
             val ble = BleClient(ctx)
-            val r = withContext(Dispatchers.IO) { ble.scan(15_000) }
-            device = r
-            status = if (r != null) "找到：${r.device.name ?: r.device.address}（RSSI ${r.rssi}）"
-                     else "没扫到卡片：确认已唤醒、没被手机 App 占用"
+            val list = withContext(Dispatchers.IO) { ble.scanAll(10_000) { line -> status = line } }
+            found = list
+            val card = list.firstOrNull { ble.isLikelyCard(it) }
+            if (card != null) { device = card; status = "自动选中：${card.device.name ?: card.device.address}" }
+            else status = "扫到 ${list.size} 台，卡片未自动识别——在下面列表里手动选"
         }
     }
     var pendingScan by remember { mutableStateOf(false) }
@@ -94,6 +97,20 @@ private fun Screen() {
             pendingScan = true
             permLauncher.launch(perms)
         }) { Text("扫描卡片") }
+
+        if (found.isNotEmpty()) {
+            Text("扫到的设备：", style = MaterialTheme.typography.bodySmall)
+            found.forEach { r ->
+                val name = r.device.name ?: r.scanRecord?.deviceName ?: "(无名)"
+                val tag = if (device?.device?.address == r.device.address) "✔ " else ""
+                OutlinedButton(
+                    onClick = { device = r },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("$tag$name  ${r.device.address}  RSSI ${r.rssi}")
+                }
+            }
+        }
 
         Button(enabled = bitmap != null && device != null, onClick = {
             val bmp = bitmap ?: return@Button
