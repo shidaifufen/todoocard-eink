@@ -121,23 +121,17 @@ class BleClient(private val ctx: Context) {
             }
             override fun onCharacteristicChanged(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray) {
                 Log.i("BleClient", "ctrl <- " + value.joinToString(" ") { "%02x".format(it) })
-                if (value.isEmpty()) return
-                if (value[0].toInt() == 0x01) {
+                if (value.size >= 3 && value[0].toInt() == 0x01) {
                     blockSize = maxOf(0, (value[1].toInt() and 0xFF) - 4)
                     acks.trySend(-2)
-                    return
+                } else if (value.size >= 5 && value[0].toInt() == 0x05) {
+                    if (value[1].toInt() == 0x08) acks.trySend(-1) else {
+                        val idx = (value[2].toInt() and 0xFF) or ((value[3].toInt() and 0xFF) shl 8) or
+                                  ((value[4].toInt() and 0xFF) shl 16) or
+                                  (if (value.size >= 6) (value[5].toInt() and 0xFF) shl 24 else 0)
+                        acks.trySend(idx)
+                    }
                 }
-                if (value[0].toInt() != 0x05) return
-                if (value.size >= 2 && value[1].toInt() == 0x08) { acks.trySend(-1); return }
-                if (value.size >= 6) {
-                    val idx = (value[2].toInt() and 0xFF) or ((value[3].toInt() and 0xFF) shl 8) or
-                              ((value[4].toInt() and 0xFF) shl 16) or ((value[5].toInt() and 0xFF) shl 24)
-                    acks.trySend(idx)
-                } else if (value.size >= 2 && value[1].toInt() != 0) {
-                    Log.w("BleClient", "device error 0x%02x".format(value[1]))
-                    acks.trySend(-3)
-                }
-            }
             }
         })
         return try { withTimeout(25_000) { ready.await() } } catch (e: Exception) { false }
