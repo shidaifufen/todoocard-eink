@@ -98,10 +98,13 @@ private fun Screen() {
                 status = "打包中…"
                 val built = withContext(Dispatchers.Default) { Payload.build(bmp) }
                 status = "传输中…"
+                val logs = StringBuilder()
                 withContext(Dispatchers.IO) {
-                    ble.send(built.legacy) { p -> progress = p }
+                    ble.send(built.legacy,
+                        onLog = { line -> logs.append(line).append("\n"); status = line },
+                        onProgress = { p -> progress = p })
                 }
-                status = "完成（legacy 包，约需 1~3 分钟）"
+                status = "完成：\n" + logs.toString().trim()
                 ble.close()
             }
         }) { Text("推送到卡片") }

@@ -13,7 +13,10 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 
 /**
@@ -41,6 +44,8 @@ class BleClient(private val ctx: Context) {
     private var data: BluetoothGattCharacteristic? = null
     private val acks = Channel<Int>(Channel.UNLIMITED)
     private var ready = CompletableDeferred<Boolean>()
+    private var blockSize = 0
+    private var lastAckAt = 0L
 
     @SuppressLint("MissingPermission")
     suspend fun scan(timeoutMs: Long = 12_000): ScanResult? {
@@ -84,7 +89,10 @@ class BleClient(private val ctx: Context) {
                 if (!ready.isCompleted) ready.complete(ctrl != null && data != null)
             }
             override fun onCharacteristicChanged(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray) {
-                if (value.size >= 5 && value[0].toInt() == 0x05) {
+                if (value.size >= 3 && value[0].toInt() == 0x01) {
+                    blockSize = maxOf(0, (value[1].toInt() and 0xFF) - 4)
+                    acks.trySend(-2)
+                } else if (value.size >= 5 && value[0].toInt() == 0x05) {
                     if (value[1].toInt() == 0x08) acks.trySend(-1) else {
                         val idx = (value[2].toInt() and 0xFF) or ((value[3].toInt() and 0xFF) shl 8) or
                                   ((value[4].toInt() and 0xFF) shl 16)
@@ -103,34 +111,79 @@ class BleClient(private val ctx: Context) {
         return gatt?.writeCharacteristic(ch) ?: false
     }
 
-    /** 发送 legacy 包（不压缩，218 KB 左右，慢但实现简单） */
+    /** 发送 legacy 包（未压缩，218 KB；握手流程与桌面版 sender.py 一致） */
     @SuppressLint("MissingPermission")
-    suspend fun send(legacy: ByteArray, onProgress: (Int) -> Unit = {}) {
+    suspend fun send(legacy: ByteArray, onLog: (String) -> Unit = {}, onProgress: (Int) -> Unit = {}) {
         val c = ctrl ?: error("控制点未就绪")
         val d = data ?: error("数据点未就绪")
-        runCatching { write(c, byteArrayOf(0x01, 0x00, 0x00)) }
-        runCatching { write(c, byteArrayOf(0x03)) }
+        val g = gatt ?: error("未连接")
 
-        val chunk = 512
-        var idx = 0
-        var off = 0
-        while (off < legacy.size) {
-            val end = minOf(off + chunk, legacy.size)
-            val pkt = ByteArray(4 + (end - off))
+        // 1) 请求 MTU（能大一点就大一点，Android 会自动协商）
+        withContext(kotlinx.coroutines.Dispatchers.Main) {
+            runCatching { g.requestMtu(517) }
+        }
+        delay(300)
+        onLog("MTU 已请求（实际 ${g.device.name ?: ""}）")
+
+        // 2) 问块大小：设备回 [0x01, blockSize, 0x00]
+        blockSize = 0
+        write(c, byteArrayOf(0x01))
+        val ok = withTimeoutOrNull(5000) {
+            while (blockSize <= 0) { acks.receive() }
+            true
+        } ?: false
+        if (!ok) throw IllegalStateException("等不到 block size 响应（通知没订阅成功？）")
+        val bs = blockSize
+        onLog("block payload = $bs")
+
+        // 3) 补齐到块大小整数倍，报长度，再开始
+        var body = legacy
+        if (body.size % bs != 0) {
+            body = body + ByteArray(bs - body.size % bs)
+        }
+        val nBlocks = body.size / bs
+        write(c, byteArrayOf(0x02, (body.size and 0xFF).toByte(),
+            (body.size shr 8 and 0xFF).toByte(), (body.size shr 16 and 0xFF).toByte()))
+        delay(200)
+        write(c, byteArrayOf(0x03))
+        onLog("共 $nBlocks 块")
+
+        // 4) 数据阶段：流水线写 + 回执滑窗
+        var acked = -1
+        var sent = 0
+        var stalled = 0L
+        lastAckAt = System.currentTimeMillis()
+        while (sent < nBlocks) {
+            val idx = sent
+            val pkt = ByteArray(4 + bs)
             pkt[0] = (idx and 0xFF).toByte()
             pkt[1] = (idx shr 8 and 0xFF).toByte()
             pkt[2] = (idx shr 16 and 0xFF).toByte()
             pkt[3] = (idx shr 24 and 0xFF).toByte()
-            legacy.copyInto(pkt, 4, off, end)
+            body.copyInto(pkt, 4, idx * bs, idx * bs + bs)
             write(d, pkt)
-            idx++; off = end
-            onProgress((off * 100 / legacy.size))
-            // 每 20 个包等一次回执（窗口流控）
-            if (idx % 20 == 0) {
-                runCatching { withTimeout(4000) { acks.receive() } }
+            sent++
+            if (sent % 16 == 0) {
+                withTimeoutOrNull(3000) {
+                    while (true) {
+                        val v = acks.receive()
+                        if (v >= 0) { acked = v; lastAckAt = System.currentTimeMillis() }
+                    }
+                }
             }
+            onProgress(sent * 100 / nBlocks)
+            if (acked >= 0 && sent - acked > 40) delay(4)
         }
-        runCatching { withTimeout(15_000) { acks.receive() } }
+
+        // 5) 等收尾确认 05 08
+        val refreshed = withTimeoutOrNull(20_000) {
+            while (true) {
+                val v = acks.receive()
+                if (v < 0) return@withTimeoutOrNull true
+            }
+            @Suppress("UNREACHABLE_CODE") false
+        } ?: false
+        onLog(if (refreshed) "已完成并收到显影确认" else "数据写完，但没等到显影确认")
     }
 
     @SuppressLint("MissingPermission")
