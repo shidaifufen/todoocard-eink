@@ -18,8 +18,10 @@ class PushWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params) {
             val built = Payload.build(bmp)
             val ble = BleClient(applicationContext)
             kotlinx.coroutines.runBlocking {
-                val found = ble.scan(8000) ?: return@runBlocking
-                if (ble.connect(found)) ble.send(built.legacy)
+                val list = ble.scanAll(8000)
+                val found = list.firstOrNull { ble.isLikelyCard(it) } ?: list.firstOrNull()
+                    ?: return@runBlocking
+                if (ble.connect(found)) ble.send(QuickLz.buildPayload(built.controller))
                 ble.close()
             }
             next.delete()

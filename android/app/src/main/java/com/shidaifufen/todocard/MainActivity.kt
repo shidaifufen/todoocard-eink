@@ -122,11 +122,14 @@ private fun Screen() {
                     status = "连接失败：先长按卡片背面按钮唤醒"; return@launch
                 }
                 status = "打包中…"
-                val built = withContext(Dispatchers.Default) { Payload.build(bmp) }
-                status = "传输中…"
-                val logs = StringBuilder()
+                val payload = withContext(Dispatchers.Default) {
+                    val built = Payload.build(bmp)
+                    QuickLz.buildPayload(built.controller)
+                }
+                status = "传输中（压缩后 ${payload.size / 1024} KB）…"
+                val logs = StringBuilder("payload=${payload.size} bytes\n")
                 withContext(Dispatchers.IO) {
-                    ble.send(built.legacy,
+                    ble.send(payload,
                         onLog = { line -> logs.append(line).append("\n"); status = line },
                         onProgress = { p -> progress = p })
                 }
