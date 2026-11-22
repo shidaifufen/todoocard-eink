@@ -14,7 +14,11 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
+      - name: 确认 Android SDK
+        run: |
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          ls $ANDROID_SDK_ROOT/platforms | tail -3 || true
+      - uses: gradle/actions/setup-gradle@v3
       - name: Build debug APK
         working-directory: android
         run: gradle assembleDebug --no-daemon
