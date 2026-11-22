@@ -824,7 +824,10 @@ async function loadTimeline(){
   const d = await (await fetch(API + `/api/card/timeline?hours=48&offset=${TL_OFFSET}`)).json();
   if (!d.ok) return;
   STATE._timeline = d;
-  const now = Date.now() / 1000, end = now + 48 * 3600, span = end - now;
+  const win = d.window || {};
+  const now = win.start || (Date.now() / 1000);
+  const end = win.end || (now + 48 * 3600);
+  const span = Math.max(60, end - now);
   box.innerHTML = '';
   for (let i = 0; i <= 8; i++) {
     const tick = document.createElement('div');
@@ -868,9 +871,12 @@ async function loadTimeline(){
     tip.addEventListener('mouseleave', hideTipSoon);
   }
 
-  const pl = (d.planned || []);
+  const pl = (d.planned || []).slice().sort((a,b) => a.ts - b.ts);
+  const fixed = pl.filter(x => x.source === '每日计划');
   const conflicts = [];
-  for (let i = 1; i < pl.length; i++) if (pl[i].ts - pl[i-1].ts < 60) conflicts.push(pl[i]);
+  for (let i = 1; i < fixed.length; i++) {
+    if (fixed[i].ts - fixed[i-1].ts < 60) conflicts.push(fixed[i]);
+  }
   const cbox = $('tlConflict');
   if (cbox) cbox.textContent = conflicts.length
     ? `⚠ 有 ${conflicts.length} 处时间冲突：` +
@@ -882,7 +888,7 @@ async function loadTimeline(){
     const w = Math.max(0.6, (avg / span) * 100);
     const el = document.createElement('div');
     el.style.cssText = `position:absolute;left:${left}%;top:12px;width:${w}%;height:28px;
-      background:${conflicts.some(c => c.ts === p.ts) ? '#d9534fdd' : '#4f7cffcc'};border-radius:3px;cursor:pointer`;
+      background:${conflicts.some(c => c.ts === p.ts && p.source === '每日计划') ? '#d9534fdd' : '#4f7cffcc'};border-radius:3px;cursor:pointer`;
     el.onmouseenter = (e) => showTip(e,
       `${new Date(p.ts*1000).toLocaleString('zh-CN')} · ${p.label} · ${p.source} · 预计 ${Math.round(avg)}s`,
       `${API}/api/card/preview?kind=${p.kind}&fresh=0&t=${p.ts}`, p.kind);

@@ -1902,7 +1902,10 @@ class CardService:
                     t = t + timedelta(minutes=every)
         out.sort(key=lambda x: x["ts"])
         hist = list(getattr(self, "history", []) or [])[:40]
-        return {"ok": True, "planned": out, "history": hist}
+        start_ts = int((now - timedelta(minutes=1)).timestamp())
+        end_ts = int((now + timedelta(hours=hours)).timestamp())
+        return {"ok": True, "planned": out, "history": hist,
+                "window": {"start": start_ts, "end": end_ts}}
 
     # ── 调度 ──
     async def _loop(self):
@@ -2363,8 +2366,40 @@ def make_routes():
             seen.add(key)
             kept.append(it)
         svc.cfg["schedule"] = sorted(kept, key=lambda x: x.get("time", "00:00"))
+
+        # 固定计划占用的分钟
+        fixed_min = set()
+        for it in svc.cfg["schedule"]:
+            try:
+                hh, mm = (int(x) for x in it["time"].split(":"))
+                fixed_min.add(hh * 60 + mm)
+            except Exception:
+                pass
+
+        # 间隔任务：整条删掉与固定计划撞分钟的槽位（改间隔也不一定避开，直接删更干净）
+        kept_itv, dropped_itv = [], 0
+        for job in (svc.cfg.get("intervals") or []):
+            try:
+                every = max(5, int(job.get("every_min") or 60))
+                sh, sm = (int(x) for x in str(job.get("start") or "07:00").split(":"))
+                eh, em = (int(x) for x in str(job.get("end") or "23:00").split(":"))
+                t, stop = sh * 60 + sm, eh * 60 + em
+                clash = False
+                while t <= stop:
+                    if t in fixed_min:
+                        clash = True
+                        break
+                    t += every
+                if clash:
+                    dropped_itv += 1
+                    continue
+            except Exception:
+                pass
+            kept_itv.append(job)
+        svc.cfg["intervals"] = kept_itv
         svc._save_cfg()
-        return web.json_response({"ok": True, "removed": len(removed), "left": len(kept)})
+        return web.json_response({"ok": True, "removed": len(removed) + dropped_itv,
+                                  "left": len(kept), "dropped_intervals": dropped_itv})
 
     async def _fav_list(request):
         svc = current()
