@@ -136,10 +136,18 @@ class BleClient(private val ctx: Context) {
     }
 
     @SuppressLint("MissingPermission")
-    private fun write(ch: BluetoothGattCharacteristic, bytes: ByteArray): Boolean {
-        ch.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-        ch.value = bytes
-        return gatt?.writeCharacteristic(ch) ?: false
+    private fun write(ch: BluetoothGattCharacteristic, bytes: ByteArray, noResponse: Boolean = false): Boolean {
+        val g = gatt ?: return false
+        return if (android.os.Build.VERSION.SDK_INT >= 33) {
+            val type = if (noResponse) BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                       else BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            g.writeCharacteristic(ch, bytes, type) == android.bluetooth.BluetoothStatusCodes.SUCCESS
+        } else {
+            ch.writeType = if (noResponse) BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                           else BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            ch.value = bytes
+            g.writeCharacteristic(ch)
+        }
     }
 
     /** 发送 legacy 包（未压缩，218 KB；握手流程与桌面版 sender.py 一致） */
@@ -192,7 +200,7 @@ class BleClient(private val ctx: Context) {
             while (sent - acked > window) {
                 val v = withTimeoutOrNull(200) { acks.receive() }
                 if (v != null && v >= 0) { acked = v; lastAckAt = System.currentTimeMillis() }
-                if (System.currentTimeMillis() - lastAckAt > 8000) {
+                if (System.currentTimeMillis() - lastAckAt > 15000) {
                     onLog("回执停滞：已发 $sent/$nBlocks，设备回到第 ${acked + 1} 块")
                     Log.w("BleClient", "stall sent=$sent acked=$acked")
                     postWait(c, false, onLog)
@@ -205,11 +213,18 @@ class BleClient(private val ctx: Context) {
             pkt[2] = (sent shr 16 and 0xFF).toByte()
             pkt[3] = (sent shr 24 and 0xFF).toByte()
             body.copyInto(pkt, 4, sent * bs, sent * bs + bs)
-            write(d, pkt)
-            withTimeoutOrNull(300) { writeOk.receive() }
+            // 数据块用"不带响应"写 + 微延时，和桌面版 sender.py 的节奏一致
+            val wrote = write(d, pkt, noResponse = true)
+            if (!wrote) {
+                // 有些机型不支持无响应写，退回带响应
+                write(d, pkt)
+                withTimeoutOrNull(500) { writeOk.receive() }
+            } else {
+                delay(6)
+            }
             sent++
             onProgress(sent * 100 / nBlocks)
-            if (sent % 32 == 0) Log.i("BleClient", "sent=$sent/$nBlocks acked=$acked")
+            if (sent % 8 == 0) Log.i("BleClient", "sent=$sent/$nBlocks acked=$acked")
             // 顺手把已到的回执读掉
             while (true) {
                 val v = try { acks.tryReceive().getOrNull() } catch (e: Exception) { null }
