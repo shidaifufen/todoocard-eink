@@ -129,6 +129,7 @@
         <button data-panel="photos"><span class="ico">▣</span>照片与壁纸</button>
         <button data-panel="ai"><span class="ico">✦</span>AI 生图</button>
         <button data-panel="history"><span class="ico">≡</span>发送历史</button>
+        <button data-panel="fav"><span class="ico">☆</span>我的收藏</button>
       </nav>
     </div>
     <div class="group">
@@ -328,6 +329,14 @@
       <img id="aiPrev" style="display:none;max-width:100%;margin-top:10px;border-radius:12px" alt="AI">
     </section>
 
+    <section class="card hide" id="panel-fav">
+      <h3>我的收藏</h3>
+      <div class="hint" style="margin-bottom:10px">
+        收藏的照片可以一键推送；「轮播方式」选「只推收藏」时，计划任务只在收藏里轮播。
+      </div>
+      <div id="favGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px"></div>
+    </section>
+
     <section class="card hide" id="panel-history">
       <h3>发送历史</h3>
       <div class="row" style="margin-bottom:10px">
@@ -470,8 +479,8 @@ function renderNav(){
 function switchPanel(p){
   window.__panel = p;
   panel = p;
-  ['tpl','scenes','device','schedule','photos','ai','history'].forEach(x =>
-    $('panel-'+x).classList.toggle('hide', x !== p));
+  ['tpl','scenes','device','schedule','photos','ai','history','fav'].forEach(x =>
+      $('panel-'+x) && $('panel-'+x).classList.toggle('hide', x !== p));
   document.querySelectorAll('#tplNav button').forEach(b =>
     b.classList.toggle('on', p === 'tpl' && b.dataset.tpl === currentTpl));
   document.querySelectorAll('#setNav button').forEach(b =>
@@ -480,6 +489,7 @@ function switchPanel(p){
   if (p === 'scenes') renderScenes();
   if (p === 'schedule'){ renderItv(); loadTimeline(); clearInterval(window.__tlTimer); window.__tlTimer = setInterval(() => { if (window.__panel === 'schedule') loadTimeline(); }, 60000);  renderSched(STATE.schedule||[]); renderSchedState(); }
   if (p === 'history') renderHistory(STATE.history||[]);
+  if (p === 'fav') renderFav();
 }
 document.querySelectorAll('#setNav button').forEach(b => b.onclick = () => switchPanel(b.dataset.panel));
 
@@ -841,7 +851,17 @@ async function loadTimeline(){
     // 固定在时间轴上方，不遮挡轴条和下面的「下一个」
     tip.style.top = (-tip.offsetHeight - 10) + 'px';
   }
+  clearTimeout(window.__tipTimer);
   function hideTip() { tip.style.display = 'none'; }
+  function hideTipSoon() {
+    clearTimeout(window.__tipTimer);
+    window.__tipTimer = setTimeout(() => { tip.style.display = 'none'; }, 350);
+  }
+  if (!tip.__bound) {
+    tip.__bound = true;
+    tip.addEventListener('mouseenter', () => clearTimeout(window.__tipTimer));
+    tip.addEventListener('mouseleave', hideTipSoon);
+  }
 
   const pl = (d.planned || []);
   const conflicts = [];
@@ -861,7 +881,7 @@ async function loadTimeline(){
     el.onmouseenter = (e) => showTip(e,
       `${new Date(p.ts*1000).toLocaleString('zh-CN')} · ${p.label} · ${p.source} · 预计 ${Math.round(avg)}s`,
       `${API}/api/card/preview?kind=${p.kind}&fresh=0&t=${p.ts}`, p.kind);
-    el.onmouseleave = hideTip;
+    el.onmouseleave = hideTipSoon;
     el.onclick = () => toast(`${p.label} · ${new Date(p.ts*1000).toLocaleString('zh-CN')}`);
     box.appendChild(el);
   });
@@ -876,7 +896,7 @@ async function loadTimeline(){
     el.onmouseenter = (e) => showTip(e,
       `${new Date(h.ts*1000).toLocaleString('zh-CN')} · ${TPL_LABEL[h.kind] || h.kind} · ${h.ok ? '成功' : '失败'} · ${Math.round(h.seconds||0)}s`,
       h.ok ? `${API}/api/card/history/img?ts=${h.ts}&kind=${h.kind}&name=${encodeURIComponent(h.img||'')}` : null, h.kind);
-    el.onmouseleave = hideTip;
+    el.onmouseleave = hideTipSoon;
     el.onclick = () => toast(el.onmouseenter ? '悬停看缩略图' : '');
     box.appendChild(el);
   });
@@ -1195,6 +1215,39 @@ function renderHistory(list){
     const mb = (STATE.history_size || 0) / 1048576;
     $('histSize').textContent = mb < 1 ? `${Math.round((STATE.history_size||0)/1024)} KB` : `${mb.toFixed(1)} MB`;
   }
+}
+
+async function renderFav(){
+  const box = $('favGrid'); if (!box) return;
+  const d = await (await fetch(API + '/api/card/fav/list')).json();
+  const items = d.items || [];
+  if (!items.length) {
+    box.innerHTML = '<div class="hint">还没有收藏。照片模板里点「☆ 收藏当前照片」就会出现在这里。</div>';
+    return;
+  }
+  box.innerHTML = items.map(it => `
+    <div style="border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#15171c">
+      <img src="${API}/api/card/photo?path=${encodeURIComponent(it.path)}"
+           style="width:100%;height:220px;object-fit:cover;display:block" onerror="this.style.opacity=.2">
+      <div style="padding:8px">
+        <div class="hint" style="word-break:break-all;margin-bottom:6px">${it.name}</div>
+        <div class="btnrow" style="gap:6px">
+          <button class="primary" style="flex:1;padding:4px 8px" onclick="pushFav('${it.path.replace(/'/g, "\\'")}')">推送</button>
+          <button style="padding:4px 8px" onclick="unfav('${it.path.replace(/'/g, "\\'")}')">取消</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+async function pushFav(path){
+  const d = await postJSON('/api/card/fav/push', {path});
+  toast(d.ok ? '已开始推送这张' : (d.error || '推送失败'));
+}
+
+async function unfav(path){
+  const d = await postJSON('/api/card/fav', {action: 'remove', path});
+  toast(d.ok ? '已取消收藏' : '操作失败');
+  renderFav();
 }
 
 async function saveHistKeep(){

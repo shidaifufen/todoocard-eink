@@ -2333,6 +2333,52 @@ def make_routes():
         offset = int(request.query.get("offset", "0") or 0)
         return web.json_response(current().timeline(hours, offset))
 
+
+    async def _fav_list(request):
+        svc = current()
+        favs = [f for f in (svc.cfg.get("fav") or []) if Path(f).is_file()]
+        items = [{"path": f, "name": Path(f).name,
+                  "mtime": int(Path(f).stat().st_mtime)} for f in favs]
+        return web.json_response({"ok": True, "items": items})
+
+    async def _photo_thumb(request):
+        """给收藏页出缩略图；只允许已配置目录下的文件。"""
+        from PIL import Image, ImageOps
+        import io
+        path = request.query.get("path", "")
+        p = Path(path)
+        try:
+            roots = [Path(x).expanduser() for x in (current().cfg.get("folders") or [])]
+            if not any(str(p).startswith(str(r)) for r in roots):
+                raise web.HTTPForbidden()
+            if not p.exists():
+                raise web.HTTPNotFound()
+            im = Image.open(p)
+            im = ImageOps.exif_transpose(im).convert("RGB")
+            im.thumbnail((220, 330), Image.LANCZOS)
+            buf = io.BytesIO()
+            im.save(buf, "JPEG", quality=82)
+            return web.Response(body=buf.getvalue(), content_type="image/jpeg")
+        except web.HTTPException:
+            raise
+        except Exception:
+            raise web.HTTPNotFound()
+
+    async def _fav_push(request):
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        svc = current()
+        path = (body or {}).get("path")
+        if not path or not Path(path).exists():
+            return web.json_response({"ok": False, "error": "照片不存在"}, status=400)
+        svc._photo_pin = path
+        svc.cfg["photo_mode"] = "fav"
+        svc._save_cfg()
+        asyncio.create_task(svc.send("photo"))
+        return web.json_response({"ok": True, "started": True})
+
     async def _fav(request):
         try:
             body = await request.json()
@@ -2344,6 +2390,8 @@ def make_routes():
         fav = list(svc.cfg.get("fav") or [])
         if not path:
             return web.json_response({"ok": False, "error": "没有可收藏的照片"}, status=400)
+        if action == "add" and not Path(path).is_file():
+            return web.json_response({"ok": False, "error": "只能收藏单张图片，不能收藏文件夹"}, status=400)
         if action == "add" and path not in fav:
             fav.append(path)
         elif action == "remove" and path in fav:
@@ -2555,6 +2603,9 @@ def make_routes():
         ("GET", "/api/card/timeline", _timeline),
         ("GET", "/api/card/history/img", _hist_img),
         ("POST", "/api/card/fav", _fav),
+        ("GET", "/api/card/fav/list", _fav_list),
+        ("GET", "/api/card/photo", _photo_thumb),
+        ("POST", "/api/card/fav/push", _fav_push),
         ("GET", "/api/card/templates", _templates),
         ("GET", "/api/card/quote", _quote),
         ("GET", "/api/card/bing", _bing),
