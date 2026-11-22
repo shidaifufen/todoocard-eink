@@ -799,7 +799,7 @@ async function load(){
   if (panel !== 'schedule') renderSched(c.schedule||[]);
   renderRestoreBtn();
   renderHistory(c.history||[]);
-  if (panel === 'tpl') renderEditor();
+  if (panel === 'tpl') { renderEditor(); appendTplTuning(); }
 }
 
 async function preview(kind, fresh){
