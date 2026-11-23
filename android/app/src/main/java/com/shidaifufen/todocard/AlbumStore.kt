@@ -17,12 +17,16 @@ object AlbumStore {
                     val root = androidx.documentfile.provider.DocumentFile.fromTreeUri(ctx, uri)
                         ?: return@runCatching
                     walk(root, out, 0)
+                } else if (uri.scheme == "file" &&
+                    uri.path?.substringAfterLast('.', "")?.lowercase()?.let { it in exts } == true) {
+                    out.add(uri)
                 } else if (ctx.contentResolver.getType(uri)?.startsWith("image/") == true) {
                     out.add(uri)
                 }
             }
         }
-        return out.distinct().take(500)
+        val hidden = PlanStore.excludedPhotos(ctx)
+        return out.distinct().filter { it.toString() !in hidden }.take(500)
     }
 
     /** 随机取一张（供计划里的照片轮播使用） */

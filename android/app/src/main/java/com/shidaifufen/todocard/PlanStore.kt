@@ -138,6 +138,26 @@ object PlanStore {
         get() = sp_global.getString("lastPhoto", "") ?: ""
         set(v) { sp_global.edit().putString("lastPhoto", v).apply() }
 
+    var photoEdit: PhotoEdit.Params
+        get() = runCatching {
+            val data = JSONObject(sp_global.getString("photoEdit", "{}") ?: "{}")
+            PhotoEdit.Params(
+                zoom = data.optDouble("zoom", 1.0).toFloat().coerceIn(1f, 4f),
+                dx = data.optDouble("dx", 0.0).toFloat().coerceIn(-1f, 1f),
+                dy = data.optDouble("dy", 0.0).toFloat().coerceIn(-1f, 1f),
+                hue = data.optDouble("hue", 0.0).toFloat().coerceIn(-180f, 180f),
+                saturation = data.optDouble("saturation", 1.0).toFloat().coerceIn(0f, 2f),
+                exposure = data.optDouble("exposure", 0.0).toFloat().coerceIn(-2f, 2f),
+                contrast = data.optDouble("contrast", 1.0).toFloat().coerceIn(.6f, 1.6f),
+            )
+        }.getOrDefault(PhotoEdit.Params())
+        set(value) {
+            val data = JSONObject().put("zoom", value.zoom).put("dx", value.dx).put("dy", value.dy)
+                .put("hue", value.hue).put("saturation", value.saturation)
+                .put("exposure", value.exposure).put("contrast", value.contrast)
+            sp_global.edit().putString("photoEdit", data.toString()).apply()
+        }
+
     private fun fieldsKey() = "photoFields"
 
     var photoFields: PhotoCard.Fields
@@ -163,13 +183,19 @@ object PlanStore {
     fun addAlbum(c: Context, uri: String) {
         val list = albums(c).toMutableList()
         if (!list.contains(uri)) list.add(uri)
-        sp_global.edit().putString("albums", list.joinToString("\n")).apply()
+        sp_global.edit().putString("albums", list.joinToString("\n"))
+            .putStringSet("excludedPhotos", excludedPhotos(c) - uri).apply()
     }
+
+    fun excludedPhotos(c: Context): Set<String> = sp(c).getStringSet("excludedPhotos", emptySet())
+        ?.toSet() ?: emptySet()
 
     fun removeAlbum(uri: String) {
         val list = (sp_global.getString("albums", "") ?: "").split("\n")
             .filter { it.isNotBlank() && it != uri }
-        sp_global.edit().putString("albums", list.joinToString("\n")).apply()
+        val hidden = (sp_global.getStringSet("excludedPhotos", emptySet()) ?: emptySet()) + uri
+        sp_global.edit().putString("albums", list.joinToString("\n"))
+            .putStringSet("excludedPhotos", hidden).apply()
     }
 
     var lastDrawnUri: String

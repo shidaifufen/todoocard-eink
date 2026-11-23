@@ -89,8 +89,10 @@ object PhotoEdit {
         val dh = src.height * cover
         val left = (width - dw) / 2 + p.dx.coerceIn(-1f, 1f) * (dw - width) / 2
         val top = (height - dh) / 2 + p.dy.coerceIn(-1f, 1f) * (dh - height) / 2
+        val colorAdjusted = p.hue != 0f || p.saturation != 1f ||
+            p.exposure != 0f || p.contrast != 1f
         val paint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
-            colorFilter = ColorMatrixColorFilter(buildMatrix(p))
+            if (colorAdjusted) colorFilter = ColorMatrixColorFilter(buildMatrix(p))
         }
         c.save()
         c.clipRect(0f, 0f, width, height)

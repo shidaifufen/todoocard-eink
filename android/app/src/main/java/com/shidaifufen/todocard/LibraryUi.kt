@@ -41,7 +41,7 @@ import kotlinx.coroutines.withContext
 
 @Composable
 internal fun LibraryScreen(
-    albums: List<String>,
+    photos: List<Uri>,
     photoPath: String,
     fields: PhotoCard.Fields,
     edit: PhotoEdit.Params,
@@ -54,14 +54,9 @@ internal fun LibraryScreen(
     onEdit: (PhotoEdit.Params) -> Unit,
     onUse: () -> Unit,
 ) {
-    val ctx = LocalContext.current
-    var photos by remember { mutableStateOf<List<Uri>>(emptyList()) }
-    LaunchedEffect(albums) {
-        photos = withContext(Dispatchers.IO) { AlbumStore.listImages(ctx, albums) }
-    }
     val source by produceState<Bitmap?>(null, photoPath) {
         value = if (photoPath.isBlank()) null else withContext(Dispatchers.IO) {
-            PhotoEdit.decodePreview(photoPath)
+            runCatching { PhotoEdit.decodePreview(photoPath) }.getOrNull()
         }
     }
     val band = remember(photoPath, fields) {
@@ -107,7 +102,7 @@ internal fun LibraryScreen(
             Icon(Icons.Outlined.FolderOpen, null, Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp)); Text("也可选择可访问的文件夹")
         }
-        if (albums.isNotEmpty()) {
+        if (photos.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("相册照片", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))

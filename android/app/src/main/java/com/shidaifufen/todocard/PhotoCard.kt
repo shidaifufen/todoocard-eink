@@ -46,48 +46,7 @@ object PhotoCard {
     }
 
     fun render(path: String, fields: Fields): Bitmap {
-        val src0 = BitmapFactory.decodeFile(path)
-        val canvas = Bitmap.createBitmap(Render.W, Render.H, Bitmap.Config.ARGB_8888)
-        val c = Canvas(canvas)
-        c.drawColor(android.graphics.Color.WHITE)
-
-        val meta = readExif(path)
-        val hasAny = listOf(meta.taken, meta.time, meta.camera, meta.params).any { it.isNotBlank() }
-        val showDate = fields.date && meta.taken.isNotBlank()
-        val showTime = fields.time && meta.time.isNotBlank()
-        val line1 = listOf(if (showDate) meta.taken else "", if (showTime) meta.time else "")
-            .filter { it.isNotBlank() }.joinToString("  ")
-        val line2 = listOf(if (fields.camera) meta.camera else "",
-                           if (fields.params) meta.params else "")
-            .filter { it.isNotBlank() }.joinToString("  ")
-
-        val rows = (if (line1.isNotBlank()) 1 else 0) + (if (line2.isNotBlank()) 1 else 0)
-        val band = if (!hasAny || rows == 0) 0 else 24 + 26 * rows
-
-        val photoH = Render.H - band
-        if (src0 != null) {
-            val scale = maxOf(Render.W.toFloat() / src0.width, photoH.toFloat() / src0.height)
-            val w = (src0.width * scale).toInt(); val h = (src0.height * scale).toInt()
-            val left = (Render.W - w) / 2; val top = (photoH - h) / 2
-            c.drawBitmap(src0, null, android.graphics.Rect(left, top, left + w, top + h), null)
-        }
-
-        if (band > 0) {
-            c.drawRect(0f, photoH.toFloat(), Render.W.toFloat(), Render.H.toFloat(), Paint().apply {
-                color = android.graphics.Color.WHITE
-            })
-            c.drawRect(0f, photoH.toFloat(), Render.W.toFloat(), photoH + 2f, Paint().apply {
-                color = android.graphics.Color.BLACK
-            })
-            var y = photoH + 26f
-            if (line1.isNotBlank()) {
-                c.drawText(line1, Render.M, y, paint(21f, bold = true)); y += 26f
-            }
-            if (line2.isNotBlank()) {
-                c.drawText(line2, Render.M, y, paint(16f)); y += 24f
-            }
-        }
-        return canvas
+        return render(path, fields, PhotoEdit.Params())
     }
 
     private data class Meta(
@@ -125,7 +84,7 @@ object PhotoCard {
     fun importToFiles(ctx: android.content.Context, uri: android.net.Uri): String? {
         return try {
             val dir = File(ctx.filesDir, "photos").apply { mkdirs() }
-            val out = File(dir, "p_${System.currentTimeMillis()}.jpg")
+            val out = File(dir, "p_${System.nanoTime()}.jpg")
             val input = ctx.contentResolver.openInputStream(uri) ?: return null
             input.use {
                 out.outputStream().use { output -> it.copyTo(output) }

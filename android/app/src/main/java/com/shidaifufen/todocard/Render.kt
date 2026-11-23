@@ -261,22 +261,35 @@ object Render {
 
     private fun Canvas.drawPoem(card: Card) {
         head(card.poemTitle, card.poemBy)
-        var y = 198f
-        val p = paint(35f, BLACK, bold = true)
-        card.poemLines.take(6).forEach { line ->
-            wrap(this, line, p, W - 2 * M).forEach { fragment ->
-                if (y < 545f) drawText(fragment, M, y, p)
-                y += 52f
-            }
+        val hasNote = card.poemNote.isNotBlank()
+        val startY = 190f
+        val maxPoemHeight = if (hasNote) 360f else 505f
+        var chosenPaint = paint(35f, BLACK, bold = true)
+        var wrapped = emptyList<String>()
+        var lineHeight = 0f
+        for (fontSize in 35 downTo 19 step 2) {
+            val candidate = paint(fontSize.toFloat(), BLACK, bold = true)
+            val lines = card.poemLines.take(8).flatMap { wrap(this, it, candidate, W - M * 2) }
+            val height = fontSize * 1.48f
+            chosenPaint = candidate
+            wrapped = lines
+            lineHeight = height
+            if (lines.size * height <= maxPoemHeight) break
         }
-        if (card.poemNote.isNotEmpty()) {
-            val noteTop = maxOf(567f, y + 14f).coerceAtMost(603f)
+        val maxLines = (maxPoemHeight / lineHeight).toInt().coerceAtLeast(1)
+        val displayLines = wrapped.take(maxLines).toMutableList()
+        if (wrapped.size > maxLines && displayLines.isNotEmpty()) {
+            displayLines[displayLines.lastIndex] = fitLine(displayLines.last() + "…", chosenPaint, W - M * 2)
+        }
+        displayLines.forEachIndexed { index, line ->
+            drawText(line, M, startY + index * lineHeight, chosenPaint)
+        }
+        if (hasNote) {
+            val noteTop = 582f
             rule(noteTop)
-            drawText("赏析", M, noteTop + 39f, paint(22f, RED, bold = true))
-            var ny = noteTop + 69f
-            wrap(this, card.poemNote, paint(20f), W - 2 * M).take(3).forEach {
-                if (ny < H - 50f) drawText(it, M, ny, paint(20f))
-                ny += 27f
+            drawText("赏析", M, noteTop + 34f, paint(20f, RED, bold = true))
+            wrap(this, card.poemNote, paint(18f), W - M * 2).take(3).forEachIndexed { index, line ->
+                drawText(line, M, noteTop + 62f + index * 23f, paint(18f))
             }
         }
         foot()

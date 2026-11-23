@@ -41,17 +41,23 @@ internal val TEMPLATES = listOf(
     "photo" to "照片轮播",
 )
 
-private fun handleSharedIntent(ctx: Context, intent: Intent?,
-                               onPhoto: (Uri) -> Unit, onText: (String) -> Unit) {
+internal fun handleSharedIntent(intent: Intent?,
+                               onPhotos: (List<Uri>) -> Unit, onText: (String) -> Unit) {
     when (intent?.action) {
         Intent.ACTION_SEND -> {
             val uri = if (Build.VERSION.SDK_INT >= 33)
                 intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
             else @Suppress("DEPRECATION") intent.getParcelableExtra(Intent.EXTRA_STREAM)
-            if (uri != null) onPhoto(uri)
+            if (uri != null) onPhotos(listOf(uri))
             else intent.getStringExtra(Intent.EXTRA_TEXT)?.let(onText)
         }
-        Intent.ACTION_VIEW -> intent.data?.let(onPhoto)
+        Intent.ACTION_SEND_MULTIPLE -> {
+            val uris = if (Build.VERSION.SDK_INT >= 33)
+                intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+            else @Suppress("DEPRECATION") intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+            uris?.distinct()?.take(30)?.takeIf { it.isNotEmpty() }?.let(onPhotos)
+        }
+        Intent.ACTION_VIEW -> intent.data?.let { onPhotos(listOf(it)) }
         Intent.ACTION_PROCESS_TEXT -> intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)
             ?.toString()?.let(onText)
     }
@@ -84,7 +90,7 @@ private fun App(incomingIntent: Intent?) {
     var preview by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var photoPath by remember { mutableStateOf(PlanStore.lastPhoto) }
     var fields by remember { mutableStateOf(PlanStore.photoFields) }
-    var edit by remember { mutableStateOf(PhotoEdit.Params()) }
+    var edit by remember { mutableStateOf(PlanStore.photoEdit) }
     var albums by remember { mutableStateOf(PlanStore.albums(ctx)) }
     var carouselPhotos by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var selectedCarousel by remember { mutableStateOf<Uri?>(null) }
@@ -123,6 +129,10 @@ private fun App(incomingIntent: Intent?) {
             }.getOrNull()
         }
     }
+    LaunchedEffect(edit) {
+        kotlinx.coroutines.delay(300)
+        PlanStore.photoEdit = edit
+    }
 
     fun loadPhoto(uri: Uri, autoSend: Boolean = false, openEditor: Boolean = true) {
         scope.launch {
@@ -132,6 +142,7 @@ private fun App(incomingIntent: Intent?) {
             photoPath = path
             PlanStore.lastPhoto = path
             edit = PhotoEdit.Params()
+            PlanStore.photoEdit = edit
             kind = "photo"
             tab = if (autoSend || !openEditor) 0 else 2
             if (autoSend) pendingSharedPush = path
@@ -139,9 +150,35 @@ private fun App(incomingIntent: Intent?) {
         }
     }
 
+    fun loadSharedPhotos(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        scope.launch {
+            status = "正在导入 ${uris.size} 张分享照片…"
+            val imported = withContext(Dispatchers.IO) {
+                uris.mapNotNull { uri -> PhotoCard.importToFiles(ctx, uri) }
+            }
+            if (imported.isEmpty()) {
+                status = "照片读取失败，请在应用内重新选择"
+                return@launch
+            }
+            imported.forEach { path -> PlanStore.addAlbum(ctx, Uri.fromFile(java.io.File(path)).toString()) }
+            val first = imported.first()
+            photoPath = first
+            PlanStore.lastPhoto = first
+            edit = PhotoEdit.Params()
+            PlanStore.photoEdit = edit
+            kind = "photo"
+            tab = 0
+            pendingSharedPush = first
+            albums = PlanStore.albums(ctx)
+            status = if (imported.size == uris.size) "已导入 ${imported.size} 张，正准备推送第一张" else
+                "已导入 ${imported.size}/${uris.size} 张，正准备推送第一张"
+        }
+    }
+
     LaunchedEffect(incomingIntent) {
-        handleSharedIntent(ctx, incomingIntent,
-            onPhoto = { uri -> loadPhoto(uri, autoSend = true) },
+        handleSharedIntent(incomingIntent,
+            onPhotos = ::loadSharedPhotos,
             onText = { text ->
                 if (text.isNotBlank()) {
                     card = card.copy(customTitle = "分享内容",
@@ -200,15 +237,25 @@ private fun App(incomingIntent: Intent?) {
     }
     val multiplePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(30)) { uris ->
-        uris.forEach { uri ->
-            runCatching { ctx.contentResolver.takePersistableUriPermission(
-                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-            PlanStore.addAlbum(ctx, uri.toString())
-        }
-        albums = PlanStore.albums(ctx)
         if (uris.isNotEmpty()) {
-            selectedCarousel = uris.first()
-            status = "已添加 ${uris.size} 张轮播照片"
+            scope.launch {
+                status = "正在添加轮播照片…"
+                val retained = withContext(Dispatchers.IO) {
+                    uris.mapNotNull { uri ->
+                        val persisted = runCatching {
+                            ctx.contentResolver.takePersistableUriPermission(
+                                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }.isSuccess
+                        if (persisted) uri else PhotoCard.importToFiles(ctx, uri)
+                            ?.let { Uri.fromFile(java.io.File(it)) }
+                    }
+                }
+                retained.forEach { PlanStore.addAlbum(ctx, it.toString()) }
+                albums = PlanStore.albums(ctx)
+                selectedCarousel = retained.firstOrNull()
+                status = if (retained.size == uris.size) "已添加 ${retained.size} 张轮播照片" else
+                    "已添加 ${retained.size}/${uris.size} 张，其余照片无法读取"
+            }
         }
     }
     val cameraUri = remember { mutableStateOf<Uri?>(null) }
@@ -373,17 +420,21 @@ private fun App(incomingIntent: Intent?) {
                         onSend = { selectedCarousel?.let { loadPhoto(it, autoSend = true) } },
                         onRemove = {
                             selectedCarousel?.let { PlanStore.removeAlbum(it.toString()) }
+                            carouselPhotos = carouselPhotos.filter { it != selectedCarousel }
                             albums = PlanStore.albums(ctx)
-                            selectedCarousel = null
+                            selectedCarousel = carouselPhotos.firstOrNull()
                         })
-                    2 -> LibraryScreen(albums, photoPath, fields, edit,
+                    2 -> LibraryScreen(carouselPhotos, photoPath, fields, edit,
                         onPick = { picker.launch(PickVisualMediaRequest(
                             ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                         onCamera = ::takePhoto, onAddAlbum = { albumLauncher.launch(null) },
                         onAddPhotos = ::addCarouselPhotos,
                         onAlbumPhoto = { loadPhoto(it) },
                         onFields = { fields = it; PlanStore.photoFields = it },
-                        onEdit = { edit = it }, onUse = { kind = "photo"; tab = 0 })
+                        onEdit = { edit = it }, onUse = {
+                            PlanStore.photoEdit = edit
+                            kind = "photo"; tab = 0
+                        })
                     3 -> PlanScreen(ctx)
                     else -> SettingsScreen(pairedName, pairedAddress, fields, found,
                         device?.device?.address, status,
