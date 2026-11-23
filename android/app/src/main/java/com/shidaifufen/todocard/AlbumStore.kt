@@ -3,7 +3,7 @@ package com.shidaifufen.todocard
 import android.content.Context
 import android.net.Uri
 
-/** 已添加相册（SAF 目录）里的图片枚举 */
+/** 系统照片选择器中的单张图片和 SAF 目录使用同一份轮播列表。 */
 object AlbumStore {
 
     private val exts = setOf("jpg", "jpeg", "png", "webp", "heic", "heif", "bmp")
@@ -12,25 +12,32 @@ object AlbumStore {
         val out = mutableListOf<Uri>()
         albumUris.forEach { s ->
             runCatching {
-                val tree = Uri.parse(s)
-                val root = androidx.documentfile.provider.DocumentFile.fromTreeUri(ctx, tree) ?: return@runCatching
-                walk(ctx, root, out, 0)
+                val uri = Uri.parse(s)
+                if (android.provider.DocumentsContract.isTreeUri(uri)) {
+                    val root = androidx.documentfile.provider.DocumentFile.fromTreeUri(ctx, uri)
+                        ?: return@runCatching
+                    walk(root, out, 0)
+                } else if (ctx.contentResolver.getType(uri)?.startsWith("image/") == true) {
+                    out.add(uri)
+                }
             }
         }
-        return out
+        return out.distinct().take(500)
     }
 
     /** 随机取一张（供计划里的照片轮播使用） */
-    fun randomImage(ctx: Context, albumUris: List<String>): android.net.Uri? {
+    fun randomImage(ctx: Context, albumUris: List<String>, except: String? = null): Uri? {
         val all = listImages(ctx, albumUris)
-        return if (all.isEmpty()) null else all.random()
+        val candidates = all.filter { it.toString() != except }.ifEmpty { all }
+        return candidates.randomOrNull()
     }
 
-    private fun walk(ctx: Context, dir: androidx.documentfile.provider.DocumentFile,
+    private fun walk(dir: androidx.documentfile.provider.DocumentFile,
                      out: MutableList<Uri>, depth: Int) {
-        if (depth > 3 || out.size > 500) return
+        if (depth > 3 || out.size >= 500) return
         dir.listFiles().forEach { f ->
-            if (f.isDirectory) walk(ctx, f, out, depth + 1)
+            if (out.size >= 500) return@forEach
+            if (f.isDirectory) walk(f, out, depth + 1)
             else if ((f.name ?: "").substringAfterLast('.', "").lowercase() in exts) out.add(f.uri)
         }
     }

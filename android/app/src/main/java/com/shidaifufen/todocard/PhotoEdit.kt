@@ -7,6 +7,8 @@ import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Matrix
+import androidx.exifinterface.media.ExifInterface
 
 /**
  * 照片推送前的可视化编辑：
@@ -68,22 +70,57 @@ object PhotoEdit {
 
     /** 渲染成卡片（band>0 时底部留出信息带） */
     fun render(path: String, p: Params, band: Int = 0): Bitmap {
-        val src = BitmapFactory.decodeFile(path) ?: return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
-        val W = Render.W
-        val H = Render.H - band
+        val src = decodePreview(path, 2400) ?: error("照片无法解码，请重新选择")
         val out = Bitmap.createBitmap(Render.W, Render.H, Bitmap.Config.ARGB_8888)
         val c = Canvas(out)
-        c.drawColor(android.graphics.Color.WHITE)
+        drawInto(c, src, p, band)
+        src.recycle()
+        return out
+    }
 
-        val cover = maxOf(W.toFloat() / src.width, H.toFloat() / src.height) * p.zoom
+    /** 手势预览复用已解码图片；只重绘画布，不重新解码或分配卡片位图。 */
+    fun drawInto(c: Canvas, src: Bitmap, p: Params, band: Int = 0) {
+        val width = Render.W.toFloat()
+        val height = (Render.H - band).toFloat()
+        c.drawRect(0f, 0f, width, Render.H.toFloat(),
+            Paint().apply { color = android.graphics.Color.WHITE })
+        val cover = maxOf(width / src.width, height / src.height) * p.zoom
         val dw = src.width * cover
         val dh = src.height * cover
-        val left = (W - dw) / 2 + p.dx * (dw - W) / 2
-        val top = (H - dh) / 2 + p.dy * (dh - H) / 2
-
-        val paint = Paint(Paint.FILTER_BITMAP_FLAG)
-        paint.colorFilter = ColorMatrixColorFilter(buildMatrix(p))
+        val left = (width - dw) / 2 + p.dx.coerceIn(-1f, 1f) * (dw - width) / 2
+        val top = (height - dh) / 2 + p.dy.coerceIn(-1f, 1f) * (dh - height) / 2
+        val paint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
+            colorFilter = ColorMatrixColorFilter(buildMatrix(p))
+        }
+        c.save()
+        c.clipRect(0f, 0f, width, height)
         c.drawBitmap(src, null, RectF(left, top, left + dw, top + dh), paint)
-        return out
+        c.restore()
+    }
+
+    fun decodePreview(path: String, maxEdge: Int = 1200): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(path, bounds)
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > maxEdge) sample *= 2
+        val bitmap = BitmapFactory.decodeFile(path,
+            BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
+        val orientation = runCatching { ExifInterface(path).getAttributeInt(
+            ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL) }
+            .getOrDefault(ExifInterface.ORIENTATION_NORMAL)
+        val matrix = Matrix().apply {
+            when (orientation) {
+                ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> setScale(-1f, 1f)
+                ExifInterface.ORIENTATION_ROTATE_180 -> setRotate(180f)
+                ExifInterface.ORIENTATION_FLIP_VERTICAL -> setScale(1f, -1f)
+                ExifInterface.ORIENTATION_TRANSPOSE -> { setRotate(90f); postScale(-1f, 1f) }
+                ExifInterface.ORIENTATION_ROTATE_90 -> setRotate(90f)
+                ExifInterface.ORIENTATION_TRANSVERSE -> { setRotate(-90f); postScale(-1f, 1f) }
+                ExifInterface.ORIENTATION_ROTATE_270 -> setRotate(-90f)
+            }
+        }
+        if (matrix.isIdentity) return bitmap
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+            .also { if (it !== bitmap) bitmap.recycle() }
     }
 }

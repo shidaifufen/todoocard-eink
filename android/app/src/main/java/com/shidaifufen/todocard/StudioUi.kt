@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 
 internal val StudioInk = Color(0xFF252A2D)
 internal val StudioMuted = Color(0xFF68737B)
@@ -65,6 +66,9 @@ internal fun StudioScreen(
     onScan: () -> Unit,
     onSelectDevice: (ScanResult) -> Unit,
     onSend: () -> Unit,
+    carouselCount: Int,
+    onDraw: () -> Unit,
+    onAddPhotos: () -> Unit,
 ) {
     var editing by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(StudioBackground)) {
@@ -89,6 +93,14 @@ internal fun StudioScreen(
             }
         }
         Spacer(Modifier.height(8.dp))
+        if (kind == "photo") Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Text("轮播图库 · $carouselCount 张", color = StudioMuted, fontSize = 12.sp,
+                modifier = Modifier.weight(1f))
+            TextButton(onClick = onAddPhotos, enabled = !busy) { Text("添加") }
+            FilledTonalButton(onClick = onDraw, enabled = carouselCount > 0 && !busy,
+                shape = RoundedCornerShape(8.dp)) { Text("抽一张") }
+        }
         BoxWithConstraints(
             Modifier.fillMaxWidth().weight(1f).padding(horizontal = 20.dp),
             contentAlignment = Alignment.Center,
@@ -116,7 +128,7 @@ internal fun StudioScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("屏幕预览", fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f))
-                if (kind != "progress") TextButton(enabled = !busy, onClick = {
+                if (kind !in listOf("progress", "calendar")) TextButton(enabled = !busy, onClick = {
                     if (kind == "photo") onPhoto() else editing = true
                 }) {
                     Icon(if (kind == "photo") Icons.Outlined.PhotoLibrary else Icons.Outlined.Edit,
@@ -210,6 +222,20 @@ private fun CardEditorDialog(
     var poemNote by remember(kind, initial) { mutableStateOf(initial.poemNote) }
     var customTitle by remember(kind, initial) { mutableStateOf(initial.customTitle) }
     var customLines by remember(kind, initial) { mutableStateOf(initial.customLines.joinToString("\n")) }
+    var weatherCity by remember(kind, initial) { mutableStateOf(initial.weatherCity) }
+    var weatherText by remember(kind, initial) { mutableStateOf(initial.weatherText) }
+    var weatherTemp by remember(kind, initial) { mutableStateOf(initial.weatherTemp) }
+    var weatherHigh by remember(kind, initial) { mutableStateOf(initial.weatherHigh) }
+    var weatherLow by remember(kind, initial) { mutableStateOf(initial.weatherLow) }
+    var weatherAqi by remember(kind, initial) { mutableStateOf(initial.weatherAqi) }
+    var weatherForecast by remember(kind, initial) {
+        mutableStateOf(initial.weatherForecast.joinToString("\n"))
+    }
+    val scope = rememberCoroutineScope()
+    var weatherBusy by remember { mutableStateOf(false) }
+    var weatherStatus by remember { mutableStateOf("") }
+    var places by remember { mutableStateOf<List<WeatherData.Place>>(emptyList()) }
+    var weatherLocation by remember(initial) { mutableStateOf(initial) }
     val invalidCountdown = kind == "countdown" && countdowns.lines().any { line ->
         if (line.isBlank()) false else {
             val parts = line.split(",", limit = 2)
@@ -225,7 +251,61 @@ private fun CardEditorDialog(
             Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 when (kind) {
-                    "summary", "todo" -> EditorField("待办事项", todos, { todos = it }, "每行一项", 6)
+                    "summary", "todo" -> {
+                        EditorField("待办事项", todos, { todos = it }, "每行一项", 5)
+                        if (kind == "summary") {
+                            EditorField("今日一句", quote, { quote = it }, lines = 2)
+                            EditorField("署名", quoteBy, { quoteBy = it })
+                            Text("天气资料在天气看板中编辑，两张卡片共用。", fontSize = 12.sp,
+                                color = StudioMuted)
+                        }
+                    }
+                    "weather" -> {
+                        EditorField("城市", weatherCity, { weatherCity = it })
+                        Button(enabled = weatherCity.isNotBlank() && !weatherBusy, onClick = {
+                            scope.launch {
+                                weatherBusy = true
+                                weatherStatus = "正在查找城市…"
+                                runCatching { WeatherData.search(weatherCity) }
+                                    .onSuccess {
+                                        places = it
+                                        weatherStatus = if (it.isEmpty()) "没有找到，请换一个城市名" else "选择城市获取实时天气"
+                                    }.onFailure { weatherStatus = it.message ?: "查找失败" }
+                                weatherBusy = false
+                            }
+                        }) { Text(if (weatherBusy) "加载中…" else "查找城市并更新天气") }
+                        places.forEach { place ->
+                            TextButton(enabled = !weatherBusy, onClick = {
+                                scope.launch {
+                                    weatherBusy = true
+                                    weatherStatus = "正在获取天气…"
+                                    runCatching { WeatherData.load(place, initial) }
+                                        .onSuccess { value ->
+                                            weatherCity = value.weatherCity
+                                            weatherText = value.weatherText
+                                            weatherTemp = value.weatherTemp
+                                            weatherHigh = value.weatherHigh
+                                            weatherLow = value.weatherLow
+                                            weatherAqi = value.weatherAqi
+                                            weatherForecast = value.weatherForecast.joinToString("\n")
+                                            weatherLocation = value
+                                            places = emptyList()
+                                            weatherStatus = "天气已更新，保存后应用到卡片"
+                                        }.onFailure { weatherStatus = it.message ?: "天气获取失败" }
+                                    weatherBusy = false
+                                }
+                            }) { Text(place.label) }
+                        }
+                        if (weatherStatus.isNotBlank()) Text(weatherStatus, fontSize = 12.sp,
+                            color = StudioMuted)
+                        EditorField("天气", weatherText, { weatherText = it }, "例如：多云")
+                        EditorField("当前温度", weatherTemp, { weatherTemp = it }, "数字，例如 26")
+                        EditorField("最高温度", weatherHigh, { weatherHigh = it })
+                        EditorField("最低温度", weatherLow, { weatherLow = it })
+                        EditorField("空气 AQI", weatherAqi, { weatherAqi = it })
+                        EditorField("未来三天", weatherForecast, { weatherForecast = it },
+                            "每行一天，例如：周一 晴 22~28°", 3)
+                    }
                     "quote" -> {
                         EditorField("句子", quote, { quote = it }, "写一句想展示的话", 4)
                         EditorField("署名", quoteBy, { quoteBy = it })
@@ -251,7 +331,7 @@ private fun CardEditorDialog(
             }
         },
         confirmButton = {
-            Button(enabled = !invalidCountdown, onClick = {
+            Button(enabled = !invalidCountdown && !weatherBusy, onClick = {
                 onSave(initial.copy(
                     quote = quote.trim(), quoteBy = quoteBy.trim(),
                     todos = todos.lines().map { it.trim() }.filter { it.isNotEmpty() }.take(6),
@@ -265,6 +345,14 @@ private fun CardEditorDialog(
                     poemLines = poemLines.lines().map { it.trim() }.filter { it.isNotEmpty() }.take(6),
                     poemNote = poemNote.trim(), customTitle = customTitle.trim(),
                     customLines = customLines.lines().map { it.trim() }.filter { it.isNotEmpty() }.take(8),
+                    weatherCity = weatherCity.trim(), weatherText = weatherText.trim(),
+                    weatherTemp = weatherTemp.trim(), weatherHigh = weatherHigh.trim(),
+                    weatherLow = weatherLow.trim(), weatherAqi = weatherAqi.trim(),
+                    weatherForecast = weatherForecast.lines().map { it.trim() }
+                        .filter { it.isNotEmpty() }.take(3),
+                    weatherLatitude = weatherLocation.weatherLatitude,
+                    weatherLongitude = weatherLocation.weatherLongitude,
+                    weatherUpdated = weatherLocation.weatherUpdated,
                 ))
             }, shape = RoundedCornerShape(8.dp)) { Text("保存预览") }
         },

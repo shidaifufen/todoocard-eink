@@ -100,6 +100,16 @@ object PlanStore {
                 poemNote = data.optString("poemNote"),
                 customTitle = data.optString("customTitle", Render.Card().customTitle),
                 customLines = if (data.has("customLines")) lines("customLines") else Render.Card().customLines,
+                weatherCity = data.optString("weatherCity"),
+                weatherText = data.optString("weatherText"),
+                weatherTemp = data.optString("weatherTemp"),
+                weatherHigh = data.optString("weatherHigh"),
+                weatherLow = data.optString("weatherLow"),
+                weatherAqi = data.optString("weatherAqi"),
+                weatherForecast = lines("weatherForecast"),
+                weatherLatitude = data.optString("weatherLatitude"),
+                weatherLongitude = data.optString("weatherLongitude"),
+                weatherUpdated = data.optString("weatherUpdated"),
             )
         }.getOrDefault(Render.Card())
     }
@@ -114,6 +124,12 @@ object PlanStore {
             .put("poemTitle", card.poemTitle).put("poemBy", card.poemBy)
             .put("poemLines", JSONArray(card.poemLines)).put("poemNote", card.poemNote)
             .put("customTitle", card.customTitle).put("customLines", JSONArray(card.customLines))
+            .put("weatherCity", card.weatherCity).put("weatherText", card.weatherText)
+            .put("weatherTemp", card.weatherTemp).put("weatherHigh", card.weatherHigh)
+            .put("weatherLow", card.weatherLow).put("weatherAqi", card.weatherAqi)
+            .put("weatherForecast", JSONArray(card.weatherForecast))
+            .put("weatherLatitude", card.weatherLatitude).put("weatherLongitude", card.weatherLongitude)
+            .put("weatherUpdated", card.weatherUpdated)
         sp(c).edit().putString("card", data.toString()).apply()
     }
 
@@ -149,6 +165,16 @@ object PlanStore {
         if (!list.contains(uri)) list.add(uri)
         sp_global.edit().putString("albums", list.joinToString("\n")).apply()
     }
+
+    fun removeAlbum(uri: String) {
+        val list = (sp_global.getString("albums", "") ?: "").split("\n")
+            .filter { it.isNotBlank() && it != uri }
+        sp_global.edit().putString("albums", list.joinToString("\n")).apply()
+    }
+
+    var lastDrawnUri: String
+        get() = sp_global.getString("lastDrawnUri", "") ?: ""
+        set(value) { sp_global.edit().putString("lastDrawnUri", value).apply() }
 
     var lastChecked: Long
         get() = sp_global.getLong("lastChecked", 0L)

@@ -4,6 +4,7 @@ import android.bluetooth.le.ScanResult
 import android.graphics.Bitmap
 import android.net.Uri
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,6 +26,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -45,6 +48,7 @@ internal fun LibraryScreen(
     onPick: () -> Unit,
     onCamera: () -> Unit,
     onAddAlbum: () -> Unit,
+    onAddPhotos: () -> Unit,
     onAlbumPhoto: (Uri) -> Unit,
     onFields: (PhotoCard.Fields) -> Unit,
     onEdit: (PhotoEdit.Params) -> Unit,
@@ -55,13 +59,29 @@ internal fun LibraryScreen(
     LaunchedEffect(albums) {
         photos = withContext(Dispatchers.IO) { AlbumStore.listImages(ctx, albums) }
     }
-    val photoPreview by produceState<Bitmap?>(null, photoPath, fields, edit) {
-        value = if (photoPath.isBlank()) null else withContext(Dispatchers.Default) {
-            runCatching { PhotoCard.render(photoPath, fields, edit) }.getOrNull()
+    val source by produceState<Bitmap?>(null, photoPath) {
+        value = if (photoPath.isBlank()) null else withContext(Dispatchers.IO) {
+            PhotoEdit.decodePreview(photoPath)
         }
+    }
+    val band = remember(photoPath, fields) {
+        if (photoPath.isBlank()) 0 else PhotoCard.bandHeight(photoPath, fields)
     }
     val currentEdit by rememberUpdatedState(edit)
     val currentOnEdit by rememberUpdatedState(onEdit)
+    val currentSource by rememberUpdatedState(source)
+    val currentBand by rememberUpdatedState(band)
+    val infoBand by produceState<Bitmap?>(null, photoPath, fields, band) {
+        value = if (band == 0) null else withContext(Dispatchers.Default) {
+            Bitmap.createBitmap(Render.W, Render.H, Bitmap.Config.ARGB_8888).also {
+                PhotoCard.drawBand(android.graphics.Canvas(it), photoPath, fields, band)
+            }
+        }
+    }
+    var tool by remember { mutableIntStateOf(0) }
+    var compare by remember { mutableStateOf(false) }
+    var showGrid by remember { mutableStateOf(true) }
+    var showAdvanced by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
         .background(StudioBackground).padding(horizontal = 20.dp)) {
         Spacer(Modifier.height(12.dp))
@@ -78,16 +98,20 @@ internal fun LibraryScreen(
                 Spacer(Modifier.width(5.dp)); Text("拍照")
             }
         }
-        OutlinedButton(onClick = onAddAlbum, shape = RoundedCornerShape(8.dp),
+        OutlinedButton(onClick = onAddPhotos, shape = RoundedCornerShape(8.dp),
             modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Outlined.AddPhotoAlternate, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp)); Text("从系统相册多选，加入轮播")
+        }
+        TextButton(onClick = onAddAlbum, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Outlined.FolderOpen, null, Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp)); Text("添加轮播相册")
+            Spacer(Modifier.width(6.dp)); Text("也可选择可访问的文件夹")
         }
         if (albums.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("相册照片", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                Text("${albums.size} 个相册 · ${photos.size} 张", fontSize = 12.sp, color = StudioMuted)
+                Text("${photos.size} 张可轮播", fontSize = 12.sp, color = StudioMuted)
             }
             Spacer(Modifier.height(8.dp))
             if (photos.isEmpty()) Text("相册里还没有可用照片", fontSize = 12.sp, color = StudioMuted)
@@ -109,6 +133,8 @@ internal fun LibraryScreen(
             }
         } else {
             Text("照片编辑", fontWeight = FontWeight.SemiBold)
+            Text("在画面上拖动调整位置，双指缩放；也可用下方按钮微调",
+                fontSize = 12.sp, color = StudioMuted)
             Spacer(Modifier.height(10.dp))
             BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 val width = minOf(maxWidth, 255.dp)
@@ -116,23 +142,86 @@ internal fun LibraryScreen(
                     .background(Color.White)
                     .border(1.dp, Color(0xFFD9DED8))
                     .pointerInput(photoPath) {
-                        detectTransformGestures { _, pan, zoom, _ ->
+                        detectTransformGestures { centroid, pan, zoom, _ ->
                             val params = currentEdit
+                            val src = currentSource ?: return@detectTransformGestures
                             val nextZoom = (params.zoom * zoom).coerceIn(1f, 4f)
+                            val w = size.width.toFloat()
+                            val h = size.height * (Render.H - currentBand).toFloat() / Render.H
+                            val cover = maxOf(w / src.width, h / src.height)
+                            val oldW = src.width * cover * params.zoom
+                            val oldH = src.height * cover * params.zoom
+                            val newW = src.width * cover * nextZoom
+                            val newH = src.height * cover * nextZoom
+                            val ratio = nextZoom / params.zoom
+                            val oldX = params.dx * (oldW - w) / 2
+                            val oldY = params.dy * (oldH - h) / 2
+                            val nextX = (oldX * ratio + (centroid.x - w / 2) * (1 - ratio) + pan.x)
+                            val nextY = (oldY * ratio + (centroid.y - h / 2) * (1 - ratio) + pan.y)
                             currentOnEdit(params.copy(
                                 zoom = nextZoom,
-                                dx = (params.dx + pan.x / size.width * 2f).coerceIn(-1f, 1f),
-                                dy = (params.dy + pan.y / size.height * 2f).coerceIn(-1f, 1f),
+                                dx = if (newW - w < 1f) 0f else (nextX * 2 / (newW - w)).coerceIn(-1f, 1f),
+                                dy = if (newH - h < 1f) 0f else (nextY * 2 / (newH - h)).coerceIn(-1f, 1f),
                             ))
                         }
                     }) {
-                    photoPreview?.let {
-                        Image(it.asImageBitmap(), "照片卡片预览", Modifier.fillMaxSize(),
-                            contentScale = ContentScale.FillBounds)
+                    source?.let { bitmap ->
+                        Canvas(Modifier.fillMaxSize()) {
+                            drawIntoCanvas { canvas ->
+                                val native = canvas.nativeCanvas
+                                native.save()
+                                native.scale(size.width / Render.W, size.height / Render.H)
+                                val shown = if (compare) edit.copy(hue = 0f, exposure = 0f,
+                                    saturation = 1f, contrast = 1f) else edit
+                                PhotoEdit.drawInto(native, bitmap, shown, band)
+                                infoBand?.let { native.drawBitmap(it, 0f, 0f, null) }
+                                native.restore()
+                            }
+                            if (showGrid && tool == 0) {
+                                val line = Color.White.copy(alpha = .5f)
+                                val bottom = size.height * (Render.H - band) / Render.H
+                                for (index in 1..2) {
+                                    drawLine(line, androidx.compose.ui.geometry.Offset(size.width * index / 3, 0f),
+                                        androidx.compose.ui.geometry.Offset(size.width * index / 3, bottom), 1.dp.toPx())
+                                    drawLine(line, androidx.compose.ui.geometry.Offset(0f, bottom * index / 3),
+                                        androidx.compose.ui.geometry.Offset(size.width, bottom * index / 3), 1.dp.toPx())
+                                }
+                            }
+                        }
                     }
                 }
             }
+            Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("裁切", "调色", "信息带").forEachIndexed { index, title ->
+                    FilterChip(tool == index, onClick = { tool = index }, label = { Text(title) },
+                        shape = RoundedCornerShape(8.dp))
+                }
+            }
+            if (tool == 0) {
+            Row(Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = { onEdit(edit.copy(zoom = (edit.zoom - .15f).coerceAtLeast(1f))) }) {
+                    Text("－")
+                }
+                Text("${"%.1f".format(edit.zoom)}×", fontSize = 13.sp)
+                OutlinedButton(onClick = { onEdit(edit.copy(zoom = (edit.zoom + .15f).coerceAtMost(4f))) }) {
+                    Text("＋")
+                }
+                TextButton(onClick = { onEdit(edit.copy(zoom = 1f, dx = 0f, dy = 0f)) }) {
+                    Text("居中")
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("显示构图网格", Modifier.weight(1f), fontSize = 13.sp)
+                Switch(showGrid, onCheckedChange = { showGrid = it })
+            }
+            Adjustment("缩放", edit.zoom, 1f..4f, { onEdit(edit.copy(zoom = it)) }, "%.1f×")
+            Adjustment("左右", edit.dx, -1f..1f, { onEdit(edit.copy(dx = it)) }, "%+.1f")
+            Adjustment("上下", edit.dy, -1f..1f, { onEdit(edit.copy(dy = it)) }, "%+.1f")
+            }
             Spacer(Modifier.height(16.dp))
+            if (tool == 2) {
             Text("信息带", fontWeight = FontWeight.SemiBold)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf(
@@ -145,11 +234,33 @@ internal fun LibraryScreen(
                         label = { Text(label, fontSize = 12.sp) }, shape = RoundedCornerShape(8.dp))
                 }
             }
-            Adjustment("缩放", edit.zoom, 1f..4f, { onEdit(edit.copy(zoom = it)) }, "%.1f×")
+            Text("只显示照片原本包含的拍摄信息；关闭后画面会自动填满空间。",
+                fontSize = 12.sp, color = StudioMuted)
+            }
+            if (tool == 1) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("自然", "明亮", "黑白").forEachIndexed { index, label ->
+                    OutlinedButton(onClick = { onEdit(edit.copy(hue = 0f, contrast = 1f,
+                        saturation = if (index == 2) 0f else 1f,
+                        exposure = if (index == 1) .35f else 0f)) },
+                        modifier = Modifier.weight(1f), contentPadding = PaddingValues(6.dp),
+                        shape = RoundedCornerShape(8.dp)) { Text(label) }
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("对比原图色彩", Modifier.weight(1f), fontSize = 13.sp)
+                Switch(compare, onCheckedChange = { compare = it })
+            }
             Adjustment("曝光", edit.exposure, -2f..2f, { onEdit(edit.copy(exposure = it)) }, "%+.1f")
-            Adjustment("对比", edit.contrast, 0.6f..1.6f, { onEdit(edit.copy(contrast = it)) }, "%.1f")
             Adjustment("饱和", edit.saturation, 0f..2f, { onEdit(edit.copy(saturation = it)) }, "%.1f")
+            TextButton(onClick = { showAdvanced = !showAdvanced }) {
+                Text(if (showAdvanced) "收起更多调整" else "更多调整")
+            }
+            if (showAdvanced) {
+            Adjustment("对比", edit.contrast, 0.6f..1.6f, { onEdit(edit.copy(contrast = it)) }, "%.1f")
             Adjustment("色相", edit.hue, -180f..180f, { onEdit(edit.copy(hue = it)) }, "%+.0f°")
+            }
+            }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { onEdit(PhotoEdit.Params()) }, shape = RoundedCornerShape(8.dp)) {
                     Icon(Icons.Outlined.RestartAlt, null, Modifier.size(18.dp))

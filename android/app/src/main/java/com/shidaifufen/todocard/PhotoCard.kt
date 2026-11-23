@@ -7,6 +7,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.exifinterface.media.ExifInterface
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 
 /** 照片卡：cover 裁切 + 底部信息带（与桌面版规则一致） */
 object PhotoCard {
@@ -40,7 +41,7 @@ object PhotoCard {
     fun render(path: String, fields: Fields, edit: PhotoEdit.Params): Bitmap {
         val band = bandHeight(path, fields)
         val canvas = PhotoEdit.render(path, edit, band)
-        if (band > 0) drawBand(canvas, path, fields, band)
+        if (band > 0) drawBand(Canvas(canvas), path, fields, band)
         return canvas
     }
 
@@ -94,8 +95,10 @@ object PhotoCard {
         val camera: String = "", val params: String = "",
     )
 
+    private val metadataCache = ConcurrentHashMap<String, Meta>()
+
     private fun readExif(path: String): Meta {
-        return try {
+        return metadataCache[path] ?: try {
             val e = ExifInterface(path)
             val dt = e.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
                 ?: e.getAttribute(ExifInterface.TAG_DATETIME) ?: ""
@@ -114,7 +117,8 @@ object PhotoCard {
                 iso?.let { "ISO$it" },
             ).joinToString("  ")
             Meta(taken, time, listOf(make, model).filter { it.isNotBlank() }.joinToString(" "), params)
-        } catch (e: Exception) { Meta() }
+                .also { metadataCache[path] = it }
+        } catch (e: Exception) { Meta().also { metadataCache[path] = it } }
     }
 
     /** 把相册 Uri 复制到 App 私有目录，便于 Exif 与后续推送 */
@@ -130,8 +134,7 @@ object PhotoCard {
         } catch (e: Exception) { null }
     }
 
-    private fun drawBand(canvas: Bitmap, path: String, fields: Fields, band: Int) {
-        val c = Canvas(canvas)
+    internal fun drawBand(c: Canvas, path: String, fields: Fields, band: Int) {
         val meta = readExif(path)
         val line1 = listOf(
             if (fields.date && meta.taken.isNotBlank()) meta.taken else "",

@@ -23,13 +23,27 @@ jobs:
           yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
           $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0" > /dev/null
       - uses: gradle/actions/setup-gradle@v3
-      - name: 单元测试（QuickLZ 与 Python 版逐字节比对）
+      - name: 单元测试（协议回归与卡片渲染检查）
         working-directory: android
         run: gradle test --no-daemon
 
       - name: Build debug APK
         working-directory: android
         run: gradle assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-card-previews
+          path: android/app/build/reports/card-previews/*.png
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: android-test-reports
+          path: |
+            android/app/build/reports/tests/
+            android/app/build/test-results/
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: todocard-debug-apk

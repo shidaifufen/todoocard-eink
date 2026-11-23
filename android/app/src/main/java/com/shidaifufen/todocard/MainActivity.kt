@@ -15,6 +15,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material.icons.outlined.Casino
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Settings
@@ -31,11 +32,13 @@ internal val TEMPLATES = listOf(
     "summary" to "每日总结",
     "quote" to "每日一句",
     "todo" to "今日待办",
+    "weather" to "天气看板",
+    "calendar" to "月历",
     "progress" to "时间进度",
     "countdown" to "倒计时",
     "poem" to "每日诗词",
     "custom" to "自定义卡片",
-    "photo" to "照片卡片",
+    "photo" to "照片轮播",
 )
 
 private fun handleSharedIntent(ctx: Context, intent: Intent?,
@@ -55,14 +58,23 @@ private fun handleSharedIntent(ctx: Context, intent: Intent?,
 }
 
 class MainActivity : ComponentActivity() {
+    private var incomingIntent by mutableStateOf<Intent?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { App() }
+        incomingIntent = if (savedInstanceState == null) intent else null
+        setContent { App(incomingIntent) }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        incomingIntent = intent
     }
 }
 
 @Composable
-private fun App() {
+private fun App(incomingIntent: Intent?) {
     val ctx = LocalContext.current
     remember(ctx) { PlanStore.init(ctx); true }
     val scope = rememberCoroutineScope()
@@ -74,16 +86,35 @@ private fun App() {
     var fields by remember { mutableStateOf(PlanStore.photoFields) }
     var edit by remember { mutableStateOf(PhotoEdit.Params()) }
     var albums by remember { mutableStateOf(PlanStore.albums(ctx)) }
+    var carouselPhotos by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    var selectedCarousel by remember { mutableStateOf<Uri?>(null) }
+    var pendingSharedPush by remember { mutableStateOf<String?>(null) }
     var status by remember { mutableStateOf("选择模板并预览，再推送到卡片") }
     var progress by remember { mutableIntStateOf(0) }
-    var busy by remember { mutableStateOf(false) }
+    var preparing by remember { mutableStateOf(false) }
+    val pushState by PushService.status.collectAsState()
+    val busy = preparing || pushState.running
     var found by remember { mutableStateOf<List<ScanResult>>(emptyList()) }
     var device by remember { mutableStateOf<ScanResult?>(null) }
     var pairedAddress by remember { mutableStateOf(PlanStore.deviceAddress) }
     var pairedName by remember { mutableStateOf(PlanStore.deviceName) }
 
+    LaunchedEffect(pushState) {
+        if (pushState.message.isNotBlank()) {
+            status = pushState.message
+            progress = pushState.progress
+            pairedAddress = PlanStore.deviceAddress
+            pairedName = PlanStore.deviceName
+        }
+    }
+
     val photoReady = photoPath.isNotBlank() && java.io.File(photoPath).isFile
-    LaunchedEffect(kind, card, photoPath, fields, edit) {
+    LaunchedEffect(albums) {
+        carouselPhotos = withContext(Dispatchers.IO) { AlbumStore.listImages(ctx, albums) }
+        if (selectedCarousel !in carouselPhotos) selectedCarousel = carouselPhotos.firstOrNull()
+    }
+    LaunchedEffect(kind, card, photoPath, fields, edit, tab) {
+        if (tab != 0) return@LaunchedEffect
         preview = withContext(Dispatchers.Default) {
             runCatching {
                 if (kind == "photo") {
@@ -93,19 +124,24 @@ private fun App() {
         }
     }
 
-    fun loadPhoto(uri: Uri) {
-        val path = PhotoCard.importToFiles(ctx, uri)
-        if (path == null) { status = "照片读取失败，请重新选择"; return }
-        photoPath = path
-        PlanStore.lastPhoto = path
-        edit = PhotoEdit.Params()
-        kind = "photo"
-        status = "照片已载入"
+    fun loadPhoto(uri: Uri, autoSend: Boolean = false, openEditor: Boolean = true) {
+        scope.launch {
+            status = "正在载入照片…"
+            val path = withContext(Dispatchers.IO) { PhotoCard.importToFiles(ctx, uri) }
+            if (path == null) { status = "照片读取失败，请重新选择"; return@launch }
+            photoPath = path
+            PlanStore.lastPhoto = path
+            edit = PhotoEdit.Params()
+            kind = "photo"
+            tab = if (autoSend || !openEditor) 0 else 2
+            if (autoSend) pendingSharedPush = path
+            status = if (autoSend) "分享照片已收到，准备直接推送…" else "照片已载入"
+        }
     }
 
-    LaunchedEffect(Unit) {
-        handleSharedIntent(ctx, (ctx as? android.app.Activity)?.intent,
-            onPhoto = { uri -> loadPhoto(uri); tab = 1 },
+    LaunchedEffect(incomingIntent) {
+        handleSharedIntent(ctx, incomingIntent,
+            onPhoto = { uri -> loadPhoto(uri, autoSend = true) },
             onText = { text ->
                 if (text.isNotBlank()) {
                     card = card.copy(customTitle = "分享内容",
@@ -141,22 +177,39 @@ private fun App() {
         }
     }
 
-    var pendingScan by remember { mutableStateOf(false) }
+    var onPermissionsGranted by remember { mutableStateOf<(() -> Unit)?>(null) }
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()) { grants ->
-        if (grants.values.all { it } && pendingScan) { pendingScan = false; scan() }
+        if (grants.values.all { it }) {
+            val action = onPermissionsGranted
+            onPermissionsGranted = null
+            action?.invoke()
+        }
         else if (!grants.values.all { it }) status = "需要蓝牙权限才能扫描设备"
     }
+    fun bluetoothPermissions(): Array<String> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+        arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+    else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
     fun requestScan() {
-        val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-            arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
-        else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
-        pendingScan = true
-        permLauncher.launch(permissions)
+        onPermissionsGranted = { scan() }
+        permLauncher.launch(bluetoothPermissions())
     }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri?.let { loadPhoto(it) }
+    }
+    val multiplePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(30)) { uris ->
+        uris.forEach { uri ->
+            runCatching { ctx.contentResolver.takePersistableUriPermission(
+                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            PlanStore.addAlbum(ctx, uri.toString())
+        }
+        albums = PlanStore.albums(ctx)
+        if (uris.isNotEmpty()) {
+            selectedCarousel = uris.first()
+            status = "已添加 ${uris.size} 张轮播照片"
+        }
     }
     val cameraUri = remember { mutableStateOf<Uri?>(null) }
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
@@ -172,11 +225,23 @@ private fun App() {
     }
     val albumLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
-            ctx.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            runCatching { ctx.contentResolver.takePersistableUriPermission(
+                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
             PlanStore.addAlbum(ctx, uri.toString())
             albums = PlanStore.albums(ctx)
             status = "已添加轮播相册"
         }
+    }
+    fun addCarouselPhotos() {
+        multiplePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    }
+    fun drawCarousel(): Uri? {
+        val chosen = carouselPhotos.filter { it.toString() != PlanStore.lastDrawnUri }
+            .ifEmpty { carouselPhotos }.randomOrNull() ?: return null
+        selectedCarousel = chosen
+        PlanStore.lastDrawnUri = chosen.toString()
+        status = "已抽到一张照片"
+        return chosen
     }
 
     fun selectDevice(result: ScanResult) {
@@ -203,62 +268,63 @@ private fun App() {
     }
 
     fun doSend() {
-        val bmp = preview ?: return
+        if (busy) return
         val sentKind = kind
+        val sentCard = card.copy(kind = kind)
+        val sentPath = photoPath
+        val sentFields = fields
+        val sentEdit = edit
+        preparing = true
         scope.launch {
-            val started = System.currentTimeMillis()
-            busy = true
-            progress = 0
             try {
-                status = "打包中…"
-                val payload = withContext(Dispatchers.Default) {
-                    QuickLz.buildPayload(Payload.build(bmp).controller)
-                }
-                val saved = PlanStore.deviceAddress
-                val ble = BleClient(ctx)
-                status = "等待卡片广播，最长 120 秒"
-                var target: ScanResult? = null
-                val deadline = System.currentTimeMillis() + 120_000
-                while (System.currentTimeMillis() < deadline && target == null) {
-                    val list = withContext(Dispatchers.IO) { ble.scanAll(10_000) }
-                    target = list.firstOrNull { (it.device.name ?: "").contains("todoo", true) }
-                        ?: list.firstOrNull { it.device.address.startsWith("FF:FF", true) }
-                        ?: list.firstOrNull { saved.isNotEmpty() && it.device.address == saved }
-                        ?: list.firstOrNull { it.device.address.endsWith("39:01", true) }
-                    if (target == null) {
-                        val left = ((deadline - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
-                        status = "等待卡片广播，剩余 ${left} 秒"
+                status = "正在准备卡片…"
+                val file = withContext(Dispatchers.IO) {
+                    val bmp = if (sentKind == "photo") {
+                        check(java.io.File(sentPath).isFile) { "请先选择照片" }
+                        PhotoCard.render(sentPath, sentFields, sentEdit)
+                    } else Render.render(sentCard)
+                    val output = java.io.File.createTempFile("push_", ".png", ctx.cacheDir)
+                    try {
+                        output.outputStream().use {
+                            check(bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it))
+                        }
+                    } finally {
+                        bmp.recycle()
                     }
+                    output
                 }
-                if (target == null) { status = "未找到卡片，请唤醒后重试"; return@launch }
-                PlanStore.deviceAddress = target.device.address
-                PlanStore.deviceName = target.device.name ?: ""
-                pairedAddress = PlanStore.deviceAddress
-                pairedName = PlanStore.deviceName
-                status = "连接中…"
-                if (!withContext(Dispatchers.IO) { ble.connect(target!!) }) {
-                    status = "连接失败：卡片可能在休眠或被占用"; return@launch
-                }
-                status = "传输中（${payload.size / 1024} KB）…"
-                val logs = StringBuilder("payload=${payload.size}B\n")
-                withContext(Dispatchers.IO) {
-                    ble.send(payload,
-                        onLog = { logs.append(it).append('\n'); status = it },
-                        onProgress = { progress = it })
-                }
-                ble.close()
-                status = logs.toString().trim()
+                ctx.startForegroundService(Intent(ctx, PushService::class.java)
+                    .putExtra("bitmapPath", file.absolutePath).putExtra("kind", sentKind))
             } catch (e: Exception) {
                 status = "失败：${e.message}"
             } finally {
-                PlanStore.addHistory(ctx, PlanStore.Hist(
-                    System.currentTimeMillis(), sentKind,
-                    status.lineSequence().lastOrNull() == "已完成并收到显影确认",
-                    ((System.currentTimeMillis() - started) / 1000).toInt(),
-                    status.lineSequence().lastOrNull().orEmpty(),
-                ))
-                busy = false
+                preparing = false
             }
+        }
+    }
+
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()) {
+        onPermissionsGranted = { doSend() }
+        permLauncher.launch(bluetoothPermissions())
+    }
+
+    fun requestSend() {
+        if (busy) return
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            onPermissionsGranted = { doSend() }
+            permLauncher.launch(bluetoothPermissions())
+        }
+    }
+
+    LaunchedEffect(pendingSharedPush, photoPath, busy) {
+        if (pendingSharedPush != null && pendingSharedPush == photoPath && !busy) {
+            pendingSharedPush = null
+            requestSend()
         }
     }
 
@@ -277,9 +343,10 @@ private fun App() {
             NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                 listOf(
                     Triple("卡片", Icons.Outlined.Dashboard, 0),
-                    Triple("相册", Icons.Outlined.PhotoLibrary, 1),
-                    Triple("计划", Icons.Outlined.Schedule, 2),
-                    Triple("设置", Icons.Outlined.Settings, 3),
+                    Triple("轮播", Icons.Outlined.Casino, 1),
+                    Triple("相册", Icons.Outlined.PhotoLibrary, 2),
+                    Triple("计划", Icons.Outlined.Schedule, 3),
+                    Triple("设置", Icons.Outlined.Settings, 4),
                 ).forEach { (label, icon, index) ->
                     NavigationBarItem(selected = tab == index, onClick = { tab = index },
                         icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp)) },
@@ -292,17 +359,32 @@ private fun App() {
                     0 -> StudioScreen(kind, card, preview, photoReady, status, progress, busy,
                         pairedName.ifEmpty { pairedAddress }, found, device?.device?.address,
                         onKind = { kind = it }, onCard = { card = it; PlanStore.saveCard(ctx, it) },
-                        onPhoto = { tab = 1 },
+                        onPhoto = { tab = 2 },
                         onScan = ::requestScan, onSelectDevice = ::selectDevice,
-                        onSend = ::doSend)
-                    1 -> LibraryScreen(albums, photoPath, fields, edit,
+                        onSend = ::requestSend,
+                        carouselCount = carouselPhotos.size,
+                        onDraw = { drawCarousel()?.let { loadPhoto(it, openEditor = false) } },
+                        onAddPhotos = ::addCarouselPhotos)
+                    1 -> CarouselScreen(carouselPhotos, selectedCarousel, busy,
+                        onAddPhotos = ::addCarouselPhotos,
+                        onDraw = { drawCarousel() },
+                        onSelect = { selectedCarousel = it },
+                        onUse = { selectedCarousel?.let { loadPhoto(it) } },
+                        onSend = { selectedCarousel?.let { loadPhoto(it, autoSend = true) } },
+                        onRemove = {
+                            selectedCarousel?.let { PlanStore.removeAlbum(it.toString()) }
+                            albums = PlanStore.albums(ctx)
+                            selectedCarousel = null
+                        })
+                    2 -> LibraryScreen(albums, photoPath, fields, edit,
                         onPick = { picker.launch(PickVisualMediaRequest(
                             ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                         onCamera = ::takePhoto, onAddAlbum = { albumLauncher.launch(null) },
-                        onAlbumPhoto = ::loadPhoto,
+                        onAddPhotos = ::addCarouselPhotos,
+                        onAlbumPhoto = { loadPhoto(it) },
                         onFields = { fields = it; PlanStore.photoFields = it },
                         onEdit = { edit = it }, onUse = { kind = "photo"; tab = 0 })
-                    2 -> PlanScreen(ctx)
+                    3 -> PlanScreen(ctx)
                     else -> SettingsScreen(pairedName, pairedAddress, fields, found,
                         device?.device?.address, status,
                         onScan = ::requestScan, onSelect = ::selectDevice,

@@ -65,13 +65,22 @@ class SchedulerWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, para
         try {
             val bmp = if (kind == "photo") {
                 // 优先从已添加的相册里随机取图，没有相册就用最近一张
-                val albumUri = AlbumStore.randomImage(applicationContext, PlanStore.albums(applicationContext))
+                val albumUri = AlbumStore.randomImage(applicationContext,
+                    PlanStore.albums(applicationContext), PlanStore.lastDrawnUri)
+                if (albumUri != null) PlanStore.lastDrawnUri = albumUri.toString()
                 val p = albumUri?.let { u ->
                     PhotoCard.importToFiles(applicationContext, u)
                 } ?: PlanStore.lastPhoto
                 if (p.isEmpty()) return
                 PhotoCard.render(p, PlanStore.photoFields)
-            } else Render.render(PlanStore.card(applicationContext).copy(kind = kind))
+            } else {
+                var card = PlanStore.card(applicationContext)
+                if (kind in listOf("weather", "summary")) {
+                    card = kotlinx.coroutines.runBlocking { WeatherData.refresh(card) }
+                    PlanStore.saveCard(applicationContext, card)
+                }
+                Render.render(card.copy(kind = kind))
+            }
             val payload = QuickLz.buildPayload(Payload.build(bmp).controller)
             val ble = BleClient(applicationContext)
             kotlinx.coroutines.runBlocking {
