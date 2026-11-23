@@ -19,6 +19,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
@@ -304,6 +309,24 @@ private fun App() {
             kind = "photo"; tab = 0; status = "已选择照片"
         }
     }
+    val cameraUri = remember { mutableStateOf<android.net.Uri?>(null) }
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        if (ok) {
+            val uri = cameraUri.value
+            if (uri != null) {
+                ctx.contentResolver.openInputStream(uri)?.use { photo = BitmapFactory.decodeStream(it) }
+                PhotoCard.importToFiles(ctx, uri)?.let { photoPath = it; PlanStore.lastPhoto = it }
+                kind = "photo"; tab = 0; status = "拍照完成，可直接推送"
+            }
+        }
+    }
+    fun takePhoto() {
+        val dir = java.io.File(ctx.cacheDir, "cam").apply { mkdirs() }
+        val f = java.io.File(dir, "shot_${System.currentTimeMillis()}.jpg")
+        val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", f)
+        cameraUri.value = uri
+        cameraLauncher.launch(uri)
+    }
     var pendingScan by remember { mutableStateOf(false) }
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -368,10 +391,18 @@ private fun App() {
     Scaffold(
         bottomBar = {
             NavigationBar {
-                NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, icon = { Text("▦") }, label = { Text("卡片") })
-                NavigationBarItem(selected = tab == 1, onClick = { tab = 1 }, icon = { Text("▤") }, label = { Text("相册") })
-                NavigationBarItem(selected = tab == 2, onClick = { tab = 2 }, icon = { Text("◷") }, label = { Text("计划") })
-                NavigationBarItem(selected = tab == 3, onClick = { tab = 3 }, icon = { Text("⚙") }, label = { Text("设置") })
+                NavigationBarItem(selected = tab == 0, onClick = { tab = 0 },
+                    icon = { Icon(Icons.Outlined.Dashboard, null, Modifier.size(24.dp)) },
+                    label = { Text("卡片", fontSize = 12.sp) })
+                NavigationBarItem(selected = tab == 1, onClick = { tab = 1 },
+                    icon = { Icon(Icons.Outlined.PhotoLibrary, null, Modifier.size(24.dp)) },
+                    label = { Text("相册", fontSize = 12.sp) })
+                NavigationBarItem(selected = tab == 2, onClick = { tab = 2 },
+                    icon = { Icon(Icons.Outlined.Schedule, null, Modifier.size(24.dp)) },
+                    label = { Text("计划", fontSize = 12.sp) })
+                NavigationBarItem(selected = tab == 3, onClick = { tab = 3 },
+                    icon = { Icon(Icons.Outlined.Settings, null, Modifier.size(24.dp)) },
+                    label = { Text("设置", fontSize = 12.sp) })
             }
         }
     ) { pad ->
@@ -446,9 +477,12 @@ private fun App() {
                     }
                 }
                 1 -> Column(Modifier.fillMaxSize().padding(top = 12.dp)) {
-                    Button(onClick = {
-                        picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                    }) { Text("从相册选择照片") }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = {
+                            picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        }) { Text("从相册选择") }
+                        Button(onClick = { takePhoto() }) { Text("拍照推送") }
+                    }
                     photo?.let {
                         Image(it.asImageBitmap(), null, Modifier.fillMaxWidth().padding(top = 12.dp)
                             .aspectRatio(528f / 792f), contentScale = androidx.compose.ui.layout.ContentScale.Fit)
