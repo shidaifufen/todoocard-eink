@@ -231,6 +231,7 @@ private fun planNext(fixed: List<PlanStore.Fixed>, itvs: List<PlanStore.Interval
 @Composable
 private fun App() {
     val ctx = LocalContext.current
+    remember { PlanStore.init(ctx); true }
     val scope = rememberCoroutineScope()
 
     var kind by remember { mutableStateOf("summary") }
@@ -273,9 +274,17 @@ private fun App() {
             val ble = BleClient(ctx)
             val list = withContext(Dispatchers.IO) { ble.scanAll(10_000) { status = it } }
             found = list
-            val auto = list.firstOrNull { ble.isLikelyCard(it) }
-            if (auto != null) { device = auto; status = "已选中 ${auto.device.address}" }
-            else status = "扫到 ${list.size} 台，请在下面选择卡片"
+            val saved = PlanStore.deviceAddress
+            val auto = list.firstOrNull { saved.isNotEmpty() && it.device.address == saved }
+                ?: list.firstOrNull { ble.isLikelyCard(it) }
+                ?: list.firstOrNull { it.device.address.endsWith("39:01", ignoreCase = true) }
+                ?: list.firstOrNull()
+            device = auto
+            if (auto != null) {
+                PlanStore.deviceAddress = auto.device.address
+                PlanStore.deviceName = auto.device.name ?: ""
+                status = "已选中 ${auto.device.name ?: auto.device.address}"
+            } else status = "没扫到设备"
         }
     }
 
@@ -378,6 +387,20 @@ private fun App() {
                             }, enabled = !busy) { Text("扫描") }
                             Button(onClick = { doSend() }, enabled = preview != null && device != null && !busy) {
                                 Text(if (busy) "推送中…" else "推送")
+                            }
+                        }
+                        if (found.isNotEmpty()) {
+                            Text("设备（点选）", fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp))
+                            LazyColumn(Modifier.heightIn(max = 160.dp)) {
+                                items(found) { r ->
+                                    val nm = r.device.name ?: r.scanRecord?.deviceName ?: "(无名)"
+                                    val sel = device?.device?.address == r.device.address
+                                    TextButton(onClick = {
+                                        device = r
+                                        PlanStore.deviceAddress = r.device.address
+                                        status = "已选中 $nm"
+                                    }) { Text("${if (sel) "✔ " else ""}$nm  ${r.device.address}  ${r.rssi}dBm", fontSize = 12.sp) }
+                                }
                             }
                         }
                         if (progress in 1..99) LinearProgressIndicator(progress = { progress / 100f }, Modifier.fillMaxWidth().padding(top = 8.dp))
