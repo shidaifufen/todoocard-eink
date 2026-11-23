@@ -324,12 +324,10 @@ private fun App() {
                         status = "还没扫到卡片，继续等（第 ${i + 2}/4 轮）"
                     }
                 }
-                if (target == null) {
-                    if (device == null) { status = "还没有配对：先到「设置」页配对卡片"; return@launch }
-                    target = device
-                }
+                val tgt = target ?: device
+                if (tgt == null) { status = "还没有配对：先到「设置」页配对卡片"; return@launch }
                 status = "连接中…"
-                if (!withContext(Dispatchers.IO) { ble.connect(target) }) {
+                if (!withContext(Dispatchers.IO) { ble.connect(tgt) }) {
                     status = "连接失败：卡片可能在休眠或被别的设备占用"; return@launch
                 }
                 status = "传输中（${payload.size / 1024} KB）…"
