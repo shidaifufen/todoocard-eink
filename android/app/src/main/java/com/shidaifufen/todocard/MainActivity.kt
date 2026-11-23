@@ -196,6 +196,20 @@ private fun PlanScreen(ctx: android.content.Context) {
     }
 }
 
+
+/** 色域面板：横向=色相，纵向=曝光 */
+private fun applyPad(pos: androidx.compose.ui.geometry.Offset,
+                     size: androidx.compose.ui.unit.IntSize,
+                     cur: PhotoEdit.Params): PhotoEdit.Params? {
+    if (size.width == 0 || size.height == 0) return null
+    val fx = (pos.x / size.width).coerceIn(0f, 1f)
+    val fy = (pos.y / size.height).coerceIn(0f, 1f)
+    val hue = fx * 360f - 180f
+    val exposure = (1f - fy) * 4f - 2f
+    val sat = 1f - (fy - 0.5f).coerceIn(-0.5f, 0.5f)
+    return cur.copy(hue = hue, exposure = exposure, saturation = sat.coerceIn(0.4f, 1.8f))
+}
+
 private fun templateName(k: String): String = TEMPLATES.firstOrNull { it.first == k }?.second ?: k
 
 /** 计算未来 hours 小时内的计划时间点（固定 + 间隔） */
@@ -532,64 +546,103 @@ private fun App() {
                     }
                     if (photoPath.isNotEmpty()) {
                         val previewBmp = remember(photoPath, edit) {
-                            runCatching { PhotoEdit.render(photoPath, edit) }.getOrNull()
+                            runCatching { PhotoCard.render(photoPath, pfields, edit) }.getOrNull()
                         }
-                        previewBmp?.let {
-                            Image(it.asImageBitmap(), null,
-                                Modifier.padding(top = 10.dp)
-                                    .heightIn(max = 260.dp)
-                                    .aspectRatio(528f / 792f)
-                                    .align(Alignment.CenterHorizontally)
-                                    .pointerInput(Unit) {
-                                        detectTransformGestures { _, pan, zoom, _ ->
-                                            val nz = (edit.zoom * zoom).coerceIn(1f, 3f)
-                                            // 只有放大后才允许平移，且限制在图片范围内
-                                            val lim = (nz - 1f) / 2f + 0.05f
-                                            edit = edit.copy(
-                                                zoom = nz,
-                                                dx = (edit.dx + pan.x / size.width * 2f).coerceIn(-lim, lim),
-                                                dy = (edit.dy + pan.y / size.height * 2f).coerceIn(-lim, lim),
-                                            )
-                                        }
-                                    },
-                                contentScale = androidx.compose.ui.layout.ContentScale.Fit)
-                        }
-                        Text("拖动平移 · 双指缩放 · 下方调色", fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("裁切 / 色彩", fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
-                        listOf(
-                            "缩放" to edit.zoom,
-                            "水平" to (edit.dx + 1) / 2,
-                            "垂直" to (edit.dy + 1) / 2,
-                        ).forEachIndexed { i, (label, v) ->
-                            Text("$label ${"%.2f".format(v)}", fontSize = 11.sp)
-                            Slider(value = v, onValueChange = { nv ->
-                                edit = when (i) {
-                                    0 -> edit.copy(zoom = nv.coerceIn(1f, 3f))
-                                    1 -> edit.copy(dx = (nv * 2 - 1).coerceIn(-1f, 1f))
-                                    else -> edit.copy(dy = (nv * 2 - 1).coerceIn(-1f, 1f))
+                        // 卡片框 + 胶片网格，手指直接拖
+                        Box(
+                            Modifier.fillMaxWidth()
+                                .heightIn(max = 300.dp)
+                                .aspectRatio(528f / 792f)
+                                .align(Alignment.CenterHorizontally)
+                                .background(androidx.compose.ui.graphics.Color.Black)
+                                .pointerInput(Unit) {
+                                    detectTransformGestures { _, pan, zoom, _ ->
+                                        val nz = (edit.zoom * zoom).coerceIn(1f, 4f)
+                                        val lim = (nz - 1f) / 2f
+                                        edit = edit.copy(
+                                            zoom = nz,
+                                            dx = (edit.dx + pan.x / size.width * 2f).coerceIn(-lim, lim),
+                                            dy = (edit.dy + pan.y / size.height * 2f).coerceIn(-lim, lim),
+                                        )
+                                    }
                                 }
-                            }, valueRange = if (i == 0) 1f..3f else 0f..1f)
+                        ) {
+                            previewBmp?.let {
+                                Image(it.asImageBitmap(), null, Modifier.fillMaxSize(),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.FillBounds)
+                            }
+                            // 三分线 + 边框
+                            androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                                val w = size.width; val h = size.height
+                                val stroke = 1.dp.toPx()
+                                drawRect(androidx.compose.ui.graphics.Color.White,
+                                    style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+                                val c = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.35f)
+                                drawLine(c, androidx.compose.ui.geometry.Offset(w / 3, 0f),
+                                    androidx.compose.ui.geometry.Offset(w / 3, h), stroke)
+                                drawLine(c, androidx.compose.ui.geometry.Offset(w * 2 / 3, 0f),
+                                    androidx.compose.ui.geometry.Offset(w * 2 / 3, h), stroke)
+                                drawLine(c, androidx.compose.ui.geometry.Offset(0f, h / 3),
+                                    androidx.compose.ui.geometry.Offset(w, h / 3), stroke)
+                                drawLine(c, androidx.compose.ui.geometry.Offset(0f, h * 2 / 3),
+                                    androidx.compose.ui.geometry.Offset(w, h * 2 / 3), stroke)
+                            }
+                            Text("拖动平移 · 双指缩放", fontSize = 10.sp,
+                                color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f),
+                                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp))
                         }
-                        Text("亮度 ${edit.brightness}", fontSize = 11.sp)
-                        Slider(value = edit.brightness.toFloat(), onValueChange = {
-                            edit = edit.copy(brightness = it.toInt())
-                        }, valueRange = -100f..100f)
-                        Text("对比度 ${"%.2f".format(edit.contrast)}", fontSize = 11.sp)
-                        Slider(value = edit.contrast, onValueChange = {
-                            edit = edit.copy(contrast = it.coerceIn(0.5f, 1.6f))
-                        }, valueRange = 0.5f..1.6f)
-                        Text("饱和度 ${"%.2f".format(edit.saturation)}", fontSize = 11.sp)
-                        Slider(value = edit.saturation, onValueChange = {
-                            edit = edit.copy(saturation = it.coerceIn(0f, 1.6f))
-                        }, valueRange = 0f..1.6f)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = { kind = "photo"; tab = 0 }) { Text("去推送") }
+
+                        // 色彩偏好面板（参考官方：色相/饱和度色域 + 曝光）
+                        Text("色彩偏好", fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = 10.dp))
+                        var padSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+                        Box(
+                            Modifier.fillMaxWidth().height(150.dp).padding(top = 6.dp)
+                                .onSizeChanged { padSize = it }
+                                .pointerInput(Unit) {
+                                    detectDragGestures(
+                                        onDragStart = { off -> applyPad(off, padSize, edit)?.let { edit = it } },
+                                        onDrag = { change, _ -> applyPad(change.position, padSize, edit)?.let { edit = it } }
+                                    )
+                                }
+                        ) {
+                            androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                                val w = size.width; val h = size.height
+                                // 横向色相带
+                                drawRect(
+                                    brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
+                                        listOf(
+                                            androidx.compose.ui.graphics.Color(0xFF3B82F6),
+                                            androidx.compose.ui.graphics.Color(0xFF22D3EE),
+                                            androidx.compose.ui.graphics.Color(0xFF4ADE80),
+                                            androidx.compose.ui.graphics.Color(0xFFFACC15),
+                                            androidx.compose.ui.graphics.Color(0xFFF87171),
+                                            androidx.compose.ui.graphics.Color(0xFFC084FC),
+                                        )
+                                    )
+                                )
+                                // 上下叠加白/黑，纵向表示明暗（饱和度/曝光）
+                                drawRect(brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                                    listOf(androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
+                                        androidx.compose.ui.graphics.Color.Transparent,
+                                        androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.75f))
+                                ))
+                                // 当前点
+                                val px = (edit.hue + 180f) / 360f * w
+                                val py = (1f - (edit.exposure + 2f) / 4f) * h
+                                drawCircle(androidx.compose.ui.graphics.Color.White, 9f,
+                                    androidx.compose.ui.geometry.Offset(px, py),
+                                    style = androidx.compose.ui.graphics.drawscope.Stroke(2.5f))
+                                drawCircle(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.25f), 4f,
+                                    androidx.compose.ui.geometry.Offset(px, py))
+                            }
+                        }
+                        Text("色彩 ${edit.hue.toInt()}    曝光 ${"%.1f".format(edit.exposure)}    饱和 ${"%.2f".format(edit.saturation)}",
+                            fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                            Button(onClick = { kind = "photo"; tab = 0 }) { Text("保存并推送") }
                             OutlinedButton(onClick = { edit = PhotoEdit.Params() }) { Text("重置") }
                         }
-                    }
-                    Text("选照片后会自动切到「照片」模板。批量与收藏在后续版本。",
-                        fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
                 }
                 2 -> PlanScreen(ctx)
                 else -> Column(Modifier.fillMaxSize().padding(top = 12.dp).verticalScroll(rememberScrollState())) {
