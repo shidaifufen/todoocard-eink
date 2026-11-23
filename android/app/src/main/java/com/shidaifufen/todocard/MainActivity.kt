@@ -363,7 +363,7 @@ private fun App() {
                 PlanStore.deviceAddress = target.device.address
                 PlanStore.deviceName = target.device.name ?: ""
                 status = "连接中…"
-                if (!withContext(Dispatchers.IO) { ble.connect(tgt) }) {
+                if (!withContext(Dispatchers.IO) { ble.connect(target!!) }) {
                     status = "连接失败：卡片可能在休眠或被别的设备占用"; return@launch
                 }
                 status = "传输中（${payload.size / 1024} KB）…"
