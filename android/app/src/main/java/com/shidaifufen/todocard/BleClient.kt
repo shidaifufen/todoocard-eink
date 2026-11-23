@@ -211,10 +211,15 @@ class BleClient(private val ctx: Context) {
             body.copyInto(pkt, 4, idx * bs, idx * bs + bs)
 
             // 只用 Write Command（0x52），失败就重试同一块，绝不回退到带响应写
-            var ok = write(d, pkt, noResponse = true)
-            if (!ok) { delay(8); ok = write(d, pkt, noResponse = true) }
-            if (!ok) { delay(15); write(d, pkt, noResponse = true) }
-            delay(4)
+            var ok = false
+            var tries = 0
+            while (!ok && tries < 6) {
+                tries++
+                ok = write(d, pkt, noResponse = true)
+                if (!ok) delay(15L * tries)   // 队列满就退避，别硬塞
+            }
+            if (tries > 1) Log.i("BleClient", "block $idx retried $tries times")
+            delay(10)
 
             // 读掉当前所有回执
             while (true) {
