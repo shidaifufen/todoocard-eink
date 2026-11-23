@@ -289,13 +289,12 @@ private fun App() {
                 ?: list.firstOrNull { it.device.address.startsWith("FF:FF", true) }
                 ?: list.firstOrNull { saved.isNotEmpty() && it.device.address == saved }
                 ?: list.firstOrNull { it.device.address.endsWith("39:01", ignoreCase = true) }
-                ?: list.firstOrNull()
             device = auto
             if (auto != null) {
                 PlanStore.deviceAddress = auto.device.address
                 PlanStore.deviceName = auto.device.name ?: ""
                 status = "已选中 ${auto.device.name ?: auto.device.address}"
-            } else status = "没扫到设备"
+            } else status = "扫到 ${list.size} 台，但没有识别到卡片：长按卡片背面按钮唤醒后重扫"
         }
     }
 
