@@ -242,7 +242,7 @@ class BleClient(private val ctx: Context) {
 
         // 5) 等收尾确认 05 08
         val refreshed = postWait(c, true, onLog)
-        Log.i("BleClient", "send done nBlocks=$nBlocks sent=$sent lastAck=$acked refreshed=$refreshed")
+        Log.i("BleClient", "send done nBlocks=$nBlocks nextIdx=$nextIdx refreshed=$refreshed")
     }
 
 
