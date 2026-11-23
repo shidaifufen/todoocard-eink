@@ -311,11 +311,26 @@ private fun App() {
                 val payload = withContext(Dispatchers.Default) {
                     QuickLz.buildPayload(Payload.build(bmp).controller)
                 }
-                val d = device ?: run { status = "先扫描并选中卡片"; return@launch }
-                status = "连接中…"
+                val saved = PlanStore.deviceAddress
                 val ble = BleClient(ctx)
-                if (!withContext(Dispatchers.IO) { ble.connect(d) }) {
-                    status = "连接失败：靠近卡片、长按背面按钮唤醒后重试"; return@launch
+                status = "等待卡片广播…"
+                var target = device
+                if (target == null && saved.isNotEmpty()) {
+                    repeat(4) { i ->
+                        val list = withContext(Dispatchers.IO) { ble.scanAll(10_000) }
+                        val hit = list.firstOrNull { it.device.address == saved }
+                            ?: list.firstOrNull { it.device.address.endsWith("39:01", true) }
+                        if (hit != null) { target = hit; return@repeat }
+                        status = "还没扫到卡片，继续等（第 ${i + 2}/4 轮）"
+                    }
+                }
+                if (target == null) {
+                    if (device == null) { status = "还没有配对：先到「设置」页配对卡片"; return@launch }
+                    target = device
+                }
+                status = "连接中…"
+                if (!withContext(Dispatchers.IO) { ble.connect(target) }) {
+                    status = "连接失败：卡片可能在休眠或被别的设备占用"; return@launch
                 }
                 status = "传输中（${payload.size / 1024} KB）…"
                 val logs = StringBuilder("payload=${payload.size}B\n")
@@ -421,7 +436,38 @@ private fun App() {
                 }
                 2 -> PlanScreen(ctx)
                 else -> Column(Modifier.fillMaxSize().padding(top = 12.dp).verticalScroll(rememberScrollState())) {
-                    Text("设备", fontWeight = FontWeight.Bold)
+                    Text("配对卡片", fontWeight = FontWeight.Bold)
+                    Text(if (PlanStore.deviceAddress.isEmpty()) "未配对"
+                         else "已配对：${PlanStore.deviceName.ifEmpty { PlanStore.deviceAddress }}",
+                        fontSize = 13.sp, modifier = Modifier.padding(vertical = 6.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = {
+                            val perms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                                arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+                            else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+                            pendingScan = true; permLauncher.launch(perms)
+                        }) { Text("扫描") }
+                        Button(enabled = device != null, onClick = {
+                            val d = device ?: return@Button
+                            scope.launch {
+                                status = "配对中…"
+                                val ble = BleClient(ctx)
+                                val ok = withContext(Dispatchers.IO) { ble.connect(d) }
+                                if (ok) {
+                                    PlanStore.deviceAddress = d.device.address
+                                    PlanStore.deviceName = d.device.name ?: ""
+                                    status = "配对成功，回「卡片」页点推送即可"
+                                } else status = "配对失败，靠近卡片再试"
+                                ble.close()
+                            }
+                        }) { Text("配对选中设备") }
+                        TextButton(onClick = {
+                            PlanStore.deviceAddress = ""; PlanStore.deviceName = ""
+                            status = "已解除配对"
+                        }) { Text("解除") }
+                    }
+
                     found.forEach { r ->
                         val name = r.device.name ?: r.scanRecord?.deviceName ?: "(无名)"
                         TextButton(onClick = { device = r }) {
