@@ -44,6 +44,7 @@ private val TEMPLATES = listOf(
     "countdown" to "倒计时",
     "poem" to "每日诗词",
     "custom" to "自定义卡片",
+    "photo" to "照片轮播",
 )
 
 
