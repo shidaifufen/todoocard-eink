@@ -76,6 +76,27 @@ object PlanStore {
         sp(c).edit().putString("hist", arr.toString()).apply()
     }
 
+
+    var lastPhoto: String
+        get() = sp_global.getString("lastPhoto", "") ?: ""
+        set(v) { sp_global.edit().putString("lastPhoto", v).apply() }
+
+    private fun fieldsKey() = "photoFields"
+
+    var photoFields: PhotoCard.Fields
+        get() {
+            val raw = sp_global.getString(fieldsKey(), "") ?: ""
+            if (raw.isEmpty()) return PhotoCard.Fields()
+            val p = raw.split(",")
+            fun has(i: Int) = p.getOrNull(i) == "1"
+            return PhotoCard.Fields(has(0), has(1), has(2), has(3), has(4))
+        }
+        set(v) {
+            val raw = listOf(v.date, v.time, v.camera, v.params, v.weather)
+                .joinToString(",") { if (it) "1" else "0" }
+            sp_global.edit().putString(fieldsKey(), raw).apply()
+        }
+
     var lastChecked: Long
         get() = sp_global.getLong("lastChecked", 0L)
         set(v) { sp_global.edit().putLong("lastChecked", v).apply() }

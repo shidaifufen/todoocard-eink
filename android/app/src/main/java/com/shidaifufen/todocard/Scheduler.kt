@@ -59,12 +59,15 @@ class SchedulerWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, para
 
     /** 渲染模板并按已保存的设备地址推送 */
     private fun pushTemplate(kind: String) {
-        if (kind == "photo") return          // 照片由前台选择，后台暂不推
         val addr = PlanStore.deviceAddress
         if (addr.isEmpty()) return
         val t0 = System.currentTimeMillis()
         try {
-            val bmp = Render.render(Render.Card(kind = kind))
+            val bmp = if (kind == "photo") {
+                val p = PlanStore.lastPhoto
+                if (p.isEmpty()) return
+                PhotoCard.render(p, PlanStore.photoFields)
+            } else Render.render(Render.Card(kind = kind))
             val payload = QuickLz.buildPayload(Payload.build(bmp).controller)
             val ble = BleClient(applicationContext)
             kotlinx.coroutines.runBlocking {

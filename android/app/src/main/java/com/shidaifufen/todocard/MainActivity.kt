@@ -238,6 +238,8 @@ private fun App() {
     var card by remember { mutableStateOf(Render.Card()) }
     var preview by remember { mutableStateOf<Bitmap?>(null) }
     var photo by remember { mutableStateOf<Bitmap?>(null) }
+    var photoPath by remember { mutableStateOf(PlanStore.lastPhoto) }
+    var pfields by remember { mutableStateOf(PlanStore.photoFields) }
     var status by remember { mutableStateOf("选模板 → 预览 → 推送") }
     var progress by remember { mutableStateOf(0) }
     var busy by remember { mutableStateOf(false) }
@@ -248,7 +250,9 @@ private fun App() {
     fun refreshPreview() {
         scope.launch {
             val bmp = withContext(Dispatchers.Default) {
-                if (kind == "photo") photo else Render.render(card.copy(kind = kind))
+                if (kind == "photo" && photoPath.isNotEmpty()) {
+                    PhotoCard.render(photoPath, pfields)
+                } else Render.render(card.copy(kind = kind))
             }
             preview = bmp
         }
@@ -291,6 +295,10 @@ private fun App() {
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
             ctx.contentResolver.openInputStream(uri)?.use { photo = BitmapFactory.decodeStream(it) }
+            PhotoCard.importToFiles(ctx, uri)?.let {
+                photoPath = it
+                PlanStore.lastPhoto = it
+            }
             kind = "photo"; tab = 0; status = "已选择照片"
         }
     }
@@ -402,6 +410,20 @@ private fun App() {
                                 Text(if (busy) "推送中…" else "推送")
                             }
                         }
+                        if (kind == "photo" && photoPath.isNotEmpty()) {
+                            Text("信息带显示项（勾掉不占高度）", fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(pfields.date, { v -> pfields = pfields.copy(date = v); PlanStore.photoFields = pfields })
+                                Text("日期", fontSize = 12.sp)
+                                Checkbox(pfields.time, { v -> pfields = pfields.copy(time = v); PlanStore.photoFields = pfields })
+                                Text("时间", fontSize = 12.sp)
+                                Checkbox(pfields.camera, { v -> pfields = pfields.copy(camera = v); PlanStore.photoFields = pfields })
+                                Text("机身", fontSize = 12.sp)
+                                Checkbox(pfields.params, { v -> pfields = pfields.copy(params = v); PlanStore.photoFields = pfields })
+                                Text("参数", fontSize = 12.sp)
+                            }
+                        }
+
                         if (found.isNotEmpty()) {
                             Text("设备（点选）", fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp))
                             LazyColumn(Modifier.heightIn(max = 160.dp)) {
