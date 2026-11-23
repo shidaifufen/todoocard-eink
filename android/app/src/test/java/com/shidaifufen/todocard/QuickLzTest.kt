@@ -51,4 +51,17 @@ class QuickLzTest {
         val out = QuickLz.buildPayload(raw)
         assertArrayEquals(byteArrayOf(0, 0, 0, 0), out.copyOfRange(0, 4))
     }
+
+    /** 用桌面版真实卡片 payload 做逐字节比对（raw.bin / expected.qlz 由 Python 生成） */
+    @Test
+    fun matchesDesktopPayload() {
+        val raw = javaClass.getResourceAsStream("/raw.bin")!!.readBytes()
+        val expected = javaClass.getResourceAsStream("/expected.qlz")!!.readBytes()
+        val got = QuickLz.buildPayload(raw)
+        assertEquals("size", expected.size, got.size)
+        var firstDiff = -1
+        for (i in expected.indices) if (expected[i] != got[i]) { firstDiff = i; break }
+        assertEquals("first diff at $firstDiff (expected ${'$'}{expected.getOrNull(firstDiff)}, got ${'$'}{got.getOrNull(firstDiff)})",
+            -1, firstDiff)
+    }
 }
