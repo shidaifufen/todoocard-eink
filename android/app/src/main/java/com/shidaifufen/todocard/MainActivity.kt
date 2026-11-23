@@ -32,6 +32,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -643,6 +645,7 @@ private fun App() {
                             Button(onClick = { kind = "photo"; tab = 0 }) { Text("保存并推送") }
                             OutlinedButton(onClick = { edit = PhotoEdit.Params() }) { Text("重置") }
                         }
+                    }
                 }
                 2 -> PlanScreen(ctx)
                 else -> Column(Modifier.fillMaxSize().padding(top = 12.dp).verticalScroll(rememberScrollState())) {
