@@ -45,6 +45,21 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+
+/** 色域面板：横向=色相，纵向=曝光 */
+private fun applyPad(pos: androidx.compose.ui.geometry.Offset,
+                     size: androidx.compose.ui.unit.IntSize,
+                     cur: PhotoEdit.Params): PhotoEdit.Params? {
+    if (size.width == 0 || size.height == 0) return null
+    val fx = (pos.x / size.width).coerceIn(0f, 1f)
+    val fy = (pos.y / size.height).coerceIn(0f, 1f)
+    return cur.copy(
+        hue = fx * 360f - 180f,
+        exposure = (1f - fy) * 4f - 2f,
+        saturation = (1f - (fy - 0.5f).coerceIn(-0.5f, 0.5f)).coerceIn(0.4f, 1.8f),
+    )
+}
+
 internal val TEMPLATES = listOf(
     "summary" to "每日总结",
     "quote" to "每日一句",
