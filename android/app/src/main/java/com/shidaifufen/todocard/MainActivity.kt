@@ -319,7 +319,7 @@ private fun App() {
             try {
                 status = "打包中…"
                 val payload = withContext(Dispatchers.Default) {
-                    QuickLz.buildPayload(Payload.build(bmp).controller)
+                    Payload.build(bmp).legacy   // 先用未压缩 legacy 验证设备兼容性
                 }
                 val saved = PlanStore.deviceAddress
                 val ble = BleClient(ctx)
