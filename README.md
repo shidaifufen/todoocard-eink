@@ -6,6 +6,14 @@
 
 ---
 
+
+## 安卓版（原生 Kotlin）
+
+- 安装包：[todocard-android-1.0.0.apk](https://github.com/shidaifufen/todoocard-eink/releases/download/v1.0.0-android/todocard-android-1.0.0.apk)
+- 源码：`android/`；构建：push 到 main 触发 `.github/workflows/build-android.yml`
+- 功能：8 模板、照片裁切/调色、相册（SAF）、每日计划 + 间隔推送 + 时间轴、配对后自动等广播推送、系统分享/荣耀传送门
+- 交接与真机调试：见 [HANDOFF-ANDROID.md](HANDOFF-ANDROID.md)
+
 ## 直接下载就能用
 
 不用装 Python、不用命令行，**下载解压 → 双击 → 浏览器自动打开**。
