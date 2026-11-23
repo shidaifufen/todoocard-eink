@@ -536,8 +536,10 @@ private fun App() {
                         }
                         previewBmp?.let {
                             Image(it.asImageBitmap(), null,
-                                Modifier.fillMaxWidth().padding(top = 12.dp)
+                                Modifier.padding(top = 10.dp)
+                                    .heightIn(max = 260.dp)
                                     .aspectRatio(528f / 792f)
+                                    .align(Alignment.CenterHorizontally)
                                     .pointerInput(Unit) {
                                         detectTransformGestures { _, pan, zoom, _ ->
                                             val nz = (edit.zoom * zoom).coerceIn(1f, 3f)
@@ -552,7 +554,9 @@ private fun App() {
                                     },
                                 contentScale = androidx.compose.ui.layout.ContentScale.Fit)
                         }
-                        Text("裁切 / 色彩", fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                        Text("拖动平移 · 双指缩放 · 下方调色", fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("裁切 / 色彩", fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
                         listOf(
                             "缩放" to edit.zoom,
                             "水平" to (edit.dx + 1) / 2,
