@@ -101,6 +101,8 @@ object PlanStore {
     fun albums(c: Context): List<String> =
         (sp_global.getString("albums", "") ?: "").split("\n").filter { it.isNotBlank() }
 
+    fun clearAlbums(c: Context) { sp_global.edit().putString("albums", "").apply() }
+
     fun addAlbum(c: Context, uri: String) {
         val list = albums(c).toMutableList()
         if (!list.contains(uri)) list.add(uri)

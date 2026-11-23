@@ -23,6 +23,27 @@ object PhotoCard {
         typeface = if (bold) Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD) else Typeface.SANS_SERIF
     }
 
+    fun bandHeight(path: String, fields: Fields): Int {
+        val meta = readExif(path)
+        val hasAny = listOf(meta.taken, meta.time, meta.camera, meta.params).any { it.isNotBlank() }
+        val line1 = listOf(
+            if (fields.date && meta.taken.isNotBlank()) meta.taken else "",
+            if (fields.time && meta.time.isNotBlank()) meta.time else "").filter { it.isNotBlank() }
+        val line2 = listOf(
+            if (fields.camera) meta.camera else "",
+            if (fields.params) meta.params else "").filter { it.isNotBlank() }
+        val rows = (if (line1.isNotEmpty()) 1 else 0) + (if (line2.isNotEmpty()) 1 else 0)
+        return if (!hasAny || rows == 0) 0 else 24 + 26 * rows
+    }
+
+    /** 带裁切/色彩参数的渲染 */
+    fun render(path: String, fields: Fields, edit: PhotoEdit.Params): Bitmap {
+        val band = bandHeight(path, fields)
+        val canvas = PhotoEdit.render(path, edit, band)
+        if (band > 0) drawBand(canvas, path, fields, band)
+        return canvas
+    }
+
     fun render(path: String, fields: Fields): Bitmap {
         val src0 = BitmapFactory.decodeFile(path)
         val canvas = Bitmap.createBitmap(Render.W, Render.H, Bitmap.Config.ARGB_8888)
@@ -106,5 +127,26 @@ object PhotoCard {
             }
             out.absolutePath
         } catch (e: Exception) { null }
+    }
+
+    private fun drawBand(canvas: Bitmap, path: String, fields: Fields, band: Int) {
+        val c = Canvas(canvas)
+        val meta = readExif(path)
+        val line1 = listOf(
+            if (fields.date && meta.taken.isNotBlank()) meta.taken else "",
+            if (fields.time && meta.time.isNotBlank()) meta.time else "").filter { it.isNotBlank() }
+        val line2 = listOf(
+            if (fields.camera) meta.camera else "",
+            if (fields.params) meta.params else "").filter { it.isNotBlank() }
+        val photoH = Render.H - band
+        c.drawRect(0f, photoH.toFloat(), Render.W.toFloat(), Render.H.toFloat(), Paint().apply {
+            color = android.graphics.Color.WHITE
+        })
+        c.drawRect(0f, photoH.toFloat(), Render.W.toFloat(), photoH + 2f, Paint().apply {
+            color = android.graphics.Color.BLACK
+        })
+        var y = photoH + 26f
+        if (line1.isNotEmpty()) { c.drawText(line1.joinToString("  "), Render.M, y, paint(21f, true)); y += 26f }
+        if (line2.isNotEmpty()) { c.drawText(line2.joinToString("  "), Render.M, y, paint(16f)) }
     }
 }

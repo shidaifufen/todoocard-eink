@@ -259,7 +259,7 @@ private fun App() {
         scope.launch {
             val bmp = withContext(Dispatchers.Default) {
                 if (kind == "photo" && photoPath.isNotEmpty()) {
-                    PhotoCard.render(photoPath, pfields)
+                    PhotoCard.render(photoPath, pfields, edit)
                 } else Render.render(card.copy(kind = kind))
             }
             preview = bmp
@@ -501,6 +501,29 @@ private fun App() {
                         OutlinedButton(onClick = { albumLauncher.launch(null) }) { Text("添加相册") }
                     }
                     if (albums.isNotEmpty()) {
+                        var photos by remember { mutableStateOf<List<android.net.Uri>>(emptyList()) }
+                        LaunchedEffect(albums) {
+                            photos = withContext(Dispatchers.IO) { AlbumStore.listImages(ctx, albums) }
+                        }
+                        if (photos.isNotEmpty()) {
+                            Text("相册里有 ${photos.size} 张，点选载入", fontSize = 12.sp,
+                                modifier = Modifier.padding(top = 6.dp))
+                            androidx.compose.foundation.lazy.LazyRow(Modifier.padding(top = 6.dp)) {
+                                items(photos.size) { i ->
+                                    val u = photos[i]
+                                    Box(Modifier.padding(end = 8.dp).clickable {
+                                        PhotoCard.importToFiles(ctx, u)?.let {
+                                            photoPath = it; PlanStore.lastPhoto = it
+                                            status = "已载入相册照片"
+                                        }
+                                    }.width(86.dp).height(86.dp)
+                                        .background(androidx.compose.ui.graphics.Color(0xFF2A2D35))) {
+                                        coil.compose.AsyncImage(u, null, Modifier.fillMaxSize(),
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                                    }
+                                }
+                            }
+                        }
                         Text("已添加 ${albums.size} 个相册", fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 6.dp))
@@ -510,8 +533,22 @@ private fun App() {
                             runCatching { PhotoEdit.render(photoPath, edit) }.getOrNull()
                         }
                         previewBmp?.let {
-                            Image(it.asImageBitmap(), null, Modifier.fillMaxWidth().padding(top = 12.dp)
-                                .aspectRatio(528f / 792f), contentScale = androidx.compose.ui.layout.ContentScale.Fit)
+                            Image(it.asImageBitmap(), null,
+                                Modifier.fillMaxWidth().padding(top = 12.dp)
+                                    .aspectRatio(528f / 792f)
+                                    .pointerInput(Unit) {
+                                        detectTransformGestures { _, pan, zoom, _ ->
+                                            val nz = (edit.zoom * zoom).coerceIn(1f, 3f)
+                                            // 只有放大后才允许平移，且限制在图片范围内
+                                            val lim = (nz - 1f) / 2f + 0.05f
+                                            edit = edit.copy(
+                                                zoom = nz,
+                                                dx = (edit.dx + pan.x / size.width * 2f).coerceIn(-lim, lim),
+                                                dy = (edit.dy + pan.y / size.height * 2f).coerceIn(-lim, lim),
+                                            )
+                                        }
+                                    },
+                                contentScale = androidx.compose.ui.layout.ContentScale.Fit)
                         }
                         Text("裁切 / 色彩", fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
                         listOf(
