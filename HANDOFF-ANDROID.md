@@ -37,7 +37,10 @@ unzip -o a.zip   # 得到 app-debug.apk
 
 ```
 android/app/src/main/java/com/shidaifufen/todocard/
-├── MainActivity.kt     主界面：四个 Tab（卡片/相册/计划/设置），状态机都在这里
+├── MainActivity.kt     四个 Tab 的状态、权限与推送流程
+├── StudioUi.kt         卡片工作台、完整预览、模板内容编辑
+├── LibraryUi.kt        相册、照片调整、设备与设置界面
+├── PlanScreen.kt       每日计划、间隔推送、时间轴与历史
 ├── Render.kt           528×792 六色渲染器（summary/quote/todo/progress/countdown/poem/custom）
 ├── PhotoCard.kt        照片卡：cover 裁切 + EXIF 信息带（日期/时间/机身/参数）
 ├── PhotoEdit.kt        照片编辑渲染：缩放/位移/亮度/对比度/饱和度 → 528×792
@@ -45,7 +48,7 @@ android/app/src/main/java/com/shidaifufen/todocard/
 ├── Payload.kt          4bpp 量化 → 面板标定（rot180+flipH）→ 控制器视角（rotateCW+mirror）→ legacy 包
 ├── QuickLz.kt          QuickLZ level-3 压缩（2048 块、0x7D/0x7C 头）
 ├── BleClient.kt        BLE：扫描/连接/握手/数据传输/等显影确认
-├── PlanStore.kt        SharedPreferences 存储：计划、间隔、历史、设备、相册、照片
+├── PlanStore.kt        SharedPreferences 存储：计划、间隔、历史、设备、相册、照片、模板内容
 ├── Scheduler.kt        WorkManager 每 15 分钟检查计划并推送
 ├── PushService.kt      前台服务（connectedDevice）
 └── PushWorker.kt       备用 WorkManager worker
@@ -163,8 +166,8 @@ printf '<?xml version="1.0" encoding="utf-8" standalone="yes" ?>\n<map>\n    <st
 ## 六、剩余 TODO（按优先级）
 
 1. **看板元素与 Web 版对齐**：天气三天预报、AQI、诗句赏析排版；对照 `web/card.html` 与桌面版 `card_render.py`
-2. **导航重构**：卡片页改「预览 + 底部操作条」；设置页拆「设备 / 外观 / 关于」
-3. **相册轮播入计划**：间隔推送从相册取图（当前只做模板）
+2. **导航重构**：已完成卡片预览与底部操作条，设置页已拆「设备 / 外观 / 关于」
+3. **相册轮播入计划**：`Scheduler.kt` 已从相册随机取图；仍需真机验证轮播效果
 4. **收藏**：把满意的卡片存为收藏，一键重推
 5. **桌面 / Web 文档版本号同步**
 

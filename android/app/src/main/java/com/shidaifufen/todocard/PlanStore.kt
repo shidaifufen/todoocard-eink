@@ -76,6 +76,47 @@ object PlanStore {
         sp(c).edit().putString("hist", arr.toString()).apply()
     }
 
+    fun card(c: Context): Render.Card {
+        val raw = sp(c).getString("card", null) ?: return Render.Card()
+        return runCatching {
+            val data = JSONObject(raw)
+            fun lines(key: String): List<String> {
+                val values = data.optJSONArray(key) ?: return emptyList()
+                return (0 until values.length()).map { values.optString(it) }
+            }
+            val dates = data.optJSONArray("countdowns")
+            Render.Card(
+                quote = data.optString("quote", Render.Card().quote),
+                quoteBy = data.optString("quoteBy", Render.Card().quoteBy),
+                todos = lines("todos"),
+                countdowns = if (dates == null) emptyList() else (0 until dates.length()).mapNotNull {
+                    val item = dates.optJSONArray(it)
+                    if (item == null || item.length() < 2) null
+                    else item.optString(0) to item.optString(1)
+                },
+                poemTitle = data.optString("poemTitle", Render.Card().poemTitle),
+                poemBy = data.optString("poemBy", Render.Card().poemBy),
+                poemLines = if (data.has("poemLines")) lines("poemLines") else Render.Card().poemLines,
+                poemNote = data.optString("poemNote"),
+                customTitle = data.optString("customTitle", Render.Card().customTitle),
+                customLines = if (data.has("customLines")) lines("customLines") else Render.Card().customLines,
+            )
+        }.getOrDefault(Render.Card())
+    }
+
+    fun saveCard(c: Context, card: Render.Card) {
+        val data = JSONObject()
+            .put("quote", card.quote).put("quoteBy", card.quoteBy)
+            .put("todos", JSONArray(card.todos))
+            .put("countdowns", JSONArray().apply {
+                card.countdowns.forEach { (name, date) -> put(JSONArray().put(name).put(date)) }
+            })
+            .put("poemTitle", card.poemTitle).put("poemBy", card.poemBy)
+            .put("poemLines", JSONArray(card.poemLines)).put("poemNote", card.poemNote)
+            .put("customTitle", card.customTitle).put("customLines", JSONArray(card.customLines))
+        sp(c).edit().putString("card", data.toString()).apply()
+    }
+
 
     var lastPhoto: String
         get() = sp_global.getString("lastPhoto", "") ?: ""

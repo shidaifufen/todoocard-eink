@@ -34,9 +34,13 @@ fun PlanScreen(ctx: android.content.Context) {
     var editItv by remember { mutableStateOf<Int?>(null) }
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)
+        Modifier.fillMaxSize().background(StudioBackground).verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp)
     ) {
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(12.dp))
+        Text("计划", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text("按时间自动更新卡片", fontSize = 12.sp, color = StudioMuted)
+        Spacer(Modifier.height(18.dp))
         TimelineCard(fixed, itvs, hist, onRefresh = { hist = PlanStore.history(ctx) })
 
         SectionCard(title = "每日计划", action = {
@@ -51,9 +55,11 @@ fun PlanScreen(ctx: android.content.Context) {
                     time = f.time,
                     title = templateName(f.template),
                     enabled = f.enabled,
-                    onToggle = { v -> fixed = fixed.toMutableList().also { it[i] = f.copy(enabled = v) } },
+                    onToggle = { v ->
+                        fixed = fixed.toMutableList().also { it[i] = f.copy(enabled = v) }
+                        PlanStore.saveFixed(ctx, fixed); SchedulerWorker.schedule(ctx)
+                    },
                     onEdit = { editFixed = i },
-                    onDelete = { fixed = fixed.toMutableList().also { it.removeAt(i) } },
                 )
             }
         }
@@ -72,9 +78,11 @@ fun PlanScreen(ctx: android.content.Context) {
                     time = "${t.start}–${t.end}",
                     title = "每 ${t.everyMin} 分钟 · $days · ${templateName(t.template)}",
                     enabled = t.enabled,
-                    onToggle = { v -> itvs = itvs.toMutableList().also { it[i] = t.copy(enabled = v) } },
+                    onToggle = { v ->
+                        itvs = itvs.toMutableList().also { it[i] = t.copy(enabled = v) }
+                        PlanStore.saveIntervals(ctx, itvs); SchedulerWorker.schedule(ctx)
+                    },
                     onEdit = { editItv = i },
-                    onDelete = { itvs = itvs.toMutableList().also { it.removeAt(i) } },
                 )
             }
         }
@@ -111,7 +119,11 @@ fun PlanScreen(ctx: android.content.Context) {
                 editFixed = null
             },
             onDelete = if (idx >= 0) {
-                { fixed = fixed.toMutableList().also { it.removeAt(idx) }; PlanStore.saveFixed(ctx, fixed); editFixed = null }
+                {
+                    fixed = fixed.toMutableList().also { it.removeAt(idx) }
+                    PlanStore.saveFixed(ctx, fixed); SchedulerWorker.schedule(ctx)
+                    editFixed = null
+                }
             } else null,
         )
     }
@@ -128,7 +140,11 @@ fun PlanScreen(ctx: android.content.Context) {
                 editItv = null
             },
             onDelete = if (idx >= 0) {
-                { itvs = itvs.toMutableList().also { it.removeAt(idx) }; PlanStore.saveIntervals(ctx, itvs); editItv = null }
+                {
+                    itvs = itvs.toMutableList().also { it.removeAt(idx) }
+                    PlanStore.saveIntervals(ctx, itvs); SchedulerWorker.schedule(ctx)
+                    editItv = null
+                }
             } else null,
         )
     }
@@ -137,34 +153,27 @@ fun PlanScreen(ctx: android.content.Context) {
 @Composable
 private fun SectionCard(title: String, action: @Composable (() -> Unit)? = null,
                         content: @Composable ColumnScope.() -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(Modifier.padding(14.dp)) {
+    Column(Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(title, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, modifier = Modifier.weight(1f))
                 action?.invoke()
             }
             Spacer(Modifier.height(8.dp))
             content()
-        }
+            Spacer(Modifier.height(12.dp))
+            HorizontalDivider(color = Color(0xFFDCE3DC))
     }
 }
 
 @Composable
 private fun PlanRow(time: String, title: String, enabled: Boolean,
-                    onToggle: (Boolean) -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
+                    onToggle: (Boolean) -> Unit, onEdit: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable { onEdit() }.padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Text(time, fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.width(104.dp))
         Text(title, fontSize = 12.sp, modifier = Modifier.weight(1f),
             color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
         Switch(enabled, onToggle, Modifier.height(28.dp))
-        IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-            Text("✕", fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
-        }
     }
 }
 
@@ -172,25 +181,25 @@ private fun PlanRow(time: String, title: String, enabled: Boolean,
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TimeField(label: String, value: String, onChange: (String) -> Unit) {
-    var open by remember { mutableStateOf(false) }
+    var showPicker by remember { mutableStateOf(false) }
     val parts = value.split(":")
     val state = rememberTimePickerState(
         initialHour = parts.getOrNull(0)?.toIntOrNull() ?: 8,
         initialMinute = parts.getOrNull(1)?.toIntOrNull() ?: 0,
         is24Hour = true,
     )
-    OutlinedButton(onClick = { open = true }, shape = RoundedCornerShape(10.dp)) {
+    OutlinedButton(onClick = { showPicker = true }, shape = RoundedCornerShape(8.dp)) {
         Text("$label  $value", fontSize = 13.sp)
     }
-    if (open) {
+    if (showPicker) {
         AlertDialog(
-            onDismissRequest = { open = false },
+            onDismissRequest = { showPicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    onChange("%02d:%02d".format(state.hour, state.minute)); open = false
+                    onChange("%02d:%02d".format(state.hour, state.minute)); showPicker = false
                 }) { Text("确定") }
             },
-            dismissButton = { TextButton(onClick = { open = false }) { Text("取消") } },
+            dismissButton = { TextButton(onClick = { showPicker = false }) { Text("取消") } },
             text = { TimePicker(state = state) },
         )
     }
@@ -245,10 +254,8 @@ private fun IntervalEditDialog(initial: PlanStore.Interval, title: String, onDis
         title = { Text(title, fontSize = 16.sp) },
         text = {
             Column {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TimeField("开始", item.start) { item = item.copy(start = it) }
-                    TimeField("结束", item.end) { item = item.copy(end = it) }
-                }
+                TimeField("开始", item.start) { item = item.copy(start = it) }
+                TimeField("结束", item.end) { item = item.copy(end = it) }
                 Spacer(Modifier.height(10.dp))
                 Text("间隔 ${item.everyMin} 分钟", fontSize = 13.sp)
                 Slider(value = item.everyMin.toFloat(), onValueChange = {
@@ -281,9 +288,7 @@ private fun TimelineCard(fixed: List<PlanStore.Fixed>, itvs: List<PlanStore.Inte
                          hist: List<PlanStore.Hist>, onRefresh: () -> Unit) {
     val now = System.currentTimeMillis()
     val next = planNext(fixed, itvs, now, 48)
-    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp)) {
+    Column(Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("时间轴", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, modifier = Modifier.weight(1f))
                 TextButton(onClick = onRefresh) { Text("刷新", fontSize = 13.sp) }
@@ -316,7 +321,6 @@ private fun TimelineCard(fixed: List<PlanStore.Fixed>, itvs: List<PlanStore.Inte
             Spacer(Modifier.height(6.dp))
             Text("接下来：${next.take(3).joinToString("   ") { SimpleDateFormat("MM-dd HH:mm", Locale.CHINA).format(Date(it)) }.ifEmpty { "无" }}",
                 fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
     }
 }
 

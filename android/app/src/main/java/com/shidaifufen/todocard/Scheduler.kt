@@ -71,7 +71,7 @@ class SchedulerWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, para
                 } ?: PlanStore.lastPhoto
                 if (p.isEmpty()) return
                 PhotoCard.render(p, PlanStore.photoFields)
-            } else Render.render(Render.Card(kind = kind))
+            } else Render.render(PlanStore.card(applicationContext).copy(kind = kind))
             val payload = QuickLz.buildPayload(Payload.build(bmp).controller)
             val ble = BleClient(applicationContext)
             kotlinx.coroutines.runBlocking {

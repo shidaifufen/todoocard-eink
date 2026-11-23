@@ -122,8 +122,9 @@ object PhotoCard {
         return try {
             val dir = File(ctx.filesDir, "photos").apply { mkdirs() }
             val out = File(dir, "p_${System.currentTimeMillis()}.jpg")
-            ctx.contentResolver.openInputStream(uri)?.use { input ->
-                out.outputStream().use { input.copyTo(it) }
+            val input = ctx.contentResolver.openInputStream(uri) ?: return null
+            input.use {
+                out.outputStream().use { output -> it.copyTo(output) }
             }
             out.absolutePath
         } catch (e: Exception) { null }
