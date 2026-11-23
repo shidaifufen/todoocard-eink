@@ -197,52 +197,52 @@ class BleClient(private val ctx: Context) {
         onLog("共 $nBlocks 块")
         Log.i("BleClient", "cmd02 len=${body.size} cmd03 start nBlocks=$nBlocks")
 
-        // 4) 数据阶段：以设备回执推进块号（设备说"要第 N 块"就发第 N 块，天然支持重发）
-        var nextIdx = 0
-        var resends = 0
-        while (nextIdx < nBlocks) {
+        // 4) 数据阶段：像官方一样"连续写"，只根据回执做重发/纠偏
+        var acked = -1
+        var idx = 0
+        var refreshed = false
+        var lastProgress = System.currentTimeMillis()
+        while (idx < nBlocks && !refreshed) {
             val pkt = ByteArray(4 + bs)
-            pkt[0] = (nextIdx and 0xFF).toByte()
-            pkt[1] = (nextIdx shr 8 and 0xFF).toByte()
-            pkt[2] = (nextIdx shr 16 and 0xFF).toByte()
-            pkt[3] = (nextIdx shr 24 and 0xFF).toByte()
-            body.copyInto(pkt, 4, nextIdx * bs, nextIdx * bs + bs)
-            write(d, pkt, noResponse = true)
+            pkt[0] = (idx and 0xFF).toByte()
+            pkt[1] = (idx shr 8 and 0xFF).toByte()
+            pkt[2] = (idx shr 16 and 0xFF).toByte()
+            pkt[3] = (idx shr 24 and 0xFF).toByte()
+            body.copyInto(pkt, 4, idx * bs, idx * bs + bs)
+
+            // 只用 Write Command（0x52），失败就重试同一块，绝不回退到带响应写
+            var ok = write(d, pkt, noResponse = true)
+            if (!ok) { delay(8); ok = write(d, pkt, noResponse = true) }
+            if (!ok) { delay(15); write(d, pkt, noResponse = true) }
             delay(4)
 
-            // 等回执：设备回 05 00 <idx> 表示"下一块要 idx"
-            val ack = withTimeoutOrNull(1500) {
-                while (true) {
-                    val v = acks.receive()
-                    if (v == -1) return@withTimeoutOrNull -1   // 显影确认，结束
-                    if (v >= 0) return@withTimeoutOrNull v
-                }
-                @Suppress("UNREACHABLE_CODE") nextIdx
+            // 读掉当前所有回执
+            while (true) {
+                val v = try { acks.tryReceive().getOrNull() } catch (e: Exception) { null } ?: break
+                if (v == -1) { refreshed = true; break }
+                if (v >= 0 && v > acked) { acked = v; lastProgress = System.currentTimeMillis() }
             }
-            when {
-                ack == null -> {
-                    resends++
-                    if (resends > 6) {
-                        onLog("设备连续 $resends 次没回执，停在块 $nextIdx")
-                        postWait(c, false, onLog)
-                        return
-                    }
-                }
-                ack == -1 -> {
-                    onLog("已完成并收到显影确认")
-                    return
-                }
-                ack > nextIdx -> { nextIdx = ack; resends = 0; onProgress(nextIdx * 100 / nBlocks) }
-                else -> { /* 设备要的就是当前块或更早：重发同块 */ resends = 0 }
+            idx++
+            if (idx % 32 == 0) {
+                Log.i("BleClient", "sent=$idx/$nBlocks acked=$acked")
+                onProgress(idx * 100 / nBlocks)
             }
-            if (nextIdx % 32 == 0 && nextIdx > 0) Log.i("BleClient", "progress next=$nextIdx/$nBlocks")
-            onProgress(nextIdx * 100 / nBlocks)
+            // 设备落后太多（>128 块）就从它要的位置重发
+            if (acked >= 0 && idx - acked > 128) {
+                Log.w("BleClient", "device behind: acked=$acked idx=$idx, resync")
+                idx = acked
+            }
+            if (System.currentTimeMillis() - lastProgress > 20_000) {
+                onLog("长时间没有回执（已发 $idx/$nBlocks，设备 acked=$acked）")
+                break
+            }
         }
-        Log.i("BleClient", "all blocks acked, waiting refresh")
+        onProgress(100)
+        Log.i("BleClient", "data loop done idx=$idx acked=$acked refreshed=$refreshed")
 
         // 5) 等收尾确认 05 08
-        val refreshed = postWait(c, true, onLog)
-        Log.i("BleClient", "send done nBlocks=$nBlocks nextIdx=$nextIdx refreshed=$refreshed")
+        val got = if (refreshed) true else postWait(c, true, onLog)
+        Log.i("BleClient", "send done nBlocks=$nBlocks idx=$idx acked=$acked refreshed=$got")
     }
 
 
