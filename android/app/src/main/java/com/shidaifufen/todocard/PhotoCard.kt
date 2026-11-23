@@ -30,7 +30,7 @@ object PhotoCard {
         c.drawColor(android.graphics.Color.WHITE)
 
         val meta = readExif(path)
-        val hasAny = meta.any { it.isNotBlank() }
+        val hasAny = listOf(meta.taken, meta.time, meta.camera, meta.params).any { it.isNotBlank() }
         val showDate = fields.date && meta.taken.isNotBlank()
         val showTime = fields.time && meta.time.isNotBlank()
         val line1 = listOf(if (showDate) meta.taken else "", if (showTime) meta.time else "")
