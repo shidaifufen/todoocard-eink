@@ -169,7 +169,7 @@ class BleClient(private val ctx: Context) {
 
         // 2) 问块大小：设备回 [0x01, blockSize, 0x00]
         blockSize = 0
-        write(c, byteArrayOf(0x01))
+        write(c, byteArrayOf(0x01, 0x00))
         val ok = withTimeoutOrNull(5000) {
             while (blockSize <= 0) { acks.receive() }
             true
@@ -186,8 +186,12 @@ class BleClient(private val ctx: Context) {
         }
         val nBlocks = body.size / bs
         var sent = 0
-        write(c, byteArrayOf(0x02, (body.size and 0xFF).toByte(),
-            (body.size shr 8 and 0xFF).toByte(), (body.size shr 16 and 0xFF).toByte()))
+        write(c, byteArrayOf(0x02,
+            (body.size and 0xFF).toByte(),
+            (body.size shr 8 and 0xFF).toByte(),
+            (body.size shr 16 and 0xFF).toByte(),
+            (body.size shr 24 and 0xFF).toByte(),
+            0x01))
         delay(200)
         write(c, byteArrayOf(0x03))
         onLog("共 $nBlocks 块")
