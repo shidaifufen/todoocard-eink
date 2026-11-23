@@ -97,6 +97,16 @@ object PlanStore {
             sp_global.edit().putString(fieldsKey(), raw).apply()
         }
 
+
+    fun albums(c: Context): List<String> =
+        (sp_global.getString("albums", "") ?: "").split("\n").filter { it.isNotBlank() }
+
+    fun addAlbum(c: Context, uri: String) {
+        val list = albums(c).toMutableList()
+        if (!list.contains(uri)) list.add(uri)
+        sp_global.edit().putString("albums", list.joinToString("\n")).apply()
+    }
+
     var lastChecked: Long
         get() = sp_global.getLong("lastChecked", 0L)
         set(v) { sp_global.edit().putLong("lastChecked", v).apply() }

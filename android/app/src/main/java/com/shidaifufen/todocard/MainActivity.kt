@@ -246,6 +246,8 @@ private fun App() {
     var photo by remember { mutableStateOf<Bitmap?>(null) }
     var photoPath by remember { mutableStateOf(PlanStore.lastPhoto) }
     var pfields by remember { mutableStateOf(PlanStore.photoFields) }
+    var edit by remember { mutableStateOf(PhotoEdit.Params()) }
+    var albums by remember { mutableStateOf(PlanStore.albums(ctx)) }
     var status by remember { mutableStateOf("选模板 → 预览 → 推送") }
     var progress by remember { mutableStateOf(0) }
     var busy by remember { mutableStateOf(false) }
@@ -325,6 +327,17 @@ private fun App() {
         val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", f)
         cameraUri.value = uri
         cameraLauncher.launch(uri)
+    }
+    val albumLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            ctx.contentResolver.takePersistableUriPermission(
+                uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            PlanStore.addAlbum(ctx, uri.toString())
+            albums = PlanStore.albums(ctx)
+            status = "已添加相册"
+        }
     }
     var pendingScan by remember { mutableStateOf(false) }
     val permLauncher = rememberLauncherForActivityResult(
@@ -483,12 +496,54 @@ private fun App() {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = {
                             picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                        }) { Text("从相册选择") }
-                        Button(onClick = { takePhoto() }) { Text("拍照推送") }
+                        }) { Text("选择照片") }
+                        Button(onClick = { takePhoto() }) { Text("拍照") }
+                        OutlinedButton(onClick = { albumLauncher.launch(null) }) { Text("添加相册") }
                     }
-                    photo?.let {
-                        Image(it.asImageBitmap(), null, Modifier.fillMaxWidth().padding(top = 12.dp)
-                            .aspectRatio(528f / 792f), contentScale = androidx.compose.ui.layout.ContentScale.Fit)
+                    if (albums.isNotEmpty()) {
+                        Text("已添加 ${albums.size} 个相册", fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 6.dp))
+                    }
+                    if (photoPath.isNotEmpty()) {
+                        val previewBmp = remember(photoPath, edit) {
+                            runCatching { PhotoEdit.render(photoPath, edit) }.getOrNull()
+                        }
+                        previewBmp?.let {
+                            Image(it.asImageBitmap(), null, Modifier.fillMaxWidth().padding(top = 12.dp)
+                                .aspectRatio(528f / 792f), contentScale = androidx.compose.ui.layout.ContentScale.Fit)
+                        }
+                        Text("裁切 / 色彩", fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                        listOf(
+                            "缩放" to edit.zoom,
+                            "水平" to (edit.dx + 1) / 2,
+                            "垂直" to (edit.dy + 1) / 2,
+                        ).forEachIndexed { i, (label, v) ->
+                            Text("$label ${"%.2f".format(v)}", fontSize = 11.sp)
+                            Slider(value = v, onValueChange = { nv ->
+                                edit = when (i) {
+                                    0 -> edit.copy(zoom = nv.coerceIn(1f, 3f))
+                                    1 -> edit.copy(dx = (nv * 2 - 1).coerceIn(-1f, 1f))
+                                    else -> edit.copy(dy = (nv * 2 - 1).coerceIn(-1f, 1f))
+                                }
+                            }, valueRange = if (i == 0) 1f..3f else 0f..1f)
+                        }
+                        Text("亮度 ${edit.brightness}", fontSize = 11.sp)
+                        Slider(value = edit.brightness.toFloat(), onValueChange = {
+                            edit = edit.copy(brightness = it.toInt())
+                        }, valueRange = -100f..100f)
+                        Text("对比度 ${"%.2f".format(edit.contrast)}", fontSize = 11.sp)
+                        Slider(value = edit.contrast, onValueChange = {
+                            edit = edit.copy(contrast = it.coerceIn(0.5f, 1.6f))
+                        }, valueRange = 0.5f..1.6f)
+                        Text("饱和度 ${"%.2f".format(edit.saturation)}", fontSize = 11.sp)
+                        Slider(value = edit.saturation, onValueChange = {
+                            edit = edit.copy(saturation = it.coerceIn(0f, 1.6f))
+                        }, valueRange = 0f..1.6f)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { kind = "photo"; tab = 0 }) { Text("去推送") }
+                            OutlinedButton(onClick = { edit = PhotoEdit.Params() }) { Text("重置") }
+                        }
                     }
                     Text("选照片后会自动切到「照片」模板。批量与收藏在后续版本。",
                         fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
