@@ -64,7 +64,11 @@ class SchedulerWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, para
         val t0 = System.currentTimeMillis()
         try {
             val bmp = if (kind == "photo") {
-                val p = PlanStore.lastPhoto
+                // 优先从已添加的相册里随机取图，没有相册就用最近一张
+                val albumUri = AlbumStore.randomImage(applicationContext, PlanStore.albums(applicationContext))
+                val p = albumUri?.let { u ->
+                    PhotoCard.importToFiles(applicationContext, u)
+                } ?: PlanStore.lastPhoto
                 if (p.isEmpty()) return
                 PhotoCard.render(p, PlanStore.photoFields)
             } else Render.render(Render.Card(kind = kind))

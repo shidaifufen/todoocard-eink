@@ -20,6 +20,12 @@ object AlbumStore {
         return out
     }
 
+    /** 随机取一张（供计划里的照片轮播使用） */
+    fun randomImage(ctx: Context, albumUris: List<String>): android.net.Uri? {
+        val all = listImages(ctx, albumUris)
+        return if (all.isEmpty()) null else all.random()
+    }
+
     private fun walk(ctx: Context, dir: androidx.documentfile.provider.DocumentFile,
                      out: MutableList<Uri>, depth: Int) {
         if (depth > 3 || out.size > 500) return
