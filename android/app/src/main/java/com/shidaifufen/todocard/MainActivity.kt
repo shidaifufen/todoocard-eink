@@ -345,19 +345,23 @@ private fun App() {
                 }
                 val saved = PlanStore.deviceAddress
                 val ble = BleClient(ctx)
-                status = "等待卡片广播…"
-                var target = device
-                if (target == null && saved.isNotEmpty()) {
-                    repeat(4) { i ->
-                        val list = withContext(Dispatchers.IO) { ble.scanAll(10_000) }
-                        val hit = list.firstOrNull { it.device.address == saved }
-                            ?: list.firstOrNull { it.device.address.endsWith("39:01", true) }
-                        if (hit != null) { target = hit; return@repeat }
-                        status = "还没扫到卡片，继续等（第 ${i + 2}/4 轮）"
+                status = "等待卡片广播…（最长 120 秒，随时会连接）"
+                var target: android.bluetooth.le.ScanResult? = null
+                val deadline = System.currentTimeMillis() + 120_000
+                while (System.currentTimeMillis() < deadline && target == null) {
+                    val list = withContext(Dispatchers.IO) { ble.scanAll(10_000) }
+                    target = list.firstOrNull { (it.device.name ?: "").contains("todoo", true) }
+                        ?: list.firstOrNull { it.device.address.startsWith("FF:FF", true) }
+                        ?: list.firstOrNull { saved.isNotEmpty() && it.device.address == saved }
+                        ?: list.firstOrNull { it.device.address.endsWith("39:01", true) }
+                    if (target == null) {
+                        val left = ((deadline - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
+                        status = "还没扫到卡片，继续等（剩 ${left}s，可长按卡片背面按钮唤醒）"
                     }
                 }
-                val tgt = target ?: device
-                if (tgt == null) { status = "还没有配对：先到「设置」页配对卡片"; return@launch }
+                if (target == null) { status = "等了 120 秒仍没扫到卡片，请唤醒后重试"; return@launch }
+                PlanStore.deviceAddress = target.device.address
+                PlanStore.deviceName = target.device.name ?: ""
                 status = "连接中…"
                 if (!withContext(Dispatchers.IO) { ble.connect(tgt) }) {
                     status = "连接失败：卡片可能在休眠或被别的设备占用"; return@launch
