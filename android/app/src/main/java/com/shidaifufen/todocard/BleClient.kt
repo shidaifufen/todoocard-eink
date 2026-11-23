@@ -219,18 +219,19 @@ class BleClient(private val ctx: Context) {
             pkt[2] = (sent shr 16 and 0xFF).toByte()
             pkt[3] = (sent shr 24 and 0xFF).toByte()
             body.copyInto(pkt, 4, sent * bs, sent * bs + bs)
-            // 数据块：无响应写；写失败（队列满/被拒）就等一会儿重发同一个块
-            var wrote = write(d, pkt, noResponse = true)
-            if (!wrote) {
-                delay(12)
-                wrote = write(d, pkt, noResponse = true)
+            // 数据块：带响应写 + 等回调（Android 的 no-response 队列会静默丢包）
+            var wroteOk = false
+            var tries = 0
+            while (!wroteOk && tries < 3) {
+                tries++
+                writeOk.tryReceive()                 // 清掉旧信号
+                val queued = write(d, pkt, noResponse = false)
+                if (!queued) { delay(10); continue }
+                wroteOk = withTimeoutOrNull(2000) { writeOk.receive(); true } ?: false
             }
-            if (!wrote) {
-                // 个别机型不支持无响应写，退回带响应
-                write(d, pkt)
-                withTimeoutOrNull(800) { writeOk.receive() }
-            } else {
-                delay(4)
+            if (!wroteOk) {
+                onLog("第 $sent 块写入无回调，重试后仍失败")
+                Log.w("BleClient", "block $sent write failed")
             }
             sent++
             onProgress(sent * 100 / nBlocks)
