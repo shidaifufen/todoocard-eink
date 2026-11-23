@@ -219,12 +219,16 @@ class BleClient(private val ctx: Context) {
             pkt[2] = (sent shr 16 and 0xFF).toByte()
             pkt[3] = (sent shr 24 and 0xFF).toByte()
             body.copyInto(pkt, 4, sent * bs, sent * bs + bs)
-            // 数据块用"不带响应"写 + 微延时，和桌面版 sender.py 的节奏一致
-            val wrote = write(d, pkt, noResponse = true)
+            // 数据块：无响应写；写失败（队列满/被拒）就等一会儿重发同一个块
+            var wrote = write(d, pkt, noResponse = true)
             if (!wrote) {
-                // 有些机型不支持无响应写，退回带响应
+                delay(12)
+                wrote = write(d, pkt, noResponse = true)
+            }
+            if (!wrote) {
+                // 个别机型不支持无响应写，退回带响应
                 write(d, pkt)
-                withTimeoutOrNull(500) { writeOk.receive() }
+                withTimeoutOrNull(800) { writeOk.receive() }
             } else {
                 delay(4)
             }
