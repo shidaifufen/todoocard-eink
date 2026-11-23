@@ -280,8 +280,9 @@ private fun App() {
             val list = withContext(Dispatchers.IO) { ble.scanAll(10_000) { status = it } }
             found = list
             val saved = PlanStore.deviceAddress
-            val auto = list.firstOrNull { saved.isNotEmpty() && it.device.address == saved }
-                ?: list.firstOrNull { ble.isLikelyCard(it) }
+            val auto = list.firstOrNull { (it.device.name ?: "").contains("todoo", true) }
+                ?: list.firstOrNull { it.device.address.startsWith("FF:FF", true) }
+                ?: list.firstOrNull { saved.isNotEmpty() && it.device.address == saved }
                 ?: list.firstOrNull { it.device.address.endsWith("39:01", ignoreCase = true) }
                 ?: list.firstOrNull()
             device = auto
@@ -407,7 +408,7 @@ private fun App() {
                                 else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
                                 pendingScan = true; permLauncher.launch(perms)
                             }, enabled = !busy) { Text("扫描") }
-                            Button(onClick = { doSend() }, enabled = preview != null && device != null && !busy) {
+                            Button(onClick = { doSend() }, enabled = preview != null && (device != null || PlanStore.deviceAddress.isNotEmpty()) && !busy) {
                                 Text(if (busy) "推送中…" else "推送")
                             }
                         }
