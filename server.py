@@ -19,7 +19,7 @@ FROZEN = bool(getattr(sys, "frozen", False))
 RES_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 ROOT = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent
 WEB_DIR = RES_DIR / "web"
-DATA_DIR = ROOT / "data"
+DATA_DIR = Path(os.environ.get("TODOOCARD_DATA_DIR", str(ROOT / "data"))).resolve()
 PORT = int(os.environ.get("PORT", "8199"))
 
 _LOGGER = logging.getLogger("todoocard")

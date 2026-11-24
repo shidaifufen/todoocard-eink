@@ -94,6 +94,7 @@ class CardService:
         self.sse = sse
         self._task = None
         self._pair_task = None
+        self._pair_watch_task = None
         self._pair_lines: list[str] = []
         self._last_tick = 0.0
         self._last_tick_text = ""
@@ -298,10 +299,11 @@ class CardService:
                     await asyncio.sleep(15)
                     continue
                 need_scan = bool(self.cfg.get("outbox")) or self.cfg.get("button_photo")
-                if self.cfg.get("device_id") and need_scan and not self._busy:
+                if (self.cfg.get("device_id") and need_scan and not self._busy
+                        and self._pair_state not in ("waiting", "pairing")):
                     found = await asyncio.get_running_loop().run_in_executor(
                         None, self._scan_card)
-                    if found:
+                    if found and self._pair_state not in ("waiting", "pairing"):
                         if found["pairing"]:
                             _LOGGER.info("检测到配对窗口（%s），开始配对…", found["addr"])
                             await self._run_pair(found["addr"])
@@ -386,7 +388,8 @@ class CardService:
 
         日志按 pair_session 的约定写进 _pair_lines，网页的「配对」弹窗照样能看。
         """
-        from bleak import BleakClient, BleakScanner
+        from bleak import BleakScanner
+        from ble_pair import pair_device
 
         def _log(msg: str):
             _LOGGER.info("%s", msg)
@@ -402,15 +405,10 @@ class CardService:
                 if device is None:
                     _log("[ble] 没扫到这台卡片：确认它没被 TodooCam 等 App 连着，再长按按钮 5 秒")
                     return False
-                _log(f"[ble] 找到 {device.name or device_id}，连接中…")
-                client = BleakClient(device, timeout=30)
-                await client.connect()
-                try:
-                    if sys.platform == "win32":
-                        await client.pair()   # 走 Windows 系统蓝牙配对；其它平台没有这个 API
-                    _log("[ble] 配对完成")
-                finally:
-                    await client.disconnect()
+                self._pair_state = "pairing"
+                _log(f"[ble] 找到 {device.name or device_id}，先完成系统配对，再验证连接…")
+                await pair_device(device, _log)
+                _log("[ble] 配对完成，连接验证通过")
             self.cfg["paired_ts"] = int(time.time())
             self._save_cfg()
             self._emit()
@@ -420,8 +418,12 @@ class CardService:
             return False
 
     async def _run_pair(self, device_id: str) -> bool:
+        if self._pair_state in ("waiting", "pairing"):
+            return False
+        self._pair_state = "pairing"
         if sys.platform != "darwin":
             ok = await self._pair_bleak(device_id)
+            self._pair_state = "success" if ok else "fail"
             if ok:
                 await self._drain_outbox()
             return ok
@@ -432,6 +434,7 @@ class CardService:
                                              capture_output=True, text=True, timeout=120))
             out = ((r.stdout or "") + (r.stderr or ""))[-1500:]
             ok = "Pairing completed" in out or "pairing succeeded" in out.lower()
+            self._pair_state = "success" if ok else "fail"
             self.cfg["paired_ts"] = int(time.time()) if ok else 0
             self.cfg["pair_log"] = out[-500:]
             self._save_cfg()
@@ -442,6 +445,7 @@ class CardService:
             return ok
         except Exception as e:
             _LOGGER.warning("自动配对异常: %s", e)
+            self._pair_state = "fail"
             return False
 
     # ── 重试队列（outbox） ──
@@ -2059,12 +2063,12 @@ class CardService:
         except Exception:
             pass
         self._task = asyncio.create_task(self._loop(), name="card-scheduler")
-        if self._pair_task is None or self._pair_task.done():
-            self._pair_task = asyncio.create_task(self._pair_watch_loop(), name="card-pair-watch")
+        if self._pair_watch_task is None or self._pair_watch_task.done():
+            self._pair_watch_task = asyncio.create_task(self._pair_watch_loop(), name="card-pair-watch")
 
     async def stop(self):
         self._stop.set()
-        for t in (self._task, self._pair_task):
+        for t in (self._task, self._pair_task, self._pair_watch_task):
             if t:
                 t.cancel()
                 try:
@@ -2587,7 +2591,7 @@ def make_routes():
             return web.json_response({"ok": False, "error": "缺少 device_id"}, status=400)
         try:
             if sys.platform != "darwin":
-                ok = await svc._pair_bleak(str(dev))
+                ok = await svc._run_pair(str(dev))
                 return web.json_response({"ok": ok, "code": 0 if ok else 1,
                                           "output": "\n".join(svc._pair_lines[-40:])})
             sender, _ = await asyncio.get_running_loop().run_in_executor(None, svc._ensure_bins)

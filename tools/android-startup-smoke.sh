@@ -32,7 +32,7 @@ if grep -q 'FATAL EXCEPTION\|PatternSyntaxException' startup-proof/fixed-logcat.
   exit 1
 fi
 adb shell dumpsys activity activities > startup-proof/fixed-activities.txt
-grep -q "mResumedActivity.*$PKG" startup-proof/fixed-activities.txt
+grep -Eq "(mResumedActivity|topResumedActivity|ResumedActivity|Resumed:).*$PKG" startup-proof/fixed-activities.txt
 adb exec-out screencap -p > startup-proof/fixed-startup.png
 
 adb shell am force-stop "$PKG"
