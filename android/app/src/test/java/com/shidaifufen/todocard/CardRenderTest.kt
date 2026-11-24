@@ -79,6 +79,18 @@ class CardRenderTest {
         save("photo-crop", exported)
     }
 
+    @Test fun hourlyTrendBelongsToWeatherDashboardOnly() {
+        val hours = (0..5).map { Render.WeatherHour("${it + 9}:00", 20f + it, 2) }
+        val dashboard = Render.render(Render.Card(kind = "weather", weatherHours = hours))
+        val blocks = Render.render(Render.Card(kind = "weather2", weatherHours = hours))
+        assertTrue("weather dashboard shows a blue temperature trend", (540..610).any { y ->
+            (32 until 496).any { x -> dashboard.getPixel(x, y) == Color.BLUE }
+        })
+        assertTrue("color block weather has no chart below its panels", (665..730).all { y ->
+            (32 until 496).all { x -> blocks.getPixel(x, y) == Color.WHITE }
+        })
+    }
+
     @Test fun editedContentSurvivesRestart() {
         val context = RuntimeEnvironment.getApplication()
         PlanStore.init(context)
