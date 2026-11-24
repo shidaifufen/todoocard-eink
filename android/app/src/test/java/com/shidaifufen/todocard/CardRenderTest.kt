@@ -96,9 +96,13 @@ class CardRenderTest {
         assertEquals("11-25 小雨", parsed.label)
         assertEquals(-3, parsed.low)
         assertEquals(6, parsed.high)
-        val card = Render.render(Render.Card(kind = "weather", weatherForecast = listOf(
-            "11-25 小雨 -3~6°", "11-26 晴 1~9°", "11-27 多云 3~10°")))
+        val forecasts = listOf("11-25 小雨 -3~6°", "11-26 晴 1~9°", "11-27 多云 3~10°")
+        val card = Render.render(Render.Card(kind = "weather", weatherForecast = forecasts))
         assertTrue((670..733).any { y -> (210..375).any { x -> card.getPixel(x, y) == Color.BLUE } })
+        val blocks = Render.render(Render.Card(kind = "weather2", weatherForecast = forecasts))
+        assertTrue("color block forecast uses the same range chart", (425..520).any { y ->
+            (210..375).any { x -> blocks.getPixel(x, y) == Color.BLUE }
+        })
         assertNull(WeatherVisuals.parseDayRange("手动填写的天气"))
     }
 

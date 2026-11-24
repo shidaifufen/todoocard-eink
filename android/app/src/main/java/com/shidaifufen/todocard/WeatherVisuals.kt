@@ -14,12 +14,14 @@ internal object WeatherVisuals {
     }
 
     /** Horizontal range bars leave enough room for the date, weather and both temperatures. */
-    fun forecastBars(c: Canvas, forecasts: List<String>) {
+    fun forecastBars(c: Canvas, forecasts: List<String>, firstBaseline: Float = 681f,
+                     rowGap: Float = 24f, leftInset: Float = 32f) {
         val rows = forecasts.take(3)
         val ranges = rows.map(::parseDayRange)
         val valid = ranges.filterNotNull()
         if (rows.isEmpty()) {
-            c.drawText("刷新天气后显示三天预报", 32f, 700f, Paint().apply { color = Color.BLACK; textSize = 17f })
+            c.drawText("刷新天气后显示三天预报", leftInset, firstBaseline + 19f,
+                Paint().apply { color = Color.BLACK; textSize = 17f })
             return
         }
         val lo = valid.minOfOrNull { it.low } ?: 0
@@ -27,16 +29,16 @@ internal object WeatherVisuals {
         val span = (hi - lo).coerceAtLeast(1)
         val text = Paint().apply { color = Color.BLACK; textSize = 16f; typeface = Typeface.SANS_SERIF }
         rows.forEachIndexed { index, raw ->
-            val y = 681f + index * 24f
+            val y = firstBaseline + index * rowGap
             val item = ranges[index]
             if (item == null) {
                 var label = raw
-                while (text.measureText(label) > 460f && label.length > 1) label = label.dropLast(1)
-                c.drawText(label, 32f, y, text)
+                while (text.measureText(label) > 490f - leftInset && label.length > 1) label = label.dropLast(1)
+                c.drawText(label, leftInset, y, text)
             } else {
                 var label = item.label
-                while (text.measureText(label) > 158f && label.length > 1) label = label.dropLast(1)
-                c.drawText(label, 32f, y, text)
+                while (text.measureText(label) > 190f - leftInset && label.length > 1) label = label.dropLast(1)
+                c.drawText(label, leftInset, y, text)
                 val left = 210f + (item.low - lo) * 160f / span
                 val right = 210f + (item.high - lo) * 160f / span
                 c.drawRoundRect(left, y - 12f, maxOf(left + 5f, right), y - 3f, 4f, 4f,

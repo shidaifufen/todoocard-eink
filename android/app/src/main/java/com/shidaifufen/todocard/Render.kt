@@ -464,10 +464,8 @@ object Render {
         drawText("体感 ${card.weatherFeels.ifBlank { "--" }}°", mid + 12f, 337f, paint(20f))
         cell(M, 366f, right, 533f)
         drawText("未来三天", M + 14f, 400f, paint(23f, BLUE, true))
-        card.weatherForecast.take(3).forEachIndexed { index, line ->
-            drawText(fitLine(line, paint(20f), W - M * 2 - 28f), M + 14f,
-                438f + index * 35f, paint(20f))
-        }
+        WeatherVisuals.forecastBars(this, card.weatherForecast, firstBaseline = 438f,
+            rowGap = 35f, leftInset = M + 14f)
         val half = M + (W - 2 * M) / 2
         cell(M, 533f, half, 660f, BLUE)
         drawText("日出 / 日落", M + 14f, 568f, paint(22f, WHITE, true))
