@@ -47,7 +47,7 @@ internal object LayoutRender {
             "customTitle" to card.customTitle, "customText" to card.customLines.joinToString("\n"),
             "todoCount" to card.todos.size.toString(), "yearPercent" to (date.dayOfYear * 100 / date.lengthOfYear()).toString())
     }
-    private fun bind(text: String, values: Map<String, String>) = Regex("\\{\\{([A-Za-z][A-Za-z0-9]*)}}").replace(text) {
+    private fun bind(text: String, values: Map<String, String>) = Regex("\\{\\{([A-Za-z][A-Za-z0-9]*)\\}\\}").replace(text) {
         values[it.groupValues[1]].orEmpty().take(4000)
     }.take(12000)
     private fun color(name: String, card: Render.Card): Int = when (name) {

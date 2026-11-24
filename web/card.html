@@ -195,7 +195,7 @@
 
     <section class="card hide" id="panel-device">
       <h3>设备与配对</h3>
-      <div class="row"><span>已绑定 UUID</span><span id="devId" class="dev" style="margin:0">--</span></div>
+      <div class="row"><span>已选设备地址</span><span id="devId" class="dev" style="margin:0">--</span></div>
       <div class="btnrow">
         <button onclick="scanDevices()">扫描附近设备</button>
         <button class="primary" onclick="startPair()">开始配对（会显示每一步）</button>
@@ -1180,22 +1180,55 @@ async function send(kind){
   load();
 }
 
+// ── Device selection: structured Windows MAC and macOS UUID support ──
+let selectingDevice = false;
+function scanCandidates(result) {
+  const found = Array.isArray(result.found) ? result.found : [];
+  const items = found.length ? found.map(d => ({id:String(d.addr || d.id || '').trim(),
+    name:String(d.name || ''), label:[d.addr || d.id, d.name, 'rssi=' + d.rssi,
+      d.pairing ? '[配对窗口已开]' : ''].filter(Boolean).join('  ')})) : (result.devices || []).map(line => {
+    const id = String(line).match(/(?:^|\s)id=([^\s]+)/)?.[1] || '';
+    return { id, name:'', label:String(line) };
+  });
+  const valid = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|(?:[0-9a-f]{2}:){5}[0-9a-f]{2})$/i;
+  return items.filter(d => valid.test(d.id));
+}
 async function scanDevices(){
-  $('scanResult').innerHTML = '<div class="hint">扫描中，约 30 秒…</div>';
-  const d = await postJSON('/api/card/scan', {});
-  if (!d.ok){ $('scanResult').innerHTML = `<div class="hint" style="color:var(--danger)">${d.error||'扫描失败'}</div>`; return; }
-  const lines = d.devices||[];
-  if (!lines.length){ $('scanResult').innerHTML = '<div class="hint">没扫到兼容设备</div>'; return; }
-  $('scanResult').innerHTML = lines.map(ln=>{
-    const m = ln.match(/id=([0-9A-Fa-f-]{36})/);
-    return `<div class="dev">${ln.replace(/</g,'&lt;')}<div style="margin-top:6px">
-      <button onclick="useDevice('${m?m[1]:''}')">用这台</button></div></div>`;
-  }).join('');
+  $('scanResult').textContent = '扫描中，约 30 秒…';
+  try {
+    const d = await postJSON('/api/card/scan', {});
+    if (!d.ok) throw new Error(d.error || '扫描失败');
+    const devices = scanCandidates(d);
+    $('scanResult').replaceChildren();
+    if (!devices.length) { $('scanResult').textContent = '没扫到包含有效地址的兼容设备'; return; }
+    for (const device of devices) {
+      const row = document.createElement('div'); row.className = 'dev';
+      const info = document.createElement('div'); info.textContent = device.label;
+      const button = document.createElement('button'); button.textContent = '用这台并配对';
+      button.style.marginTop = '6px';
+      button.onclick = () => useDevice(device.id, device.name);
+      row.append(info, button); $('scanResult').append(row);
+    }
+  } catch (error) { $('scanResult').textContent = '扫描失败：' + error.message; }
 }
-async function useDevice(id){
-  const d = await postJSON('/api/card/config', {device_id:id});
-  if (d.ok) toast('已绑定'); load();
+async function useDevice(id, name = ''){
+  if (selectingDevice) return;
+  if (!id?.trim()) { toast('设备地址为空，请重新扫描'); return; }
+  selectingDevice = true;
+  try {
+    const d = await postJSON('/api/card/config', {device_id:id.trim(), device_name:name});
+    if (!d.ok) throw new Error(d.error || '设备保存失败');
+    if (d.card?.device_id !== id.trim()) throw new Error('服务没有保存选中的设备，请重新扫描');
+    $('devId').textContent = d.card.device_id;
+    $('devPill').textContent = d.card.device_name || d.card.device_id;
+    $('devPill').className = 'pill on';
+    toast('设备已保存，开始配对');
+    await startPair();
+    await load();
+  } catch (error) { toast('选择失败：' + error.message); }
+  finally { selectingDevice = false; }
 }
+// ── Pair session ──
 let pairTimer = null;
 function closePair(){ $('pairModal').classList.remove('show'); clearInterval(pairTimer); load(); }
 async function startPair(){

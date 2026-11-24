@@ -18,7 +18,7 @@ object LayoutPack {
         "date", "time", "week", "year", "month", "day", "quote", "quoteBy", "poemTitle", "poemBy", "poemNote",
         "poemText", "customTitle", "customText", "todoCount", "yearPercent")
     private val lists = setOf("todos", "poemLines", "customLines", "weatherForecast", "countdowns")
-    private val binding = Regex("\\{\\{([A-Za-z][A-Za-z0-9]*)}}")
+    private val binding = Regex("\\{\\{([A-Za-z][A-Za-z0-9]*)\\}\\}")
     data class Node(val type: String, val x: Float, val y: Float, val width: Float, val height: Float, val json: String)
     data class Template(val name: String, val sources: Set<String>, val nodes: List<Node>, val json: String)
     data class Pack(val name: String, val templates: Map<String, Template>, val json: String)
