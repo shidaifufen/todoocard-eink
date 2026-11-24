@@ -29,23 +29,17 @@ internal fun LayoutSettings() {
     var pending by remember { mutableStateOf<LayoutPack.Pack?>(null) }
     var reset by remember { mutableStateOf(false) }
     var exportText by remember { mutableStateOf("") }
+    val linkPrefs = remember(ctx) { ctx.getSharedPreferences("layout_links_v1", 0) }
+    var linkDialog by remember { mutableStateOf(false) }
+    var link by remember { mutableStateOf(linkPrefs.getString("last", LayoutDownload.DEFAULT_URL).orEmpty()) }
+    var linkError by remember { mutableStateOf("") }
     val importFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
             busy = true; message = "正在读取版式包…"
             try {
                 pending = withContext(Dispatchers.IO) {
-                    val bytes = ctx.contentResolver.openInputStream(uri)?.use { input ->
-                        val out = java.io.ByteArrayOutputStream()
-                        val buffer = ByteArray(8192)
-                        while (true) {
-                            val read = input.read(buffer)
-                            if (read < 0) break
-                            require(out.size() + read <= LayoutPack.MAX_BYTES) { "版式包不能超过 256 KB" }
-                            out.write(buffer, 0, read)
-                        }
-                        out.toByteArray()
-                    } ?: error("无法读取文件")
-                    LayoutPack.parse(bytes.toString(Charsets.UTF_8))
+                    val raw = ctx.contentResolver.openInputStream(uri)?.use(LayoutDownload::read) ?: error("无法读取文件")
+                    LayoutPack.parse(raw)
                 }
                 message = "校验通过，请预览后应用"
             } catch (e: Exception) { message = "导入失败：${e.message}" }
@@ -80,6 +74,7 @@ internal fun LayoutSettings() {
         Text(packName, fontSize = 15.sp)
         Text(if (changed.isEmpty()) "正在使用内置版式" else "已覆盖：${changed.joinToString { templateName(it) }}", fontSize = 12.sp, color = StudioMuted)
         Text("导入 JSON 调整排版，内容、相册、设备和计划单独保存。只替换包内列出的卡片。", fontSize = 12.sp, color = StudioMuted)
+        OutlinedButton(enabled = !busy, onClick = { linkError = ""; linkDialog = true }) { Text("从 GitHub 导入 / 更新") }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(enabled = !busy, onClick = { importFile.launch(arrayOf("application/json", "text/*", "application/octet-stream")) }) { Text("导入版式") }
             OutlinedButton(enabled = !busy, onClick = {
@@ -100,6 +95,41 @@ internal fun LayoutSettings() {
     }
     pending?.let { pack -> LayoutPreview(pack,
         onDismiss = { pending = null }, onApply = { pending = null; perform { LayoutStore.apply(ctx, pack) } }) }
+    if (linkDialog) AlertDialog(onDismissRequest = { if (!busy) linkDialog = false },
+        title = { Text("从 GitHub 获取版式") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("粘贴公开仓库的 JSON 文件链接或 Release 附件链接。每次获取最新文件，预览后再应用；上次链接会保留。", fontSize = 12.sp)
+                OutlinedTextField(value = link, onValueChange = { link = it; linkError = "" }, enabled = !busy,
+                    label = { Text("GitHub 链接") }, modifier = Modifier.fillMaxWidth(), maxLines = 4,
+                    isError = linkError.isNotEmpty())
+                Text("仓库已有版式", fontSize = 12.sp)
+                Row(Modifier.horizontalScroll(rememberScrollState())) {
+                    listOf("默认版式" to "default", "蓝色天气" to "weather-blue", "一句＋天气" to "quote-weather").forEach { (name, file) ->
+                        TextButton(enabled = !busy, onClick = {
+                            link = "https://github.com/shidaifufen/todoocard-eink/blob/main/layouts/$file.json"; linkError = ""
+                        }) { Text(name) }
+                    }
+                }
+                if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (linkError.isNotEmpty()) Text(linkError, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+            }
+        },
+        confirmButton = { TextButton(enabled = !busy && link.isNotBlank(), onClick = {
+            val requested = link.trim()
+            scope.launch {
+                busy = true; linkError = ""; message = "正在从 GitHub 获取版式…"
+                try {
+                    val pack = withContext(Dispatchers.IO) { LayoutDownload.fetch(requested) }
+                    linkPrefs.edit().putString("last", requested).apply()
+                    linkDialog = false; pending = pack; message = "下载并校验通过，请预览后应用"
+                } catch (e: Exception) {
+                    linkError = "获取失败：${e.message ?: "请检查网络连接"}"
+                    message = "获取失败，当前版式继续使用"
+                } finally { busy = false }
+            }
+        }) { Text("获取并预览") } },
+        dismissButton = { TextButton(enabled = !busy, onClick = { linkDialog = false }) { Text("取消") } })
     if (reset) AlertDialog(onDismissRequest = { reset = false }, title = { Text("恢复内置版式") },
         text = { Text("恢复全部看板的内置排版。可通过“撤销上次更改”返回当前版式。") },
         confirmButton = { TextButton(onClick = { reset = false; perform { LayoutStore.reset(ctx) } }) { Text("恢复") } },

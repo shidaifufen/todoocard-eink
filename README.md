@@ -9,10 +9,23 @@
 
 ## 安卓版（原生 Kotlin）
 
-- 安装包：[todocard-android-1.0.0.apk](https://github.com/shidaifufen/todoocard-eink/releases/download/v1.0.0-android/todocard-android-1.0.0.apk)
+- 安装包：[Android 1.5.0](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.5.0-android)（固定签名，可覆盖升级 1.3.0 及以后使用相同签名的版本）
 - 源码：`android/`；构建：push 到 main 触发 `.github/workflows/build-android.yml`
 - 功能：8 模板、照片裁切/调色、相册（SAF）、每日计划 + 间隔推送 + 时间轴、配对后自动等广播推送、系统分享/荣耀传送门
 - 交接与真机调试：见 [HANDOFF-ANDROID.md](HANDOFF-ANDROID.md)
+
+### 看板版式独立更新（Android 1.5.0 起）
+
+先升级一次应用，之后修改引擎支持的布局无需重新打包。进入 **设置 → 外观 → 看板版式包 → 从 GitHub 导入 / 更新**，粘贴公开的 JSON 文件链接，获取并预览后应用。也可以下载 JSON 后选择“导入版式”。相册、内容、设备、计划及密钥与版式单独保存；手动和定时推送共用导入版式。
+
+- [默认版式](https://github.com/shidaifufen/todoocard-eink/blob/main/layouts/default.json)
+- [蓝色天气](https://github.com/shidaifufen/todoocard-eink/blob/main/layouts/weather-blue.json)
+- [每日一句＋天气](https://github.com/shidaifufen/todoocard-eink/blob/main/layouts/quote-weather.json)
+- [完整格式、组件和更新规则](layouts/README.md)
+
+支持 `github.com/用户/仓库/blob/分支/路径.json`、`raw.githubusercontent.com/用户/仓库/分支/路径.json`，以及 `github.com/用户/仓库/releases/download/标签/文件.json`、`releases/latest/download/文件.json`。后续在 GitHub 更新同一分支和路径的 JSON，应用会保留上次链接，再次获取并应用即可更新；固定标签或提交的链接用于锁定版本。仅支持公开文件，不需要 GitHub 令牌。失败不会替换当前版式，可撤销或恢复内置。
+
+天气两种卡片已完整配置化；其他文字卡片可用通用组件替换或叠加，默认保留原版式兼容组件。新 API、新系统能力或引擎尚不支持的组件仍需升级应用。
 
 ## 直接下载就能用
 

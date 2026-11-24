@@ -17,6 +17,23 @@
 - `weather-blue.json`：两种天气卡片的配色示例，可直接导入。
 - `quote-weather.json`：把句子与天气放到同一张卡片上的示例，会自动识别所需在线内容。
 
+## 从 GitHub 导入和后续更新
+
+应用 → 设置 → 外观 → 看板版式包 → **从 GitHub 导入 / 更新**。粘贴链接后选择“获取并预览”，检查卡片后应用。入口中也能直接选择本仓库默认版式、蓝色天气和一句＋天气。上次成功获取的链接会保留，再次打开并获取即可检查该文件的最新内容；不会自动覆盖用户当前版式。
+
+支持公开 GitHub 文件的以下格式（仓库主页、文件夹页和 Release 介绍页不是文件链接）：
+
+| 链接类型 | 示例 |
+|---|---|
+| 仓库文件页面，自动转成原始 JSON | `https://github.com/shidaifufen/todoocard-eink/blob/main/layouts/default.json` |
+| Raw 文件 | `https://raw.githubusercontent.com/shidaifufen/todoocard-eink/main/layouts/default.json` |
+| 指定 Release 的 JSON 附件 | `https://github.com/shidaifufen/todoocard-eink/releases/download/v1.5.0-android/default.json` |
+| 最新 Release 的同名 JSON 附件 | `https://github.com/shidaifufen/todoocard-eink/releases/latest/download/default.json` |
+
+日常更新推荐使用上面的 `main/layouts/…` 链接：维护者只更新仓库同一路径的配置，无需构建 APK；用户重新获取、预览、应用即可。指定提交或固定 Release 标签的链接会锁定版本，不会跟随 main 更新。`latest` 指整个仓库最新正式 Release，只有该版本含同名 JSON 附件时才可用。
+
+仅支持 HTTPS 公开文件，不读取或要求 GitHub 令牌；GitHub 网络不可用时可通过浏览器下载后本地导入。下载在后台执行，限制大小为 256 KB，校验和预览成功前保留现有配置；下载并不等于应用。请勿向配置写入 API 密钥、蓝牙地址、照片或个人内容。
+
 ## 格式
 
 画布固定为 528×792。位置以左上角为原点，单位为像素；文本使用文字区域的左上角，不使用基线。元素按数组顺序绘制，后面的覆盖前面的，每个元素都会裁剪到自己的范围。
