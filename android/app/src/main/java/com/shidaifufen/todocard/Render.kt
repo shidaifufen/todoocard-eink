@@ -110,7 +110,9 @@ object Render {
 
     private fun Canvas.rule(y: Float) = fill(M, y, W - M, y + 2f, BLACK)
 
-    fun render(card: Card): Bitmap {
+    fun render(card: Card): Bitmap = LayoutStore.template(card.kind)?.let { LayoutRender.render(card, it) } ?: renderNative(card)
+
+    internal fun renderNative(card: Card): Bitmap {
         layout.set(card)
         try {
         val bmp = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888)

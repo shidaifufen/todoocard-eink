@@ -15,7 +15,7 @@ internal object WeatherVisuals {
 
     /** Horizontal range bars leave enough room for the date, weather and both temperatures. */
     fun forecastBars(c: Canvas, forecasts: List<String>, firstBaseline: Float = 681f,
-                     rowGap: Float = 24f, leftInset: Float = 32f) {
+                     rowGap: Float = 24f, leftInset: Float = 32f, barColor: Int = Color.BLUE) {
         val rows = forecasts.take(3)
         val ranges = rows.map(::parseDayRange)
         val valid = ranges.filterNotNull()
@@ -42,7 +42,7 @@ internal object WeatherVisuals {
                 val left = 210f + (item.low - lo) * 160f / span
                 val right = 210f + (item.high - lo) * 160f / span
                 c.drawRoundRect(left, y - 12f, maxOf(left + 5f, right), y - 3f, 4f, 4f,
-                    Paint().apply { color = Color.BLUE })
+                    Paint().apply { color = barColor })
                 c.drawText("${item.low}~${item.high}°", 382f, y, text)
             }
         }
@@ -76,13 +76,13 @@ internal object WeatherVisuals {
         c.restore()
     }
 
-    fun chart(c: Canvas, hours: List<Render.WeatherHour>, top: Float, height: Float) {
+    fun chart(c: Canvas, hours: List<Render.WeatherHour>, top: Float, height: Float, lineColor: Int = Color.BLUE) {
         val p = Paint().apply { color = Color.BLACK; textSize = 16f; typeface = Typeface.SANS_SERIF }
         if (height >= 100f) c.drawText("未来时段 · 温度趋势", 32f, top + 20f, p)
         val h = hours.take(6)
         if (h.size < 2) { c.drawText("刷新天气后显示温度曲线", 32f, top + 56f, p); return }
         val min = h.minOf { it.temperature } - 2; val max = h.maxOf { it.temperature } + 2
-        val line = Paint().apply { color = Color.BLUE; strokeWidth = 3f; style = Paint.Style.STROKE }
+        val line = Paint().apply { color = lineColor; strokeWidth = 3f; style = Paint.Style.STROKE }
         var px = 0f; var py = 0f
         h.forEachIndexed { i, v ->
             val x = 53f + i * 422f / (h.size - 1)

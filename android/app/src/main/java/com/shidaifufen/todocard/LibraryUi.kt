@@ -385,6 +385,8 @@ internal fun SettingsScreen(
                     color = StudioMuted)
             }
             1 -> {
+                LayoutSettings()
+                Spacer(Modifier.height(18.dp))
                 Text("六色墨水屏", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 Text("预览尺寸 528 × 792", fontSize = 13.sp, color = StudioMuted,
                     modifier = Modifier.padding(top = 8.dp))

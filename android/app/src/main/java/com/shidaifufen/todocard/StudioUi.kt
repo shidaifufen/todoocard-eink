@@ -111,7 +111,7 @@ internal fun StudioScreen(
                 )
             }
         }
-        if (kind in listOf("summary", "quote", "poem", "weather", "weather2")) Row(
+        if (kind in listOf("summary", "quote", "poem", "weather", "weather2", "custom") || LayoutStore.sources(kind)?.isNotEmpty() == true) Row(
             Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = onlineContent, onClick = { onSourceMode(true) }, enabled = !busy, label = { Text("联网更新") })
             FilterChip(selected = !onlineContent, onClick = { onSourceMode(false) }, enabled = !busy, label = { Text("手动内容") })
@@ -158,7 +158,7 @@ internal fun StudioScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("屏幕预览", fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f))
-                if (onlineContent && kind in listOf("quote", "poem", "weather", "weather2", "summary", "custom", "bing")) TextButton(
+                if (onlineContent && (kind == "bing" || LayoutStore.sources(kind)?.isNotEmpty() == true || kind in listOf("quote", "poem", "weather", "weather2", "summary", "custom"))) TextButton(
                     enabled = !busy && !refreshing, onClick = onRefresh) {
                     Text(if (refreshing) "更新中…" else if (kind in listOf("weather", "weather2")) "刷新天气" else "换一张")
                 }

@@ -9,7 +9,7 @@ import kotlinx.coroutines.withContext
 /** 计划和手动入口共用数据准备规则，API 失败时保留已保存内容。 */
 object CardSources {
     private val gate = kotlinx.coroutines.sync.Mutex()
-    private fun resources(kind: String, card: Render.Card = Render.Card()) = when (kind) {
+    private fun resources(kind: String, card: Render.Card = Render.Card()) = LayoutStore.sources(kind, card)?.toList() ?: when (kind) {
         "summary" -> listOf("weather", "quote")
         "custom" -> card.customBlocks.filter { it.enabled }.map { it.type }.filter { it in listOf("weather", "quote", "poem") }.distinct()
         "weather", "weather2" -> listOf("weather")

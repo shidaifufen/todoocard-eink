@@ -90,6 +90,7 @@ private fun App(incomingIntent: Intent?) {
     val ctx = LocalContext.current
     remember(ctx) { PlanStore.init(ctx); true }
     val scope = rememberCoroutineScope()
+    val layoutRevision by LayoutStore.revision.collectAsState()
     var tab by remember { mutableIntStateOf(0) }
     var kind by remember { mutableStateOf("summary") }
     var card by remember { mutableStateOf(PlanStore.card(ctx)) }
@@ -202,12 +203,12 @@ private fun App(incomingIntent: Intent?) {
             refreshing = false
         }
     }
-    LaunchedEffect(kind, contentDay, sourceRevision) {
+    LaunchedEffect(kind, contentDay, sourceRevision, layoutRevision) {
         while (refreshing) kotlinx.coroutines.delay(100)
-        if (onlineContent && kind in listOf("summary", "quote", "poem", "weather", "weather2", "custom") &&
+        if (onlineContent && kind in LayoutPack.kinds &&
             !refreshing && CardSources.stale(ctx, kind)) refreshCard(false)
     }
-    LaunchedEffect(kind, card, photoPath, fields, edit, tab, refreshing, onlineContent, clockTick, photoLocationRevision) {
+    LaunchedEffect(kind, card, photoPath, fields, edit, tab, refreshing, onlineContent, clockTick, photoLocationRevision, layoutRevision) {
         if (tab != 0) return@LaunchedEffect
         preview = withContext(Dispatchers.Default) {
             runCatching {

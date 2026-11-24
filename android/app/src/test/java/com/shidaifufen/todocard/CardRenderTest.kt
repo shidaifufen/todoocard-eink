@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import androidx.exifinterface.media.ExifInterface
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.Before
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
@@ -17,6 +18,10 @@ import java.io.File
 @Config(sdk = [34])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class CardRenderTest {
+    @Before fun defaultLayouts() {
+        LayoutStore.init(RuntimeEnvironment.getApplication())
+        LayoutStore.reset(RuntimeEnvironment.getApplication())
+    }
     private val output = File("build/reports/card-previews").apply { mkdirs() }
 
     private fun save(name: String, bitmap: Bitmap) {

@@ -43,7 +43,7 @@ internal object CustomBlocks {
             if (p.measureText(row + ch) > 464f && row.isNotEmpty()) { out += row; row = "" }; row += ch
         }; out + row
     }
-    private fun block(card: Render.Card, b: Render.CustomBlock, accent: Int): Bitmap {
+    internal fun block(card: Render.Card, b: Render.CustomBlock, accent: Int): Bitmap {
         val now = LocalDate.now()
         val value = when (b.type) {
             "title" -> b.text.ifBlank { card.customTitle }

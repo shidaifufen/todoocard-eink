@@ -189,7 +189,7 @@ fun PlanScreen(ctx: android.content.Context, onReplay: (PlanStore.Hist) -> Unit)
 }
 
 @Composable
-private fun SectionCard(title: String, action: @Composable (() -> Unit)? = null,
+internal fun SectionCard(title: String, action: @Composable (() -> Unit)? = null,
                         content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {

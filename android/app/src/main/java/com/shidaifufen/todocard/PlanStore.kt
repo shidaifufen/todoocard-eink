@@ -262,5 +262,6 @@ object PlanStore {
 
     fun init(c: Context) {
         sp_global = c.applicationContext.getSharedPreferences("plan", Context.MODE_PRIVATE)
+        LayoutStore.init(c.applicationContext)
     }
 }
