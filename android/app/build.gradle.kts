@@ -12,8 +12,8 @@ android {
         applicationId = "com.shidaifufen.todocard"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.3.0"
+        versionCode = 5
+        versionName = "1.4.0"
     }
     signingConfigs {
         create("stable") {
@@ -43,6 +43,7 @@ android {
 }
 
 dependencies {
+    implementation("com.google.zxing:core:3.5.3")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
     implementation("androidx.documentfile:documentfile:1.0.1")

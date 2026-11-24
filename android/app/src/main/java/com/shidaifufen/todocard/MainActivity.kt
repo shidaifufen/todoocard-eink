@@ -48,9 +48,10 @@ internal fun handleSharedIntent(intent: Intent?,
                                onPhotos: (List<Uri>) -> Unit, onText: (String) -> Unit) {
     when (intent?.action) {
         Intent.ACTION_SEND -> {
-            val uri = if (Build.VERSION.SDK_INT >= 33)
+            val uri = (if (Build.VERSION.SDK_INT >= 33)
                 intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-            else @Suppress("DEPRECATION") intent.getParcelableExtra(Intent.EXTRA_STREAM)
+            else @Suppress("DEPRECATION") intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
+                ?: intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
             if (uri != null) onPhotos(listOf(uri))
             else intent.getStringExtra(Intent.EXTRA_TEXT)?.let(onText)
         }
@@ -58,7 +59,9 @@ internal fun handleSharedIntent(intent: Intent?,
             val uris = if (Build.VERSION.SDK_INT >= 33)
                 intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
             else @Suppress("DEPRECATION") intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
-            uris?.distinct()?.take(30)?.takeIf { it.isNotEmpty() }?.let(onPhotos)
+            (uris ?: intent.clipData?.let { clip ->
+                (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }
+            }?.toCollection(ArrayList()))?.distinct()?.take(30)?.takeIf { it.isNotEmpty() }?.let(onPhotos)
         }
         Intent.ACTION_VIEW -> intent.data?.let { onPhotos(listOf(it)) }
         Intent.ACTION_PROCESS_TEXT -> intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)
@@ -119,7 +122,7 @@ private fun App(incomingIntent: Intent?) {
     var progress by remember { mutableIntStateOf(0) }
     var preparing by remember { mutableStateOf(false) }
     val pushState by PushService.status.collectAsState()
-    val busy = preparing || pushState.running || scanning || refreshing
+    val busy = preparing || pushState.running || scanning
     var found by remember { mutableStateOf<List<ScanResult>>(emptyList()) }
     var device by remember { mutableStateOf<ScanResult?>(null) }
     var pairedAddress by remember { mutableStateOf(PlanStore.deviceAddress) }
@@ -150,9 +153,10 @@ private fun App(incomingIntent: Intent?) {
         activity.lifecycle.addObserver(observer)
         onDispose { activity.lifecycle.removeObserver(observer) }
     }
-    fun refreshCard() {
+    fun refreshCard(force: Boolean = true) {
         if (refreshing) return
         val requestedKind = kind
+        val requestedCard = card
         scope.launch {
             refreshing = true
             status = "正在获取${templateName(requestedKind)}…"
@@ -163,8 +167,11 @@ private fun App(incomingIntent: Intent?) {
                 }.onFailure { status = "壁纸更新失败：${it.message}" }
                 refreshing = false; return@launch
             }
-            runCatching { CardSources.fresh(ctx, requestedKind, card) }.onSuccess {
-                card = it
+            runCatching { CardSources.fresh(ctx, requestedKind, requestedCard, force) }.onSuccess {
+                if (ContentOptions.online(ctx, requestedKind)) {
+                    card = CardSources.mergeUnchanged(card, requestedCard, it, requestedKind)
+                    PlanStore.saveCard(ctx, card)
+                }
                 status = "${templateName(requestedKind)}已更新"
             }.onFailure { status = "更新失败，已保留原内容：${it.message}" }
             refreshing = false
@@ -172,10 +179,13 @@ private fun App(incomingIntent: Intent?) {
     }
     fun refreshAnalysis() {
         if (refreshing) return
+        val requestedPoem = card
         scope.launch {
             refreshing = true; status = "正在获取这首诗的赏析…"
-            runCatching { ContentData.analysis(ctx, card) }.onSuccess {
-                card = card.copy(poemNote = it); PlanStore.saveCard(ctx, card); status = "赏析已更新"
+            runCatching { ContentData.analysis(ctx, requestedPoem) }.onSuccess {
+                if (card.poemTitle == requestedPoem.poemTitle && card.poemLines == requestedPoem.poemLines) {
+                    card = card.copy(poemNote = it); PlanStore.saveCard(ctx, card)
+                }; status = "赏析已更新"
             }.onFailure { status = "赏析刷新失败，已保留原内容：${it.message}" }
             refreshing = false
         }
@@ -191,16 +201,13 @@ private fun App(incomingIntent: Intent?) {
             refreshing = false
         }
     }
-    LaunchedEffect(kind, contentDay) {
-        if (onlineContent && kind in listOf("summary", "quote", "poem", "weather", "weather2") &&
-            ctx.getSharedPreferences("content_refresh", 0).getString(kind, "") != java.time.LocalDate.now().toString()) refreshCard()
+    LaunchedEffect(kind, contentDay, sourceRevision) {
+        while (refreshing) kotlinx.coroutines.delay(100)
+        if (onlineContent && kind in listOf("summary", "quote", "poem", "weather", "weather2", "custom") &&
+            !refreshing && CardSources.stale(ctx, kind)) refreshCard(false)
     }
     LaunchedEffect(kind, card, photoPath, fields, edit, tab, refreshing, onlineContent, clockTick) {
         if (tab != 0) return@LaunchedEffect
-        if (onlineContent && kind in listOf("summary", "quote", "poem", "weather", "weather2") &&
-            ctx.getSharedPreferences("content_refresh", 0).getString(kind, "").isNullOrBlank()) {
-            preview = null; return@LaunchedEffect
-        }
         preview = withContext(Dispatchers.Default) {
             runCatching {
                 if (kind in listOf("photo", "bing", "ai")) {
@@ -264,7 +271,8 @@ private fun App(incomingIntent: Intent?) {
             onText = { text ->
                 if (text.isNotBlank()) {
                     card = card.copy(customTitle = "分享内容",
-                        customLines = text.lines().filter { it.isNotBlank() })
+                        customLines = text.lines().filter { it.isNotBlank() },
+                        customBlocks = listOf(Render.CustomBlock(type = "text", text = text.trim(), size = 26f)))
                     PlanStore.saveCard(ctx, card)
                     kind = "custom"
                     tab = 0
@@ -517,13 +525,14 @@ private fun App(incomingIntent: Intent?) {
                                 status = "已应用手动内容，可随时切回联网更新"
                             }
                         },
+                        onLayout = { card = it; PlanStore.saveCard(ctx, it) },
                         onPhoto = { tab = 2 },
                         onScan = { requestScan() }, onSelectDevice = ::selectDevice,
                         onSend = ::requestSend,
                         carouselCount = carouselPhotos.size,
                         onDraw = { drawCarousel()?.let { loadPhoto(it, openEditor = false) } },
                         onAddPhotos = ::addCarouselPhotos,
-                        onRefresh = ::refreshCard, onAnalysis = ::refreshAnalysis, refreshing = refreshing,
+                        onRefresh = { refreshCard() }, onAnalysis = ::refreshAnalysis, refreshing = refreshing,
                         onScanAll = { requestScan(true) }, scanTimedOut = scanTimedOut,
                         onGenerate = ::generateImage, onlineContent = onlineContent,
                         onSourceMode = { online ->

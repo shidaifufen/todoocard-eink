@@ -392,12 +392,15 @@ internal fun SettingsScreen(
                     Triple("拍摄时间", fields.time, { value: Boolean -> fields.copy(time = value) }),
                     Triple("相机机身", fields.camera, { value: Boolean -> fields.copy(camera = value) }),
                     Triple("拍摄参数", fields.params, { value: Boolean -> fields.copy(params = value) }),
+                    Triple("拍摄位置（照片含 GPS 时）", fields.location, { value: Boolean -> fields.copy(location = value) }),
                 ).forEach { (label, enabled, update) ->
                     Row(Modifier.fillMaxWidth().height(50.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(label, modifier = Modifier.weight(1f))
                         Switch(enabled, onCheckedChange = { onFields(update(it)) })
                     }
                 }
+                Text("位置从照片自身的 GPS 信息读取；系统照片选择器可能会移除定位数据。",
+                    fontSize = 12.sp, color = StudioMuted)
             }
             else -> {
                 Text("土豆片", fontSize = 20.sp, fontWeight = FontWeight.Bold)

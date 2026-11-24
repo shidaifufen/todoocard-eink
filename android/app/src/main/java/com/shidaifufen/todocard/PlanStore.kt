@@ -115,6 +115,25 @@ object PlanStore {
                 weatherFeels = data.optString("weatherFeels"),
                 weatherSunrise = data.optString("weatherSunrise"),
                 weatherSunset = data.optString("weatherSunset"),
+                weatherCode = data.optInt("weatherCode", -1),
+                weatherHours = data.optJSONArray("weatherHours")?.let { hours ->
+                    (0 until hours.length()).map { i -> hours.getJSONObject(i).let {
+                        Render.WeatherHour(it.getString("time"), it.getDouble("temperature").toFloat(), it.optInt("code", -1))
+                    } }
+                }.orEmpty(),
+                fontScale = data.optDouble("fontScale", 1.0).toFloat().coerceIn(.8f, 1.5f),
+                lineSpacing = data.optDouble("lineSpacing", 1.0).toFloat().coerceIn(.8f, 1.6f),
+                elementSpacing = data.optDouble("elementSpacing", 1.0).toFloat().coerceIn(.6f, 1.6f),
+                customBlocks = data.optJSONArray("customBlocks")?.let { blocks ->
+                    (0 until blocks.length()).map { i -> blocks.getJSONObject(i).let {
+                        Render.CustomBlock(it.optString("id", "block_$i"), it.optString("type", "text"),
+                            it.optString("text"), it.optBoolean("enabled", true),
+                            it.optDouble("size", 24.0).toFloat(), it.optInt("height", 180),
+                            it.optBoolean("centered"), it.optString("imagePath"))
+                    } }
+                }.orEmpty(),
+                customAccent = data.optString("customAccent", "red"),
+                customComposition = data.optBoolean("customComposition", false),
             )
         }.getOrDefault(Render.Card())
     }
@@ -138,6 +157,17 @@ object PlanStore {
             .put("weatherAuto", card.weatherAuto)
             .put("weatherHumidity", card.weatherHumidity).put("weatherFeels", card.weatherFeels)
             .put("weatherSunrise", card.weatherSunrise).put("weatherSunset", card.weatherSunset)
+            .put("weatherCode", card.weatherCode)
+            .put("weatherHours", JSONArray().apply { card.weatherHours.forEach {
+                put(JSONObject().put("time", it.time).put("temperature", it.temperature).put("code", it.code))
+            } })
+            .put("fontScale", card.fontScale).put("lineSpacing", card.lineSpacing).put("elementSpacing", card.elementSpacing)
+            .put("customAccent", card.customAccent).put("customComposition", card.customComposition)
+            .put("customBlocks", JSONArray().apply { card.customBlocks.forEach {
+                put(JSONObject().put("id", it.id).put("type", it.type).put("text", it.text)
+                    .put("enabled", it.enabled).put("size", it.size).put("height", it.height)
+                    .put("centered", it.centered).put("imagePath", it.imagePath))
+            } })
         sp(c).edit().putString("card", data.toString()).apply()
     }
 
@@ -176,10 +206,11 @@ object PlanStore {
             if (raw.isEmpty()) return PhotoCard.Fields()
             val p = raw.split(",")
             fun has(i: Int) = p.getOrNull(i) == "1"
-            return PhotoCard.Fields(has(0), has(1), has(2), has(3), has(4))
+            return PhotoCard.Fields(has(0), has(1), has(2), has(3), has(4),
+                p.getOrNull(5) != "0")
         }
         set(v) {
-            val raw = listOf(v.date, v.time, v.camera, v.params, v.weather)
+            val raw = listOf(v.date, v.time, v.camera, v.params, v.weather, v.location)
                 .joinToString(",") { if (it) "1" else "0" }
             sp_global.edit().putString(fieldsKey(), raw).apply()
         }

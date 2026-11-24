@@ -11,7 +11,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Casino
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -33,6 +34,10 @@ internal fun CarouselScreen(
     onSend: () -> Unit,
     onRemove: () -> Unit,
 ) {
+    var previewFraction by rememberSaveable { mutableFloatStateOf(.43f) }
+    var lastExpanded by rememberSaveable { mutableFloatStateOf(.43f) }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    val availablePreview = (maxHeight - 330.dp).coerceAtLeast(80.dp)
     Column(Modifier.fillMaxSize().background(StudioBackground).padding(horizontal = 20.dp)) {
         Spacer(Modifier.height(12.dp))
         Text("照片轮播", fontSize = 24.sp, fontWeight = FontWeight.Bold)
@@ -51,7 +56,12 @@ internal fun CarouselScreen(
             }
         }
         Spacer(Modifier.height(14.dp))
-        Box(Modifier.fillMaxWidth().weight(1f).background(Color.White, RoundedCornerShape(10.dp)),
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("预览", Modifier.weight(1f), fontSize = 12.sp)
+            TextButton(onClick = { previewFraction = if (previewFraction > 0f) 0f else lastExpanded }) { Text(if (previewFraction > 0f) "隐藏大图" else "展开大图") }
+        }
+        Slider(previewFraction, { previewFraction = it; if (it > .05f) lastExpanded = it }, valueRange = 0f..1f)
+        if (previewFraction > .01f) Box(Modifier.fillMaxWidth().height(availablePreview * previewFraction).background(Color.White, RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center) {
             if (selected == null) Text("还没有照片\n从系统相册添加一些吧", color = StudioMuted)
             else AsyncImage(model = selected, contentDescription = "当前抽中的照片",
@@ -71,7 +81,7 @@ internal fun CarouselScreen(
         }
         Text("图库 · ${photos.size} 张", fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
-        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 180.dp)) {
+        LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
             items(photos.chunked(4)) { row ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     row.forEach { uri ->
@@ -79,7 +89,7 @@ internal fun CarouselScreen(
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.weight(1f).aspectRatio(1f)
                                 .background(Color.White, RoundedCornerShape(5.dp))
-                                .clickable { onSelect(uri) })
+                                .clickable { previewFraction = lastExpanded.coerceAtLeast(.65f); onSelect(uri) })
                     }
                     repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
                 }
@@ -88,4 +98,6 @@ internal fun CarouselScreen(
         }
         Spacer(Modifier.height(8.dp))
     }
+}
+
 }

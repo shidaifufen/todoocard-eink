@@ -54,10 +54,14 @@ object PushStatus {
                 .invoke(style, progress.coerceIn(0, 100))
             builder.setStyle(style as android.app.Notification.Style)
             builder.setOngoing(true)
-            builder.javaClass.getMethod("setRequestPromotedOngoing", Boolean::class.javaPrimitiveType)
-                .invoke(builder, true)
             builder.javaClass.getMethod("setShortCriticalText", String::class.java)
                 .invoke(builder, criticalText(text, progress))
+            // This promotion request was added after the initial Android 16 APIs on some builds.
+            // Its absence must not discard the supported progress style and notification text.
+            runCatching {
+                builder.javaClass.getMethod("setRequestPromotedOngoing", Boolean::class.javaPrimitiveType)
+                    .invoke(builder, true)
+            }
             builder.build()
         }.getOrDefault(notification)
     }

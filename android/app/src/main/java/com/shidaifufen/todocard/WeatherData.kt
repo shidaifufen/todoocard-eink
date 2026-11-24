@@ -2,6 +2,8 @@ package com.shidaifufen.todocard
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.supervisorScope
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -12,10 +14,10 @@ import kotlin.math.roundToInt
 object WeatherData {
     data class Place(val label: String, val latitude: Double, val longitude: Double)
 
-    private fun json(url: String): JSONObject {
+    private fun json(url: String, timeout: Int = 7_000): JSONObject {
         val connection = URL(url).openConnection() as HttpURLConnection
-        connection.connectTimeout = 12_000
-        connection.readTimeout = 12_000
+        connection.connectTimeout = timeout
+        connection.readTimeout = timeout
         return try {
             check(connection.responseCode in 200..299) { "天气服务暂时不可用" }
             connection.inputStream.bufferedReader().use { JSONObject(it.readText()) }
@@ -34,28 +36,43 @@ object WeatherData {
         }
     }
 
-    suspend fun load(place: Place, card: Render.Card): Render.Card = withContext(Dispatchers.IO) {
+    suspend fun load(place: Place, card: Render.Card): Render.Card = withContext(Dispatchers.IO) { supervisorScope {
         val coordinate = "latitude=${place.latitude}&longitude=${place.longitude}"
-        val data = json("https://api.open-meteo.com/v1/forecast?$coordinate&current=temperature_2m,weather_code,relative_humidity_2m,apparent_temperature&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset&forecast_days=4&timezone=auto")
+        val aqiRequest = async {
+            runCatching { json("https://air-quality-api.open-meteo.com/v1/air-quality?$coordinate&current=us_aqi", 3_000)
+                .getJSONObject("current").getDouble("us_aqi").roundToInt().toString() }.getOrDefault("")
+        }
+        val data = json("https://api.open-meteo.com/v1/forecast?$coordinate&current=temperature_2m,weather_code,relative_humidity_2m,apparent_temperature&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset&forecast_days=4&timezone=auto")
+        parse(data, aqiRequest.await(), place, card)
+    } }
+
+    internal fun parse(data: JSONObject, aqi: String, place: Place, card: Render.Card): Render.Card {
         val current = data.getJSONObject("current")
         val daily = data.getJSONObject("daily")
         val highs = daily.getJSONArray("temperature_2m_max")
         val lows = daily.getJSONArray("temperature_2m_min")
         val codes = daily.getJSONArray("weather_code")
         val dates = daily.getJSONArray("time")
-        val aqi = runCatching {
-            val value = json("https://air-quality-api.open-meteo.com/v1/air-quality?$coordinate&current=us_aqi")
-                .getJSONObject("current").getDouble("us_aqi").roundToInt()
-            value.toString()
-        }.getOrDefault("")
-        card.copy(
+        val hourly = data.optJSONObject("hourly")
+        val times = hourly?.optJSONArray("time")
+        val temperatures = hourly?.optJSONArray("temperature_2m")
+        val hourCodes = hourly?.optJSONArray("weather_code")
+        val now = current.optString("time")
+        val hours = if (times == null || temperatures == null) emptyList() else
+            (0 until minOf(times.length(), temperatures.length())).filter {
+                times.optString(it) >= now && !temperatures.isNull(it)
+            }.take(6).map { Render.WeatherHour(times.getString(it).substringAfter("T"),
+                temperatures.getDouble(it).toFloat(), hourCodes?.optInt(it, -1) ?: -1) }
+        return card.copy(
             weatherCity = place.label.substringBefore(" · "),
             weatherAuto = false,
             weatherText = condition(current.getInt("weather_code")),
+            weatherCode = current.getInt("weather_code"),
+            weatherHours = hours,
             weatherTemp = current.getDouble("temperature_2m").roundToInt().toString(),
             weatherHigh = highs.getDouble(0).roundToInt().toString(),
             weatherLow = lows.getDouble(0).roundToInt().toString(),
-            weatherAqi = aqi,
+            weatherAqi = aqi.ifBlank { if (card.weatherCity == place.label.substringBefore(" · ")) card.weatherAqi else "" },
             weatherHumidity = if (current.isNull("relative_humidity_2m")) "" else current.optInt("relative_humidity_2m").toString(),
             weatherFeels = if (current.isNull("apparent_temperature")) "" else current.optDouble("apparent_temperature").roundToInt().toString(),
             weatherSunrise = daily.optJSONArray("sunrise")?.optString(0)?.substringAfter("T").orEmpty(),
@@ -79,6 +96,9 @@ object WeatherData {
 
     /** 按当前网络出口估算城市，无需填写城市和申请定位权限。用户可随时改为指定城市。 */
     suspend fun automatic(card: Render.Card): Render.Card = withContext(Dispatchers.IO) {
+        // 已解析城市继续用其坐标，避免每次刷新重复串行定位和城市搜索。
+        if (card.weatherLatitude.toDoubleOrNull() != null && card.weatherLongitude.toDoubleOrNull() != null)
+            return@withContext load(Place(card.weatherCity, card.weatherLatitude.toDouble(), card.weatherLongitude.toDouble()), card).copy(weatherAuto = true)
         val location = runCatching {
             json("https://ipwho.is/?lang=zh").also {
                 check(it.optBoolean("success", false)) { "网络城市接口暂不可用" }
@@ -86,12 +106,11 @@ object WeatherData {
         }.getOrElse { json("https://ipapi.co/json/") }
         check(location.has("latitude") && location.has("longitude")) { "无法获取网络所在城市，请手动选择城市" }
         val city = location.optString("city").ifBlank { "网络所在城市" }
-        val label = runCatching { search(city).firstOrNull()?.label?.substringBefore(" · ") }.getOrNull() ?: city
-        load(Place(label, location.getDouble("latitude"), location.getDouble("longitude")), card)
+        load(Place(city, location.getDouble("latitude"), location.getDouble("longitude")), card)
             .copy(weatherAuto = true)
     }
 
-    private fun condition(code: Int): String = when (code) {
+    internal fun condition(code: Int): String = when (code) {
         0 -> "晴"; 1 -> "少云"; 2 -> "多云"; 3 -> "阴"
         45, 48 -> "雾"; 51, 53, 55, 56, 57 -> "毛毛雨"
         61, 63, 65, 66, 67, 80, 81, 82 -> "雨"

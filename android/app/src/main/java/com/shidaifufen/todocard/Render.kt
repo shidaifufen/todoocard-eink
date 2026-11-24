@@ -55,13 +55,31 @@ object Render {
         val weatherFeels: String = "",
         val weatherSunrise: String = "",
         val weatherSunset: String = "",
+        val weatherCode: Int = -1,
+        val weatherHours: List<WeatherHour> = emptyList(),
+        val fontScale: Float = 1f,
+        val lineSpacing: Float = 1f,
+        val elementSpacing: Float = 1f,
+        val customBlocks: List<CustomBlock> = emptyList(),
+        val customAccent: String = "red",
+        val customComposition: Boolean = false,
     )
+
+    data class WeatherHour(val time: String, val temperature: Float, val code: Int)
+    data class CustomBlock(val id: String = java.util.UUID.randomUUID().toString(),
+        val type: String = "text", val text: String = "", val enabled: Boolean = true,
+        val size: Float = 24f, val height: Int = 180, val centered: Boolean = false,
+        val imagePath: String = "")
+
+    private val layout = ThreadLocal<Card>()
+    private fun elementStep(base: Float) = base * (layout.get()?.elementSpacing ?: 1f).coerceIn(.7f, 1.4f)
+    private fun lineStep(base: Float) = base * (layout.get()?.lineSpacing ?: 1f).coerceIn(.8f, 1.6f)
 
     private fun paint(size: Float, color: Int = BLACK, bold: Boolean = false, mono: Boolean = false): Paint =
         Paint().apply {
             isAntiAlias = false
             this.color = color
-            textSize = size
+            textSize = size * (layout.get()?.fontScale ?: 1f).coerceIn(.8f, 1.5f)
             typeface = when {
                 mono -> Typeface.MONOSPACE
                 bold -> Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
@@ -93,6 +111,8 @@ object Render {
     private fun Canvas.rule(y: Float) = fill(M, y, W - M, y + 2f, BLACK)
 
     fun render(card: Card): Bitmap {
+        layout.set(card)
+        try {
         val bmp = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         c.drawColor(WHITE)
@@ -109,6 +129,7 @@ object Render {
             else -> c.drawSummary(card)
         }
         return bmp
+        } finally { layout.remove() }
     }
 
     private fun Canvas.drawSummary(card: Card) {
@@ -142,7 +163,7 @@ object Render {
             drawText("${index + 1}", M + 5f, y, paint(18f, WHITE, true))
             val line = fitLine(item, paint(23f), W - M * 2 - 46f)
             drawText(line, M + 40f, y, paint(23f))
-            y += 52f
+            y += elementStep(lineStep(52f)).coerceIn(40f, 55f)
         }
         val monthDays = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
         val monthPct = cal.get(Calendar.DAY_OF_MONTH) * 100 / monthDays
@@ -176,10 +197,10 @@ object Render {
         drawText("“", M - 4f, 250f, paint(110f, RED))
         var p = paint(44f, BLACK, bold = true)
         while (p.textSize > 22f && wrap(this, card.quote, p, W - 2 * M - 40f).size * p.textSize * 1.45f > 350f)
-            p = paint(p.textSize - 2f, BLACK, true)
+            p = Paint(p).apply { textSize -= 2f }
         val lines = wrap(this, card.quote, p, W - 2 * M - 40f)
         var y = 280f
-        val lineHeight = p.textSize * 1.45f
+        val lineHeight = lineStep(p.textSize * 1.45f)
         val maxLines = (350f / lineHeight).toInt().coerceAtLeast(1)
         val shown = lines.take(maxLines)
         fill(M + 6f, y - p.textSize, M + 12f, y + lineHeight * (shown.size - 1) + 8f, RED)
@@ -213,7 +234,7 @@ object Render {
             fill(M, y - 18f, M + 18f, y, BLACK)
             fill(M + 30f, y - 3f, W - M, y - 1f, BLACK)
             if (text.isNotEmpty()) drawText(fitLine(text, line, W - M * 2 - 36f), M + 32f, y - 6f, line)
-            y += 74f
+            y += elementStep(lineStep(74f)).coerceIn(55f, 84f)
         }
         drawText("勾掉一件算一件", M, H - 60f, paint(20f))
         val t = paint(20f)
@@ -279,7 +300,7 @@ object Render {
             val dp = paint(40f, RED, bold = true)
             drawText("${days}天", W - M - dp.measureText("${days}天"), y, dp)
             rule(y + 20f)
-            y += 96f
+            y += elementStep(lineStep(96f)).coerceIn(72f, 110f)
         }
         foot()
     }
@@ -288,7 +309,7 @@ object Render {
         fill(M, 37f, M + 13f, 50f, RED)
         var titlePaint = paint(30f, BLACK, true)
         while (titlePaint.textSize > 22f && titlePaint.measureText(card.poemTitle) > W - M * 2 - 23f)
-            titlePaint = paint(titlePaint.textSize - 2f, BLACK, true)
+            titlePaint = Paint(titlePaint).apply { textSize -= 2f }
         drawText(fitLine(card.poemTitle, titlePaint, W - M * 2 - 23f), M + 23f, 58f, titlePaint)
         drawText(fitLine(card.poemBy, paint(18f), W - M * 2 - 23f), M + 23f, 88f, paint(18f))
         rule(110f)
@@ -302,7 +323,7 @@ object Render {
         for (fontSize in 35 downTo 19 step 2) {
             val candidate = paint(fontSize.toFloat(), BLACK, bold = true)
             val lines = card.poemLines.take(80).flatMap { wrap(this, it, candidate, W - M * 2) }
-            val height = fontSize * 1.48f
+            val height = lineStep(candidate.textSize * 1.48f)
             chosenPaint = candidate
             wrapped = lines
             lineHeight = height
@@ -318,17 +339,18 @@ object Render {
         }
         if (hasNote) {
             val lastPoemBaseline = startY + (displayLines.size - 1).coerceAtLeast(0) * lineHeight
-            val noteTop = (lastPoemBaseline + 52f).coerceIn(360f, 560f)
+            val noteTop = (lastPoemBaseline + elementStep(52f)).coerceIn(360f, 560f)
             rule(noteTop)
             drawText("译注 · 赏析", M, noteTop + 34f, paint(20f, RED, bold = true))
             wrap(this, card.poemNote, paint(18f), W - M * 2).take(5).forEachIndexed { index, line ->
-                drawText(line, M, noteTop + 62f + index * 23f, paint(18f))
+                drawText(line, M, noteTop + 62f + index * lineStep(23f).coerceAtMost(27f), paint(18f))
             }
         }
         foot()
     }
 
     private fun Canvas.drawCustom(card: Card) {
+        if (card.customComposition || card.customBlocks.isNotEmpty()) { CustomBlocks.draw(this, card); return }
         val cal = Calendar.getInstance()
         head(card.customTitle, String.format(Locale.CHINA, "%d/%d",
             cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH)))
@@ -383,7 +405,8 @@ object Render {
     private fun Canvas.drawWeather(card: Card) {
         head("天气看板", card.weatherCity.ifBlank { "今日" })
         val temp = card.weatherTemp.ifBlank { "--" }
-        drawText("$temp°", M, 250f, paint(116f, RED, true))
+        val tempPaint = paint(116f, RED, true).apply { textSize = minOf(textSize, 310f / measureText("$temp°").coerceAtLeast(1f) * textSize) }
+        drawText("$temp°", M, 250f, tempPaint)
         drawText(card.weatherText.ifBlank { "在编辑中填写天气" }, M, 305f,
             paint(30f, BLACK, true))
         fill(M, 335f, W - M, 343f, YELLOW)
@@ -398,14 +421,12 @@ object Render {
             drawText(fitLine(label, valuePaint, cellWidth - 10f), x, 445f, valuePaint)
             fill(x, 465f, x + 32f, 472f, listOf(RED, BLUE, GREEN)[index])
         }
-        rule(505f)
-        drawText("未来三天", M, 548f, paint(25f, BLACK, true))
-        val forecast = card.weatherForecast.take(3)
-        if (forecast.isEmpty()) drawText("在编辑中添加预报", M, 605f, paint(22f))
-        else forecast.forEachIndexed { index, item ->
-            val text = fitLine(item, paint(22f), W - M * 2 - 25f)
-            drawText("${index + 1}", M, 606f + index * 47f, paint(22f, RED, true))
-            drawText(text, M + 28f, 606f + index * 47f, paint(22f))
+        WeatherVisuals.icon(this, card.weatherCode, 371f, 165f, 116f)
+        rule(495f)
+        WeatherVisuals.chart(this, card.weatherHours, 505f, 122f)
+        drawText("未来三天", M, 657f, paint(21f, BLACK, true))
+        card.weatherForecast.take(3).forEachIndexed { index, item ->
+            drawText(fitLine(item, paint(18f), W - M * 2), M, 684f + index * 25f, paint(18f))
         }
         drawText("Open-Meteo · ${card.weatherUpdated.ifBlank { "手动资料" }}", M, 765f, paint(16f))
     }
@@ -433,6 +454,7 @@ object Render {
             M + 16f, 292f, paint(30f, BLACK, true))
         drawText("今日 ${card.weatherLow.ifBlank { "--" }}～${card.weatherHigh.ifBlank { "--" }}°",
             M + 16f, 340f, paint(21f))
+        WeatherVisuals.icon(this, card.weatherCode, M + 210f, 124f, 54f)
         val aqi = card.weatherAqi.toIntOrNull()
         val color = when { aqi == null -> WHITE; aqi <= 50 -> GREEN; aqi <= 100 -> YELLOW; else -> RED }
         val ink = if (color == RED) WHITE else BLACK
@@ -466,8 +488,7 @@ object Render {
         wrap(this, advice, paint(20f), right - half - 28f).take(2).forEachIndexed { i, line ->
             drawText(line, half + 14f, 610f + i * 29f, paint(20f))
         }
-        cell(M, 660f, right, 732f, YELLOW)
-        drawText("天气资料更新于 ${card.weatherUpdated.ifBlank { "尚未获取" }}", M + 14f, 702f, paint(18f))
+        WeatherVisuals.chart(this, card.weatherHours, 667f, 86f)
         drawText("Open-Meteo · 城市天气与空气质量", M, 765f, paint(16f))
     }
 

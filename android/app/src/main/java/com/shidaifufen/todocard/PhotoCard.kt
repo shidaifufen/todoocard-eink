@@ -14,7 +14,7 @@ object PhotoCard {
 
     data class Fields(
         val date: Boolean = true, val time: Boolean = true, val camera: Boolean = true,
-        val params: Boolean = true, val weather: Boolean = true,
+        val params: Boolean = true, val weather: Boolean = true, val location: Boolean = true,
     )
 
     private fun paint(size: Float, bold: Boolean = false): Paint = Paint().apply {
@@ -24,18 +24,16 @@ object PhotoCard {
         typeface = if (bold) Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD) else Typeface.SANS_SERIF
     }
 
-    fun bandHeight(path: String, fields: Fields): Int {
+    private fun rows(path: String, fields: Fields): List<String> {
         val meta = readExif(path)
-        val hasAny = listOf(meta.taken, meta.time, meta.camera, meta.params).any { it.isNotBlank() }
-        val line1 = listOf(
-            if (fields.date && meta.taken.isNotBlank()) meta.taken else "",
-            if (fields.time && meta.time.isNotBlank()) meta.time else "").filter { it.isNotBlank() }
-        val line2 = listOf(
-            if (fields.camera) meta.camera else "",
-            if (fields.params) meta.params else "").filter { it.isNotBlank() }
-        val rows = (if (line1.isNotEmpty()) 1 else 0) + (if (line2.isNotEmpty()) 1 else 0)
-        return if (!hasAny || rows == 0) 0 else 24 + 26 * rows
+        return listOf(
+            listOf(if (fields.date) meta.taken else "", if (fields.time) meta.time else "").filter(String::isNotBlank).joinToString("  "),
+            listOf(if (fields.camera) meta.camera else "", if (fields.params) meta.params else "").filter(String::isNotBlank).joinToString("  "),
+            if (fields.location) meta.location else ""
+        ).filter(String::isNotBlank)
     }
+    fun bandHeight(path: String, fields: Fields): Int = rows(path, fields).size.let { if (it == 0) 0 else 24 + 26 * it }
+    fun location(path: String): String = readExif(path).location
 
     /** 带裁切/色彩参数的渲染 */
     fun render(path: String, fields: Fields, edit: PhotoEdit.Params): Bitmap {
@@ -51,7 +49,7 @@ object PhotoCard {
 
     private data class Meta(
         val taken: String = "", val time: String = "",
-        val camera: String = "", val params: String = "",
+        val camera: String = "", val params: String = "", val location: String = "",
     )
 
     private val metadataCache = ConcurrentHashMap<String, Meta>()
@@ -75,7 +73,8 @@ object PhotoCard {
                 expo?.let { "${it}s" },
                 iso?.let { "ISO$it" },
             ).joinToString("  ")
-            Meta(taken, time, listOf(make, model).filter { it.isNotBlank() }.joinToString(" "), params)
+            Meta(taken, time, listOf(make, model).filter { it.isNotBlank() }.joinToString(" "), params,
+                e.latLong?.let { "%.4f°, %.4f°".format(java.util.Locale.ROOT, it[0], it[1]) }.orEmpty())
                 .also { metadataCache[path] = it }
         } catch (e: Exception) { Meta().also { metadataCache[path] = it } }
     }
@@ -94,13 +93,7 @@ object PhotoCard {
     }
 
     internal fun drawBand(c: Canvas, path: String, fields: Fields, band: Int) {
-        val meta = readExif(path)
-        val line1 = listOf(
-            if (fields.date && meta.taken.isNotBlank()) meta.taken else "",
-            if (fields.time && meta.time.isNotBlank()) meta.time else "").filter { it.isNotBlank() }
-        val line2 = listOf(
-            if (fields.camera) meta.camera else "",
-            if (fields.params) meta.params else "").filter { it.isNotBlank() }
+        val lines = rows(path, fields)
         val photoH = Render.H - band
         c.drawRect(0f, photoH.toFloat(), Render.W.toFloat(), Render.H.toFloat(), Paint().apply {
             color = android.graphics.Color.WHITE
@@ -109,7 +102,12 @@ object PhotoCard {
             color = android.graphics.Color.BLACK
         })
         var y = photoH + 26f
-        if (line1.isNotEmpty()) { c.drawText(line1.joinToString("  "), Render.M, y, paint(21f, true)); y += 26f }
-        if (line2.isNotEmpty()) { c.drawText(line2.joinToString("  "), Render.M, y, paint(16f)) }
+        lines.forEachIndexed { index, line ->
+            val p = paint(if (index == 0) 21f else 16f, index == 0)
+            var display = line
+            while (display.length > 1 && p.measureText(display) > Render.W - Render.M * 2) display = display.dropLast(1)
+            c.drawText(display + if (display.length < line.length) "…" else "", Render.M, y, p)
+            y += 26f
+        }
     }
 }

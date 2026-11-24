@@ -35,7 +35,8 @@ class CardRenderTest {
             weatherCity = "深圳", weatherTemp = "26", weatherText = "多云",
             weatherHigh = "28", weatherLow = "22", weatherAqi = "42",
             weatherForecast = listOf("周一 晴 22~28°", "周二 多云 21~27°", "周三 小雨 20~25°"),
-            weatherUpdated = "11-24 08:00",
+            weatherUpdated = "11-24 08:00", weatherCode = 2,
+            weatherHours = (0..5).map { Render.WeatherHour("${it + 9}:00", 20f + it, 2) },
             weatherHumidity = "60", weatherFeels = "27", weatherSunrise = "06:40", weatherSunset = "17:35",
         )
         listOf("summary", "todo", "quote", "progress", "countdown", "poem", "custom", "calendar", "weather", "weather2")
@@ -78,9 +79,21 @@ class CardRenderTest {
         val context = RuntimeEnvironment.getApplication()
         PlanStore.init(context)
         val card = Render.Card(todos = listOf("工作", "生活"), weatherCity = "深圳",
-            weatherTemp = "26", weatherForecast = listOf("明天 晴 22~28°"))
+            weatherTemp = "26", weatherForecast = listOf("明天 晴 22~28°"),
+            weatherCode = 2, weatherHours = listOf(Render.WeatherHour("09:00", 24f, 2)),
+            customBlocks = listOf(Render.CustomBlock(id = "a", type = "quote"),
+                Render.CustomBlock(id = "b", type = "text", enabled = false)), fontScale = 1.2f)
         PlanStore.saveCard(context, card)
         PlanStore.init(context)
         assertEquals(card, PlanStore.card(context))
+    }
+
+    @Test fun backgroundRefreshPreservesEditedFields() {
+        val requested = Render.Card(weatherCity = "深圳", quote = "旧句子")
+        val edited = requested.copy(weatherCity = "广州")
+        val fetched = requested.copy(weatherCity = "深圳", weatherTemp = "26", quote = "新句子")
+        val merged = CardSources.mergeUnchanged(edited, requested, fetched, "summary")
+        assertEquals("广州", merged.weatherCity)
+        assertEquals("新句子", merged.quote)
     }
 }

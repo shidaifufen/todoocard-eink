@@ -66,6 +66,7 @@ internal fun StudioScreen(
     selectedAddress: String?,
     onKind: (String) -> Unit,
     onCard: (Render.Card) -> Unit,
+    onLayout: (Render.Card) -> Unit,
     onPhoto: () -> Unit,
     onScan: () -> Unit,
     onSelectDevice: (ScanResult) -> Unit,
@@ -82,6 +83,7 @@ internal fun StudioScreen(
     onlineContent: Boolean,
     onSourceMode: (Boolean) -> Unit,
 ) {
+    var layoutOpen by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
     var generating by remember { mutableStateOf(false) }
     var prompt by remember { mutableStateOf("") }
@@ -156,7 +158,7 @@ internal fun StudioScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("屏幕预览", fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f))
-                if (onlineContent && kind in listOf("quote", "poem", "weather", "weather2", "summary", "bing")) TextButton(
+                if (onlineContent && kind in listOf("quote", "poem", "weather", "weather2", "summary", "custom", "bing")) TextButton(
                     enabled = !busy && !refreshing, onClick = onRefresh) {
                     Text(if (refreshing) "更新中…" else if (kind in listOf("weather", "weather2")) "刷新天气" else "换一张")
                 }
@@ -170,7 +172,16 @@ internal fun StudioScreen(
                 }
             }
             if (kind == "poem") TextButton(onClick = onAnalysis, enabled = !busy && !refreshing) {
-                Text(if (refreshing) "内容更新中…" else "只刷新这首诗的赏析")
+                Text(if (refreshing) "赏析获取中…" else if (card.poemNote.isBlank()) "为这首诗写 AI 赏析" else "重新生成 AI 赏析")
+            }
+            if (!isImage) {
+                TextButton(onClick = { layoutOpen = !layoutOpen }) { Text(if (layoutOpen) "收起排版" else "字号、行距与元素间距") }
+                if (layoutOpen) {
+                    LayoutSlider("文字大小", card.fontScale, .8f..1.3f) { onLayout(card.copy(fontScale = it)) }
+                    LayoutSlider("行间距", card.lineSpacing, .8f..1.5f) { onLayout(card.copy(lineSpacing = it)) }
+                    LayoutSlider("元素间距", card.elementSpacing, .7f..1.4f) { onLayout(card.copy(elementSpacing = it)) }
+                    TextButton(onClick = { onLayout(card.copy(fontScale = 1f, lineSpacing = 1f, elementSpacing = 1f)) }) { Text("恢复默认排版") }
+                }
             }
             if (kind == "ai") TextButton(onClick = { generating = true }, enabled = !busy && !refreshing) {
                 Text("输入提示词生成图片")
@@ -207,7 +218,8 @@ internal fun StudioScreen(
         }
     }
     }
-    if (editing) CardEditorDialog(kind, card, onDismiss = { editing = false }, onSave = {
+    if (editing && kind == "custom") CustomEditorDialog(card, onDismiss = { editing = false }, onSave = { onCard(it); editing = false })
+    if (editing && kind != "custom") CardEditorDialog(kind, card, onDismiss = { editing = false }, onSave = {
         onCard(it)
         editing = false
     })
@@ -334,7 +346,7 @@ private fun CardEditorDialog(
                         TextButton(enabled = !weatherBusy, onClick = {
                             scope.launch {
                                 weatherBusy = true
-                                runCatching { WeatherData.automatic(initial) }.onSuccess { value ->
+                                runCatching { WeatherData.automatic(initial.copy(weatherLatitude = "", weatherLongitude = "")) }.onSuccess { value ->
                                     weatherCity = value.weatherCity; weatherText = value.weatherText
                                     weatherTemp = value.weatherTemp; weatherHigh = value.weatherHigh
                                     weatherLow = value.weatherLow; weatherAqi = value.weatherAqi
@@ -463,6 +475,8 @@ private fun CardEditorDialog(
                     weatherFeels = weatherLocation.weatherFeels,
                     weatherSunrise = weatherLocation.weatherSunrise,
                     weatherSunset = weatherLocation.weatherSunset,
+                    weatherCode = weatherLocation.weatherCode,
+                    weatherHours = weatherLocation.weatherHours,
                 ))
             }, shape = RoundedCornerShape(8.dp)) { Text("保存预览") }
         },
@@ -489,4 +503,10 @@ private fun EditorField(
         placeholder = if (hint.isEmpty()) null else { { Text(hint) } },
         modifier = Modifier.fillMaxWidth(), minLines = lines, maxLines = lines,
         shape = RoundedCornerShape(8.dp))
+}
+
+@Composable
+internal fun LayoutSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
+    Text("$label · "+"%.0f%%".format(value * 100), fontSize = 12.sp, color = StudioMuted)
+    Slider(value = value.coerceIn(range), onValueChange = onChange, valueRange = range)
 }
