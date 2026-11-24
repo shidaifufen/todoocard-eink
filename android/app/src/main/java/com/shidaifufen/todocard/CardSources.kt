@@ -111,7 +111,7 @@ object CardSources {
         error("诗词服务连续返回近期作品，请稍后再换；没有替换为本地诗词")
     }
 
-    suspend fun scheduledBitmap(ctx: Context, kind: String): Bitmap {
+    suspend fun scheduledBitmap(ctx: Context, kind: String, onNotice: (String) -> Unit = {}): Bitmap {
         if (kind == "bing" || kind == "ai") {
             val path = if (kind == "bing") ImageSources.bing(ctx) else ImageSources.cached(ctx, kind)
             check(path.isNotBlank()) { "请先生成一张 AI 图片" }
@@ -128,8 +128,19 @@ object CardSources {
                     snapThreshold = PlanStore.photoEdit.snapThreshold)) }
             finally { if (uri != null) java.io.File(path).delete() }
         }
-        val card = fresh(ctx, kind, PlanStore.card(ctx))
+        val card = scheduledCard(ctx, kind, onNotice)
         return withContext(Dispatchers.Default) { Render.render(card.copy(kind = kind)) }
+    }
+
+    internal suspend fun scheduledCard(ctx: Context, kind: String, onNotice: (String) -> Unit = {},
+        fetch: suspend (Context, String, Render.Card, Boolean) -> Render.Card = ::fresh): Render.Card {
+        // Every scheduled send refreshes online content, even inside the normal UI cache TTL.
+        return try { fetch(ctx, kind, PlanStore.card(ctx), true) }
+        catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (error: Exception) {
+            onNotice("在线更新失败，使用已保存内容：${error.message.orEmpty().take(100)}")
+            PlanStore.card(ctx)
+        }
     }
 }
 

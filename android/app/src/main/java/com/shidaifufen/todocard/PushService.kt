@@ -30,7 +30,7 @@ class PushService : Service() {
             while (queue.isNotEmpty()) {
                 val next = queue.removeFirst()
                 push(next.getStringExtra("bitmapPath"), next.getStringExtra("kind") ?: "photo",
-                    next.getLongExtra("scheduledAt", 0))
+                    next.getLongExtra("scheduledAt", 0), next.getBooleanExtra("replay", false))
                 // 成功或失败状态短暂展示，然后与通知一起消失；新任务可直接接续。
                 repeat(10) { if (queue.isEmpty()) delay(500) }
             }
@@ -50,21 +50,31 @@ class PushService : Service() {
         }
     }
 
-    private suspend fun push(path: String?, kind: String, scheduledAt: Long) {
+    private suspend fun push(path: String?, kind: String, scheduledAt: Long, replay: Boolean) {
         val started = System.currentTimeMillis()
         var message = "准备推送…"
         var ok = false
         var client: BleClient? = null
+        var snapshot = ""
+        var notice = ""
         val wake = getSystemService(android.os.PowerManager::class.java)
             .newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "todocard:push")
         state.value = State(true, message)
         try {
             wake.acquire(10 * 60_000L)
             report("正在准备卡片…", 0, true)
-            val source = if (path == null) CardSources.scheduledBitmap(this, kind)
+            val source = if (path == null) CardSources.scheduledBitmap(this, kind) { notice = it }
                 else BitmapFactory.decodeFile(path) ?: error("无法读取卡片图片")
             val payload = withContext(Dispatchers.Default) {
-                try { QuickLz.buildPayload(Payload.build(source).controller) }
+                try {
+                    snapshot = withContext(Dispatchers.IO) {
+                        runCatching { HistoryCards.save(this@PushService, source) }.getOrElse {
+                            notice = listOf(notice, "未能保存历史图片").filter(String::isNotBlank).joinToString(" · ")
+                            ""
+                        }
+                    }
+                    QuickLz.buildPayload(Payload.build(source).controller)
+                }
                 finally { source.recycle() }
             }
             val saved = PlanStore.deviceAddress
@@ -103,10 +113,11 @@ class PushService : Service() {
             client?.close()
             path?.let { File(it).delete() }
             if (wake.isHeld) wake.release()
+            val result = listOf(if (replay) "原图重推" else "", message, notice).filter(String::isNotBlank).joinToString(" · ")
             val detail = if (scheduledAt > 0) "计划 ${java.text.SimpleDateFormat("HH:mm", java.util.Locale.CHINA)
-                .format(java.util.Date(scheduledAt))} · $message" else message
+                .format(java.util.Date(scheduledAt))} · $result" else result
             PlanStore.addHistory(this, PlanStore.Hist(System.currentTimeMillis(), kind, ok,
-                ((System.currentTimeMillis() - started) / 1000).toInt(), detail))
+                ((System.currentTimeMillis() - started) / 1000).toInt(), detail, snapshot, replay))
             state.value = State(false, message, if (ok) 100 else state.value.progress)
             PushStatus.update(this, message, finished = true)
         }

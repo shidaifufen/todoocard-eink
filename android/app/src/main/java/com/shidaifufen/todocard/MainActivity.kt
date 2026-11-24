@@ -459,19 +459,36 @@ private fun App(incomingIntent: Intent?) {
 
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()) {
-        onPermissionsGranted = { doSend() }
         permLauncher.launch(bluetoothPermissions())
     }
 
-    fun requestSend() {
+    fun requestPush(action: () -> Unit) {
         if (busy) return
+        onPermissionsGranted = action
         if (Build.VERSION.SDK_INT >= 33 &&
             ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED) {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         } else {
-            onPermissionsGranted = { doSend() }
             permLauncher.launch(bluetoothPermissions())
+        }
+    }
+    fun requestSend() = requestPush { doSend() }
+
+    fun replayHistory(item: PlanStore.Hist) = requestPush {
+        scope.launch {
+            try {
+                val copy = withContext(Dispatchers.IO) {
+                    val original = HistoryCards.file(ctx, item.snapshot) ?: error("历史图片已不可用")
+                    val temp = java.io.File.createTempFile("replay_", ".png", ctx.cacheDir)
+                    original.copyTo(temp, overwrite = true)
+                    temp
+                }
+                ctx.startForegroundService(Intent(ctx, PushService::class.java)
+                    .putExtra("bitmapPath", copy.absolutePath).putExtra("kind", item.template)
+                    .putExtra("replay", true))
+                status = "正在重新推送历史图片"
+            } catch (e: Exception) { status = "重新推送失败：${e.message}" }
         }
     }
 
@@ -564,7 +581,7 @@ private fun App(incomingIntent: Intent?) {
                             PlanStore.photoEdit = edit
                             kind = imageKind; if (imageKind == "photo") PlanStore.lastPhoto = photoPath; tab = 0
                         })
-                    3 -> PlanScreen(ctx)
+                    3 -> PlanScreen(ctx, onReplay = ::replayHistory)
                     else -> SettingsScreen(pairedName, pairedAddress, fields, found,
                         device?.device?.address, status,
                         onScan = { requestScan() }, onSelect = ::selectDevice,

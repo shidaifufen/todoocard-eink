@@ -18,7 +18,8 @@ object PlanStore {
         val enabled: Boolean = true,
     )
 
-    data class Hist(val ts: Long, val template: String, val ok: Boolean, val seconds: Int, val msg: String)
+    data class Hist(val ts: Long, val template: String, val ok: Boolean, val seconds: Int, val msg: String,
+                    val snapshot: String = "", val replay: Boolean = false)
 
     private fun sp(c: Context) = c.getSharedPreferences("plan", Context.MODE_PRIVATE)
 
@@ -62,18 +63,20 @@ object PlanStore {
         return (0 until arr.length()).map {
             val o = arr.getJSONObject(it)
             Hist(o.optLong("ts"), o.optString("template"), o.optBoolean("ok"),
-                o.optInt("seconds"), o.optString("msg"))
+                o.optInt("seconds"), o.optString("msg"), o.optString("snapshot"), o.optBoolean("replay"))
         }
     }
 
-    fun addHistory(c: Context, h: Hist) {
+    @Synchronized fun addHistory(c: Context, h: Hist) {
         val list = (history(c) + h).takeLast(200)
         val arr = JSONArray()
         list.forEach {
             arr.put(JSONObject().put("ts", it.ts).put("template", it.template)
-                .put("ok", it.ok).put("seconds", it.seconds).put("msg", it.msg))
+                .put("ok", it.ok).put("seconds", it.seconds).put("msg", it.msg)
+                .put("snapshot", it.snapshot).put("replay", it.replay))
         }
         sp(c).edit().putString("hist", arr.toString()).apply()
+        HistoryCards.prune(c, list.map { it.snapshot }.toSet())
     }
 
     fun card(c: Context): Render.Card {

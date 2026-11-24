@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -24,11 +25,15 @@ import java.util.Locale
 /** 每日计划 / 间隔推送 / 时间轴 / 历史 —— 统一视觉：卡片分组 + 标准时间选择器 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PlanScreen(ctx: android.content.Context) {
+fun PlanScreen(ctx: android.content.Context, onReplay: (PlanStore.Hist) -> Unit) {
     PlanStore.init(ctx)
     var fixed by remember { mutableStateOf(PlanStore.fixed(ctx)) }
     var itvs by remember { mutableStateOf(PlanStore.intervals(ctx)) }
     var hist by remember { mutableStateOf(PlanStore.history(ctx)) }
+    var selected by remember { mutableStateOf<PlanStore.Hist?>(null) }
+    var allHistory by remember { mutableStateOf(false) }
+    val pushState by PushService.status.collectAsState()
+    LaunchedEffect(pushState.running) { hist = PlanStore.history(ctx) }
 
     var editFixed by remember { mutableStateOf<Int?>(null) }   // null=关闭, -1=新增, >=0 编辑
     var editItv by remember { mutableStateOf<Int?>(null) }
@@ -94,20 +99,49 @@ fun PlanScreen(ctx: android.content.Context) {
         }) {
             if (hist.isEmpty()) Text("还没有发送记录", fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            hist.takeLast(10).reversed().forEach { h ->
+            Text("点击卡片名称查看当次图片，可重新推送原图。旧版本记录没有图片快照。", fontSize = 11.sp, color = StudioMuted)
+            hist.takeLast(if (allHistory) 200 else 10).reversed().forEach { h ->
                 Column {
                 Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(SimpleDateFormat("MM-dd HH:mm", Locale.CHINA).format(Date(h.ts)),
                         fontSize = 12.sp, modifier = Modifier.width(96.dp))
-                    Text(templateName(h.template), fontSize = 12.sp, modifier = Modifier.weight(1f))
+                    if (HistoryCards.file(ctx, h.snapshot) != null) {
+                        TextButton(onClick = { selected = h }, modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(0.dp)) {
+                            Text(templateName(h.template) + " · 查看图片", fontSize = 12.sp,
+                                textDecoration = TextDecoration.Underline)
+                        }
+                    } else Text(templateName(h.template), fontSize = 12.sp, modifier = Modifier.weight(1f))
                     Text(if (h.ok) "✓ ${h.seconds}s" else "✕", fontSize = 12.sp,
                         color = if (h.ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
                 }
                 Text(h.msg, fontSize = 11.sp, color = StudioMuted, modifier = Modifier.padding(bottom = 6.dp))
                 }
             }
+            if (hist.size > 10) TextButton(onClick = { allHistory = !allHistory }) {
+                Text(if (allHistory) "收起记录" else "查看全部 ${hist.size} 条记录")
+            }
         }
         Spacer(Modifier.height(16.dp))
+    }
+
+    selected?.let { item ->
+        val image = HistoryCards.file(ctx, item.snapshot)
+        AlertDialog(onDismissRequest = { selected = null },
+            title = { Text("发送的卡片") },
+            text = {
+                Column {
+                    if (image != null) coil.compose.AsyncImage(model = image, contentDescription = "当次发送的卡片",
+                        modifier = Modifier.fillMaxWidth().aspectRatio(Render.W.toFloat() / Render.H))
+                    else Text("图片已不可用")
+                    Text(item.msg, fontSize = 12.sp, color = StudioMuted)
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = image != null && !pushState.running,
+                    onClick = { selected = null; onReplay(item) }) { Text(if (pushState.running) "正在推送…" else "重新推送原图") }
+            },
+            dismissButton = { TextButton(onClick = { selected = null }) { Text("关闭") } })
     }
 
     // 计划编辑弹窗

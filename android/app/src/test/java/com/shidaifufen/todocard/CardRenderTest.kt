@@ -111,4 +111,39 @@ class CardRenderTest {
         assertEquals("广州", merged.weatherCity)
         assertEquals("新句子", merged.quote)
     }
+
+    @Test fun scheduledSendRefreshesInsideCacheTtlAndKeepsSavedCardOnFailure() = kotlinx.coroutines.runBlocking {
+        val ctx = RuntimeEnvironment.getApplication()
+        PlanStore.saveCard(ctx, Render.Card(quote = "先前内容"))
+        val updated = CardSources.scheduledCard(ctx, "quote", fetch = { _, kind, card, force ->
+            assertEquals("quote", kind)
+            assertTrue("schedule must bypass the UI cache TTL", force)
+            card.copy(quote = "发送前的新内容")
+        })
+        assertEquals("发送前的新内容", updated.quote)
+        var notice = ""
+        val fallback = CardSources.scheduledCard(ctx, "quote", onNotice = { notice = it },
+            fetch = { _, _, _, _ -> error("offline") })
+        assertEquals("先前内容", fallback.quote)
+        assertTrue(notice.contains("使用已保存内容"))
+    }
+
+    @Test fun historyRetainsExactImageAndReplayMetadataAndPrunesExpiredImages() {
+        val ctx = RuntimeEnvironment.getApplication()
+        ctx.getSharedPreferences("plan", 0).edit().remove("hist").commit()
+        val bitmap = Bitmap.createBitmap(12, 18, Bitmap.Config.ARGB_8888)
+        bitmap.eraseColor(Color.RED)
+        val snapshot = HistoryCards.save(ctx, bitmap)
+        assertEquals("identical cards share one file", snapshot, HistoryCards.save(ctx, bitmap))
+        PlanStore.addHistory(ctx, PlanStore.Hist(1, "photo", true, 3, "sent", snapshot, true))
+        val restored = PlanStore.history(ctx).single()
+        assertEquals(snapshot, restored.snapshot)
+        assertTrue(restored.replay)
+        val decoded = android.graphics.BitmapFactory.decodeFile(HistoryCards.file(ctx, snapshot)!!.absolutePath)
+        assertTrue(bitmap.sameAs(decoded))
+        assertNull(HistoryCards.file(ctx, "../card.png"))
+        repeat(200) { PlanStore.addHistory(ctx, PlanStore.Hist(it + 2L, "quote", true, 1, "sent")) }
+        assertEquals(200, PlanStore.history(ctx).size)
+        assertNull(HistoryCards.file(ctx, snapshot))
+    }
 }
