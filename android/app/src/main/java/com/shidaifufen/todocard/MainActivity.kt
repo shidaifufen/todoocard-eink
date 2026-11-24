@@ -101,6 +101,15 @@ private fun App(incomingIntent: Intent?) {
     var pendingSharedPush by remember { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
     var sourceRevision by remember { mutableIntStateOf(0) }
+    var clockTick by remember { mutableLongStateOf(System.currentTimeMillis() / 60_000) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            clockTick = System.currentTimeMillis() / 60_000
+            kotlinx.coroutines.delay(30_000)
+        }
+    }
+    val contentDay = java.time.Instant.ofEpochMilli(clockTick * 60_000)
+        .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
     val onlineContent = remember(kind, sourceRevision) { ContentOptions.online(ctx, kind) }
     var scanning by remember { mutableStateOf(false) }
     var scanTimedOut by remember { mutableStateOf(false) }
@@ -182,11 +191,11 @@ private fun App(incomingIntent: Intent?) {
             refreshing = false
         }
     }
-    LaunchedEffect(kind) {
+    LaunchedEffect(kind, contentDay) {
         if (onlineContent && kind in listOf("summary", "quote", "poem", "weather", "weather2") &&
             ctx.getSharedPreferences("content_refresh", 0).getString(kind, "") != java.time.LocalDate.now().toString()) refreshCard()
     }
-    LaunchedEffect(kind, card, photoPath, fields, edit, tab, refreshing, onlineContent) {
+    LaunchedEffect(kind, card, photoPath, fields, edit, tab, refreshing, onlineContent, clockTick) {
         if (tab != 0) return@LaunchedEffect
         if (onlineContent && kind in listOf("summary", "quote", "poem", "weather", "weather2") &&
             ctx.getSharedPreferences("content_refresh", 0).getString(kind, "").isNullOrBlank()) {

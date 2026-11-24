@@ -15,6 +15,24 @@ android {
         versionCode = 4
         versionName = "1.3.0"
     }
+    signingConfigs {
+        create("stable") {
+            storeFile = System.getenv("ANDROID_KEYSTORE_PATH")?.let { file(it) }
+            storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            keyAlias = "todocard"
+            keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            storeType = "PKCS12"
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("stable")
+        }
+        getByName("debug") {
+            if (!System.getenv("ANDROID_KEYSTORE_PATH").isNullOrBlank())
+                signingConfig = signingConfigs.getByName("stable")
+        }
+    }
     buildFeatures { compose = true }
     testOptions { unitTests.isIncludeAndroidResources = true }
     compileOptions {

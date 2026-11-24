@@ -10,3 +10,10 @@ data/cards/
 dist-mac/
 build-mac/
 release/
+*.jks
+*.keystore
+*.p12
+keystore.properties
+android/local.properties
+android/.gradle/
+android/**/build/
