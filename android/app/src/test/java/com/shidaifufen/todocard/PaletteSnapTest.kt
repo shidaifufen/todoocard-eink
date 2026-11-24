@@ -23,7 +23,7 @@ class PaletteSnapTest {
         val colors = intArrayOf(Color.rgb(246, 248, 250), Color.rgb(45, 42, 44),
             Color.rgb(236, 15, 24), Color.rgb(16, 18, 238),
             Color.rgb(20, 235, 25), Color.rgb(240, 240, 16),
-            Color.rgb(120, 80, 170), Color.rgb(180, 50, 50))
+            Color.rgb(120, 80, 140), Color.rgb(165, 55, 55))
         val bitmap = Bitmap.createBitmap(colors, colors.size, 1, Bitmap.Config.ARGB_8888)
             .copy(Bitmap.Config.ARGB_8888, true)
         val off = bitmap.copy(Bitmap.Config.ARGB_8888, true)
