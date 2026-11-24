@@ -30,6 +30,9 @@ class PairTests(unittest.IsolatedAsyncioTestCase):
 
             async def disconnect(self):
                 calls.append(("disconnect", self.pair))
+
+            async def read_gatt_char(self, uuid):
+                return bytes([75])
         return Client
 
     async def test_pair_before_connect_and_no_second_pair(self):

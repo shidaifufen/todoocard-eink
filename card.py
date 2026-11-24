@@ -388,8 +388,7 @@ class CardService:
 
         日志按 pair_session 的约定写进 _pair_lines，网页的「配对」弹窗照样能看。
         """
-        from bleak import BleakScanner
-        from ble_pair import pair_device
+        from ble_pair import pair_device, find_pairing_device
 
         def _log(msg: str):
             _LOGGER.info("%s", msg)
@@ -401,9 +400,9 @@ class CardService:
             async with BLE_GUARD:
                 _log(f"[ble] 正在找 {device_id} …（长按卡片背面按钮 5 秒可让它进入配对窗口）")
                 # bleak 3.x 只有 find_device_by_address（Windows 上就是 MAC 地址）
-                device = await BleakScanner.find_device_by_address(device_id, timeout=25)
+                device = await find_pairing_device(device_id, _log)
                 if device is None:
-                    _log("[ble] 没扫到这台卡片：确认它没被 TodooCam 等 App 连着，再长按按钮 5 秒")
+                    _log("[ble] 等待 75 秒仍未检测到可配对窗口：请确认指示灯快闪，并关闭其他连接")
                     return False
                 self._pair_state = "pairing"
                 _log(f"[ble] 找到 {device.name or device_id}，先完成系统配对，再验证连接…")
