@@ -489,7 +489,7 @@ object Render {
             drawText(line, half + 14f, 610f + i * 29f, paint(20f))
         }
         WeatherVisuals.chart(this, card.weatherHours, 667f, 86f)
-        drawText("Open-Meteo · 城市天气与空气质量", M, 765f, paint(16f))
+        drawText("Open-Meteo · 城市天气与空气质量", M, 783f, paint(16f))
     }
 
     private fun fitLine(text: String, p: Paint, width: Float): String {
