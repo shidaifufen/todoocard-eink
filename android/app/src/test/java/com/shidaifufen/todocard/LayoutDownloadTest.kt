@@ -3,6 +3,7 @@ package com.shidaifufen.todocard
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.ByteArrayInputStream
+import java.net.URI
 
 class LayoutDownloadTest {
     @Test fun acceptsRepositoryAndReleaseDownloadLinks() {
@@ -29,5 +30,13 @@ class LayoutDownloadTest {
         assertEquals("中文", LayoutDownload.read(ByteArrayInputStream("\uFEFF中文".toByteArray(Charsets.UTF_8))))
         assertEquals(LayoutPack.MAX_BYTES, LayoutDownload.read(ByteArrayInputStream(ByteArray(LayoutPack.MAX_BYTES) { 32 })).length)
         assertTrue(runCatching { LayoutDownload.read(ByteArrayInputStream(ByteArray(LayoutPack.MAX_BYTES + 1))) }.isFailure)
+    }
+
+    @Test fun rawNetworkFallbackPreservesReferenceAndEncodedFilePath() {
+        assertEquals("https://api.github.com/repos/owner/repo/contents/layouts/a%20b.json?ref=main",
+            LayoutDownload.apiFallback(LayoutDownload.resolve("https://github.com/owner/repo/blob/main/layouts/a%20b.json")).toString())
+        assertEquals("https://api.github.com/repos/owner/repo/contents/layouts/default.json?ref=main",
+            LayoutDownload.apiFallback(LayoutDownload.resolve("https://github.com/owner/repo/raw/refs/heads/main/layouts/default.json")).toString())
+        assertNull(LayoutDownload.apiFallback(URI("https://github.com/owner/repo/releases/download/v1/default.json")))
     }
 }

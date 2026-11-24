@@ -2,14 +2,16 @@ package com.shidaifufen.todocard
 
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URI
+import java.net.URLEncoder
 
 /** Public GitHub layout files only; uses no account credentials. */
 internal object LayoutDownload {
     const val DEFAULT_URL = "https://github.com/shidaifufen/todoocard-eink/blob/main/layouts/default.json"
     private val hosts = setOf("github.com", "raw.githubusercontent.com", "objects.githubusercontent.com",
-        "release-assets.githubusercontent.com", "github-releases.githubusercontent.com")
+        "release-assets.githubusercontent.com", "github-releases.githubusercontent.com", "api.github.com")
 
     fun resolve(input: String): URI {
         val uri = URI(input.trim())
@@ -50,8 +52,29 @@ internal object LayoutDownload {
         return out.toByteArray().toString(Charsets.UTF_8).removePrefix("\uFEFF")
     }
 
+    internal fun apiFallback(uri: URI): URI? {
+        if (uri.host != "raw.githubusercontent.com") return null
+        val parts = uri.rawPath.trimStart('/').split('/')
+        if (parts.size < 4) return null
+        val refIndex = if (parts.getOrNull(2) == "refs" && parts.getOrNull(3) in setOf("heads", "tags")) 4 else 2
+        if (parts.size <= refIndex + 1) return null
+        val ref = URI("https://github.com/${parts[refIndex]}").path.drop(1)
+        return URI("https://api.github.com/repos/${parts[0]}/${parts[1]}/contents/" +
+            parts.drop(refIndex + 1).joinToString("/") + "?ref=" + URLEncoder.encode(ref, "UTF-8"))
+    }
+
     fun fetch(input: String): LayoutPack.Pack {
-        var uri = resolve(input)
+        val uri = resolve(input)
+        val raw = try { download(uri) } catch (network: IOException) {
+            val fallback = apiFallback(uri) ?: throw network
+            download(fallback)
+        }
+        check(!raw.trimStart().startsWith("<")) { "链接返回了网页，请使用 JSON 文件或 Release 附件链接" }
+        return LayoutPack.parse(raw)
+    }
+
+    private fun download(start: URI): String {
+        var uri = start
         repeat(6) {
             require(uri.scheme == "https" && uri.host?.lowercase() in hosts && uri.userInfo == null &&
                 uri.port in setOf(-1, 443)) { "GitHub 下载重定向地址不受支持" }
@@ -60,7 +83,7 @@ internal object LayoutDownload {
                 connection.instanceFollowRedirects = false
                 connection.connectTimeout = 12_000
                 connection.readTimeout = 15_000
-                connection.setRequestProperty("Accept", "application/json, text/plain;q=0.9")
+                connection.setRequestProperty("Accept", if (uri.host == "api.github.com") "application/vnd.github.raw+json" else "application/json, text/plain;q=0.9")
                 connection.setRequestProperty("Cache-Control", "no-cache")
                 connection.setRequestProperty("User-Agent", "Todocard-Android-Layouts")
                 val status = connection.responseCode
@@ -73,9 +96,7 @@ internal object LayoutDownload {
                         else -> "下载失败（HTTP $status），可下载文件后导入"
                     } }
                     require(connection.contentLengthLong <= LayoutPack.MAX_BYTES) { "版式包不能超过 256 KB" }
-                    val raw = connection.inputStream.use(::read)
-                    check(!raw.trimStart().startsWith("<")) { "链接返回了网页，请使用 JSON 文件或 Release 附件链接" }
-                    return LayoutPack.parse(raw)
+                    return connection.inputStream.use(::read)
                 }
             } finally { connection.disconnect() }
         }
