@@ -29,11 +29,17 @@ object PhotoCard {
         return listOf(
             listOf(if (fields.date) meta.taken else "", if (fields.time) meta.time else "").filter(String::isNotBlank).joinToString("  "),
             listOf(if (fields.camera) meta.camera else "", if (fields.params) meta.params else "").filter(String::isNotBlank).joinToString("  "),
-            if (fields.location) meta.location else ""
+            if (fields.location) location(path) else ""
         ).filter(String::isNotBlank)
     }
     fun bandHeight(path: String, fields: Fields): Int = rows(path, fields).size.let { if (it == 0) 0 else 24 + 26 * it }
-    fun location(path: String): String = readExif(path).location
+    fun location(path: String): String = locationNote(path).ifBlank { readExif(path).location }
+    fun locationNote(path: String): String = runCatching { File(path + ".location").readText().trim() }.getOrDefault("")
+    fun saveLocationNote(path: String, value: String) {
+        require(path.isNotBlank())
+        val note = File(path + ".location")
+        if (value.isBlank()) note.delete() else note.writeText(value.trim().take(120))
+    }
 
     /** 带裁切/色彩参数的渲染 */
     fun render(path: String, fields: Fields, edit: PhotoEdit.Params): Bitmap {

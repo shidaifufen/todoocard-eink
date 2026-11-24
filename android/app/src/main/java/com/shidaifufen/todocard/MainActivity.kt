@@ -95,6 +95,7 @@ private fun App(incomingIntent: Intent?) {
     var card by remember { mutableStateOf(PlanStore.card(ctx)) }
     var preview by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var photoPath by remember { mutableStateOf(PlanStore.lastPhoto) }
+    var photoLocationRevision by remember { mutableIntStateOf(0) }
     var imageKind by remember { mutableStateOf("photo") }
     var fields by remember { mutableStateOf(PlanStore.photoFields) }
     var edit by remember { mutableStateOf(PlanStore.photoEdit) }
@@ -206,7 +207,7 @@ private fun App(incomingIntent: Intent?) {
         if (onlineContent && kind in listOf("summary", "quote", "poem", "weather", "weather2", "custom") &&
             !refreshing && CardSources.stale(ctx, kind)) refreshCard(false)
     }
-    LaunchedEffect(kind, card, photoPath, fields, edit, tab, refreshing, onlineContent, clockTick) {
+    LaunchedEffect(kind, card, photoPath, fields, edit, tab, refreshing, onlineContent, clockTick, photoLocationRevision) {
         if (tab != 0) return@LaunchedEffect
         preview = withContext(Dispatchers.Default) {
             runCatching {
@@ -558,6 +559,7 @@ private fun App(incomingIntent: Intent?) {
                         onAddPhotos = ::addCarouselPhotos,
                         onAlbumPhoto = { loadPhoto(it) },
                         onFields = { fields = it; PlanStore.photoFields = it },
+                        onLocationSaved = { photoLocationRevision++ },
                         onEdit = { edit = it }, onUse = {
                             PlanStore.photoEdit = edit
                             kind = imageKind; if (imageKind == "photo") PlanStore.lastPhoto = photoPath; tab = 0

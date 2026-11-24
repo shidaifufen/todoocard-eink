@@ -18,7 +18,7 @@ import kotlinx.coroutines.withContext
 
 @Composable
 internal fun CustomEditorDialog(initial: Render.Card, onDismiss: () -> Unit, onSave: (Render.Card) -> Unit) {
-    var card by remember { mutableStateOf(initial.copy(customBlocks = initial.customBlocks.ifEmpty { CustomBlocks.defaults(initial) })) }
+    var card by remember { mutableStateOf(initial.copy(customBlocks = if (initial.customComposition) initial.customBlocks else initial.customBlocks.ifEmpty { CustomBlocks.defaults(initial) })) }
     var add by remember { mutableStateOf(false) }
     var picking by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf("") }

@@ -52,6 +52,7 @@ internal fun LibraryScreen(
     onAddPhotos: () -> Unit,
     onAlbumPhoto: (Uri) -> Unit,
     onFields: (PhotoCard.Fields) -> Unit,
+    onLocationSaved: () -> Unit,
     onEdit: (PhotoEdit.Params) -> Unit,
     onUse: () -> Unit,
 ) {
@@ -60,14 +61,16 @@ internal fun LibraryScreen(
             runCatching { PhotoEdit.decodePreview(photoPath) }.getOrNull()
         }
     }
-    val band = remember(photoPath, fields) {
+    var locationRevision by remember { mutableIntStateOf(0) }
+    var locationNote by remember(photoPath) { mutableStateOf(if (photoPath.isBlank()) "" else PhotoCard.locationNote(photoPath)) }
+    val band = remember(photoPath, fields, locationRevision) {
         if (photoPath.isBlank()) 0 else PhotoCard.bandHeight(photoPath, fields)
     }
     val currentEdit by rememberUpdatedState(edit)
     val currentOnEdit by rememberUpdatedState(onEdit)
     val currentSource by rememberUpdatedState(source)
     val currentBand by rememberUpdatedState(band)
-    val infoBand by produceState<Bitmap?>(null, photoPath, fields, band) {
+    val infoBand by produceState<Bitmap?>(null, photoPath, fields, band, locationRevision) {
         value = if (band == 0) null else withContext(Dispatchers.Default) {
             Bitmap.createBitmap(Render.W, Render.H, Bitmap.Config.ARGB_8888).also {
                 PhotoCard.drawBand(android.graphics.Canvas(it), photoPath, fields, band)
@@ -243,7 +246,14 @@ internal fun LibraryScreen(
                         label = { Text(label, fontSize = 12.sp) }, shape = RoundedCornerShape(8.dp))
                 }
             }
-            Text("只显示照片原本包含的拍摄信息；关闭后画面会自动填满空间。",
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("显示拍摄位置", Modifier.weight(1f))
+                Switch(fields.location, onCheckedChange = { onFields(fields.copy(location = it)) })
+            }
+            OutlinedTextField(value = locationNote, onValueChange = { locationNote = it.take(120) },
+                label = { Text("这张照片的地点备注（可选）") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            TextButton(onClick = { PhotoCard.saveLocationNote(photoPath, locationNote); locationRevision++; onLocationSaved() }) { Text("保存地点") }
+            Text("备注优先显示；留空时显示照片中的 GPS 坐标。系统选择器可能移除 GPS。",
                 fontSize = 12.sp, color = StudioMuted)
             }
             if (tool == 1) {

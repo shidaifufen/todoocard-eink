@@ -50,7 +50,8 @@ object CardSources {
             "poem" -> current.poemTitle == requested.poemTitle && current.poemBy == requested.poemBy &&
                 current.poemLines == requested.poemLines && current.poemNote == requested.poemNote
             "weather" -> current.weatherCity == requested.weatherCity &&
-                current.weatherLatitude == requested.weatherLatitude && current.weatherLongitude == requested.weatherLongitude
+                current.weatherLatitude == requested.weatherLatitude && current.weatherLongitude == requested.weatherLongitude &&
+                current.weatherAuto == requested.weatherAuto
             else -> false
         }
         var result = current
@@ -80,6 +81,7 @@ object CardSources {
                         poemLines = it.lines, poemNote = it.note) }
                     else -> WeatherData.refresh(result)
                 }
+                if (!ContentOptions.online(ctx, kind)) return card
                 val latest = PlanStore.card(ctx)
                 PlanStore.saveCard(ctx, mergeUnchanged(latest, card, result, resource))
                 prefs.edit().putLong(key(resource, result), System.currentTimeMillis()).apply()
