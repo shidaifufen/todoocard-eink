@@ -13,7 +13,9 @@ object AlbumStore {
         albumUris.forEach { s ->
             runCatching {
                 val uri = Uri.parse(s)
-                if (android.provider.DocumentsContract.isTreeUri(uri)) {
+                if (uri.scheme == "todocard-album") {
+                    uri.lastPathSegment?.let { out.addAll(MediaAlbums.photos(ctx, it)) }
+                } else if (android.provider.DocumentsContract.isTreeUri(uri)) {
                     val root = androidx.documentfile.provider.DocumentFile.fromTreeUri(ctx, uri)
                         ?: return@runCatching
                     walk(root, out, 0)
@@ -26,7 +28,7 @@ object AlbumStore {
             }
         }
         val hidden = PlanStore.excludedPhotos(ctx)
-        return out.distinct().filter { it.toString() !in hidden }.take(500)
+        return out.distinct().filter { it.toString() !in hidden }.take(5000)
     }
 
     /** 随机取一张（供计划里的照片轮播使用） */

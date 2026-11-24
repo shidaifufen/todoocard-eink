@@ -109,7 +109,7 @@ internal fun LibraryScreen(
         }
         TextButton(onClick = onAddAlbum, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Outlined.FolderOpen, null, Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp)); Text("也可选择可访问的文件夹")
+            Spacer(Modifier.width(6.dp)); Text("选择整个系统相册 / 文件夹")
         }
         if (photos.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
@@ -318,8 +318,12 @@ internal fun SettingsScreen(
     onPair: () -> Unit,
     onUnpair: () -> Unit,
     onFields: (PhotoCard.Fields) -> Unit,
+    onScanAll: () -> Unit,
+    scanTimedOut: Boolean,
 ) {
     var section by remember { mutableStateOf(0) }
+    var aiSettings by remember { mutableStateOf(false) }
+    val settingsContext = LocalContext.current
     Column(Modifier.fillMaxSize().background(StudioBackground).verticalScroll(rememberScrollState())
         .padding(horizontal = 20.dp)) {
         Spacer(Modifier.height(12.dp))
@@ -345,6 +349,7 @@ internal fun SettingsScreen(
                     if (selectedAddress != null) OutlinedButton(onClick = onPair,
                         shape = RoundedCornerShape(8.dp)) { Text("配对选中设备") }
                 }
+                if (scanTimedOut) TextButton(onClick = onScanAll) { Text("查找所有设备（不限制 FF:FF）") }
                 if (pairedAddress.isNotEmpty()) TextButton(onClick = onUnpair) {
                     Text("解除配对", color = StudioRed)
                 }
@@ -400,8 +405,17 @@ internal fun SettingsScreen(
                 Text("六色墨水屏卡片工坊", fontSize = 14.sp)
                 Text("Android · 528 × 792", fontSize = 12.sp, color = StudioMuted,
                     modifier = Modifier.padding(top = 4.dp))
+                TextButton(onClick = { aiSettings = true }) { Text("配置诗词赏析 / AI 生图接口") }
+                TextButton(onClick = {
+                    runCatching { settingsContext.startActivity(android.content.Intent(
+                        android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, settingsContext.packageName)) }
+                }) { Text("系统通知与实时活动设置") }
+                Text("推送会显示查找、连接、进度、显影与结果，结束后约 5 秒自动收起。胶囊样式由系统控制。",
+                    fontSize = 12.sp, color = StudioMuted)
             }
         }
         Spacer(Modifier.height(24.dp))
     }
+    if (aiSettings) AiSettingsDialog { aiSettings = false }
 }

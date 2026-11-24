@@ -26,7 +26,7 @@ object PushStatus {
         builder.setContentIntent(PendingIntent.getActivity(ctx, 0,
             Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
-        return promote(ctx, builder.build(), null)
+        return promote(ctx, builder.build(), null, text)
     }
 
     fun update(ctx: Context, text: String, progress: Int? = null, finished: Boolean = false) {
@@ -35,36 +35,58 @@ object PushStatus {
         ensureChannel(ctx)
         val notification = builder(ctx, text, progress, finished)
         ctx.getSystemService(NotificationManager::class.java).notify(ID,
-            if (finished) notification.build() else promote(ctx, notification.build(), progress))
+            promote(ctx, notification.build(), if (finished && text.contains("成功")) 100 else progress, text))
     }
+
+    fun clear(ctx: Context) = ctx.getSystemService(NotificationManager::class.java).cancel(ID)
 
     // Android 16 的公开 API：保留 SDK 35 构建，旧系统直接使用普通进度通知。
     private fun promote(ctx: Context, notification: android.app.Notification,
-                        progress: Int?): android.app.Notification {
+                        progress: Int?, text: String): android.app.Notification {
         if (Build.VERSION.SDK_INT < 36) return notification
         return runCatching {
             val builder = android.app.Notification.Builder.recoverBuilder(ctx, notification)
+            val styleClass = Class.forName("android.app.Notification\$ProgressStyle")
+            val style = styleClass.getConstructor().newInstance()
+            styleClass.getMethod("setProgressIndeterminate", Boolean::class.javaPrimitiveType)
+                .invoke(style, progress == null)
+            if (progress != null) styleClass.getMethod("setProgress", Int::class.javaPrimitiveType)
+                .invoke(style, progress.coerceIn(0, 100))
+            builder.setStyle(style as android.app.Notification.Style)
+            builder.setOngoing(true)
             builder.javaClass.getMethod("setRequestPromotedOngoing", Boolean::class.javaPrimitiveType)
                 .invoke(builder, true)
             builder.javaClass.getMethod("setShortCriticalText", String::class.java)
-                .invoke(builder, progress?.let { "$it%" } ?: "推送中")
+                .invoke(builder, criticalText(text, progress))
             builder.build()
         }.getOrDefault(notification)
+    }
+
+    internal fun criticalText(text: String, progress: Int?): String = when {
+        text.contains("成功") -> "推送成功"
+        text.startsWith("失败") -> "推送失败"
+        text.contains("查找") || text.contains("广播") -> "查找中"
+        text.contains("已连接") -> "已连接"
+        text.contains("连接中") -> "连接中"
+        text.contains("显影") -> "显影中"
+        progress != null -> "$progress%"
+        text.contains("准备") -> "准备中"
+        else -> "推送中"
     }
 
     private fun builder(ctx: Context, text: String, progress: Int?, finished: Boolean) =
         NotificationCompat.Builder(ctx, CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
-            .setContentTitle(if (finished) "土豆片 · 推送结束" else "土豆片 · 正在推送")
+            .setContentTitle("土豆片 · ${criticalText(text, progress)}")
             .setContentText(text.take(120))
             .setContentIntent(PendingIntent.getActivity(ctx, 0,
                 Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
             .setOnlyAlertOnce(true)
-            .setOngoing(!finished)
+            .setOngoing(true)
             .setAutoCancel(finished)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .apply {
-                if (!finished && progress != null) setProgress(100, progress, false)
+                setProgress(100, if (finished && text.contains("成功")) 100 else progress ?: 0, progress == null && !finished)
             }
 }

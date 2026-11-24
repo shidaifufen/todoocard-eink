@@ -14,6 +14,7 @@ class PushService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var task: Job? = null
     private var lastNotificationAt = 0L
+    private val queue = java.util.ArrayDeque<Intent>()
 
     override fun onCreate() {
         super.onCreate()
@@ -23,14 +24,20 @@ class PushService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val path = intent?.getStringExtra("bitmapPath")
-        if (task?.isActive == true) {
-            path?.let { File(it).delete() }
-            return START_NOT_STICKY
+        if (intent == null) { stopSelf(); return START_NOT_STICKY }
+        queue.add(intent)
+        if (task?.isActive != true) task = scope.launch {
+            while (queue.isNotEmpty()) {
+                val next = queue.removeFirst()
+                push(next.getStringExtra("bitmapPath"), next.getStringExtra("kind") ?: "photo",
+                    next.getLongExtra("scheduledAt", 0))
+                // 成功或失败状态短暂展示，然后与通知一起消失；新任务可直接接续。
+                repeat(10) { if (queue.isEmpty()) delay(500) }
+            }
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            PushStatus.clear(this@PushService)
+            stopSelf()
         }
-        if (path == null) { stopSelf(); return START_NOT_STICKY }
-        val kind = intent?.getStringExtra("kind") ?: "photo"
-        task = scope.launch { push(path, kind) }
         return START_NOT_STICKY
     }
 
@@ -43,30 +50,31 @@ class PushService : Service() {
         }
     }
 
-    private suspend fun push(path: String, kind: String) {
+    private suspend fun push(path: String?, kind: String, scheduledAt: Long) {
         val started = System.currentTimeMillis()
         var message = "准备推送…"
         var ok = false
         var client: BleClient? = null
+        val wake = getSystemService(android.os.PowerManager::class.java)
+            .newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "todocard:push")
         state.value = State(true, message)
         try {
+            wake.acquire(10 * 60_000L)
             report("正在准备卡片…", 0, true)
+            val source = if (path == null) CardSources.scheduledBitmap(this, kind)
+                else BitmapFactory.decodeFile(path) ?: error("无法读取卡片图片")
             val payload = withContext(Dispatchers.Default) {
-                val bitmap = BitmapFactory.decodeFile(path) ?: error("无法读取卡片图片")
-                try { QuickLz.buildPayload(Payload.build(bitmap).controller) }
-                finally { bitmap.recycle() }
+                try { QuickLz.buildPayload(Payload.build(source).controller) }
+                finally { source.recycle() }
             }
             val saved = PlanStore.deviceAddress
             val ble = BleClient(this).also { client = it }
-            report("等待卡片广播，最长 120 秒", 0, true)
+            report("查找中 · 请唤醒卡片", 0, true)
             var target: android.bluetooth.le.ScanResult? = null
             val deadline = System.currentTimeMillis() + 120_000
             while (System.currentTimeMillis() < deadline && target == null) {
                 val list = withContext(Dispatchers.IO) { ble.scanAll(10_000) }
-                target = list.firstOrNull { (it.device.name ?: "").contains("todoo", true) }
-                    ?: list.firstOrNull { it.device.address.startsWith("FF:FF", true) }
-                    ?: list.firstOrNull { saved.isNotEmpty() && it.device.address == saved }
-                    ?: list.firstOrNull { it.device.address.endsWith("39:01", true) }
+                target = DeviceDiscovery.target(list, saved)
                 if (target == null) {
                     val left = ((deadline - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
                     report("等待卡片广播，剩余 $left 秒")
@@ -78,26 +86,29 @@ class PushService : Service() {
             report("连接中…", force = true)
             if (!withContext(Dispatchers.IO) { ble.connect(selected) })
                 error("连接失败：卡片可能在休眠或被占用")
-            report("传输中（${payload.size / 1024} KB）…", force = true)
+            report("已连接 · 准备推送", 0, true)
+            delay(700)
+            report("推送中（${payload.size / 1024} KB）", force = true)
             var lastLog = ""
             withContext(Dispatchers.IO) {
                 ble.send(payload,
-                    onLog = { lastLog = it; report(it) },
-                    onProgress = { report(if (it == 100) "正在等待显影确认…" else "正在传输 $it%", it) })
+                    onLog = { lastLog = it },
+                    onProgress = { report(if (it == 100) "显影中 · 等待设备确认" else "推送中 · $it%", it) })
             }
             ok = lastLog == "已完成并收到显影确认"
-            message = if (ok) "已完成并收到显影确认" else lastLog.ifBlank { "数据已发送，未收到显影确认" }
+            message = if (ok) "推送成功 · 已收到显影确认" else lastLog.ifBlank { "数据已发送，未收到显影确认" }
         } catch (error: Exception) {
             message = "失败：${error.message ?: "推送中断"}"
         } finally {
             client?.close()
-            File(path).delete()
+            path?.let { File(it).delete() }
+            if (wake.isHeld) wake.release()
+            val detail = if (scheduledAt > 0) "计划 ${java.text.SimpleDateFormat("HH:mm", java.util.Locale.CHINA)
+                .format(java.util.Date(scheduledAt))} · $message" else message
             PlanStore.addHistory(this, PlanStore.Hist(System.currentTimeMillis(), kind, ok,
-                ((System.currentTimeMillis() - started) / 1000).toInt(), message))
+                ((System.currentTimeMillis() - started) / 1000).toInt(), detail))
             state.value = State(false, message, if (ok) 100 else state.value.progress)
-            stopForeground(STOP_FOREGROUND_DETACH)
             PushStatus.update(this, message, finished = true)
-            stopSelf()
         }
     }
 

@@ -41,6 +41,7 @@ fun PlanScreen(ctx: android.content.Context) {
         Text("计划", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Text("按时间自动更新卡片", fontSize = 12.sp, color = StudioMuted)
         Spacer(Modifier.height(18.dp))
+        PlanReadiness(ctx)
         TimelineCard(fixed, itvs, hist, onRefresh = { hist = PlanStore.history(ctx) })
 
         SectionCard(title = "每日计划", action = {
@@ -94,12 +95,15 @@ fun PlanScreen(ctx: android.content.Context) {
             if (hist.isEmpty()) Text("还没有发送记录", fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             hist.takeLast(10).reversed().forEach { h ->
+                Column {
                 Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(SimpleDateFormat("MM-dd HH:mm", Locale.CHINA).format(Date(h.ts)),
                         fontSize = 12.sp, modifier = Modifier.width(96.dp))
                     Text(templateName(h.template), fontSize = 12.sp, modifier = Modifier.weight(1f))
                     Text(if (h.ok) "✓ ${h.seconds}s" else "✕", fontSize = 12.sp,
                         color = if (h.ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+                }
+                Text(h.msg, fontSize = 11.sp, color = StudioMuted, modifier = Modifier.padding(bottom = 6.dp))
                 }
             }
         }
@@ -286,7 +290,8 @@ private fun IntervalEditDialog(initial: PlanStore.Interval, title: String, onDis
 @Composable
 private fun TimelineCard(fixed: List<PlanStore.Fixed>, itvs: List<PlanStore.Interval>,
                          hist: List<PlanStore.Hist>, onRefresh: () -> Unit) {
-    val now = System.currentTimeMillis()
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(30_000) } }
     val next = planNext(fixed, itvs, now, 48)
     Column(Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -327,37 +332,5 @@ private fun TimelineCard(fixed: List<PlanStore.Fixed>, itvs: List<PlanStore.Inte
 fun templateName(k: String): String = TEMPLATES.firstOrNull { it.first == k }?.second ?: k
 
 fun planNext(fixed: List<PlanStore.Fixed>, itvs: List<PlanStore.Interval>,
-             now: Long, hours: Int): List<Long> {
-    val out = mutableListOf<Long>()
-    val cal = Calendar.getInstance()
-    for (f in fixed.filter { it.enabled }) {
-        val p = f.time.split(":")
-        repeat(hours / 24 + 2) { d ->
-            cal.timeInMillis = now
-            cal.add(Calendar.DAY_OF_YEAR, d)
-            cal.set(Calendar.HOUR_OF_DAY, p.getOrNull(0)?.toIntOrNull() ?: 8)
-            cal.set(Calendar.MINUTE, p.getOrNull(1)?.toIntOrNull() ?: 0)
-            cal.set(Calendar.SECOND, 0)
-            if (cal.timeInMillis > now) out.add(cal.timeInMillis)
-        }
-    }
-    for (t in itvs.filter { it.enabled }) {
-        val s = t.start.split(":"); val e = t.end.split(":")
-        repeat(hours / 24 + 2) { d ->
-            cal.timeInMillis = now
-            cal.add(Calendar.DAY_OF_YEAR, d)
-            cal.set(Calendar.HOUR_OF_DAY, s.getOrNull(0)?.toIntOrNull() ?: 9)
-            cal.set(Calendar.MINUTE, s.getOrNull(1)?.toIntOrNull() ?: 0)
-            val endCal = (cal.clone() as Calendar).apply {
-                set(Calendar.HOUR_OF_DAY, e.getOrNull(0)?.toIntOrNull() ?: 22)
-                set(Calendar.MINUTE, e.getOrNull(1)?.toIntOrNull() ?: 0)
-            }
-            var x = cal.timeInMillis
-            while (x <= endCal.timeInMillis) {
-                if (x > now) out.add(x)
-                x += maxOf(5, t.everyMin) * 60_000L
-            }
-        }
-    }
-    return out.sorted()
-}
+             now: Long, hours: Int): List<Long> =
+    SchedulePlanner.slots(fixed, itvs, now + 1, now + hours * 3600_000L).map { it.at }.distinct()

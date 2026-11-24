@@ -16,7 +16,7 @@ import java.util.Locale
 object Render {
     const val W = 528
     const val H = 792
-    const val M = 34f
+    const val M = 32f
 
     private val BLACK = Color.rgb(0, 0, 0)
     private val WHITE = Color.rgb(255, 255, 255)
@@ -30,7 +30,7 @@ object Render {
     data class Card(
         val kind: String = "summary",
         val quote: String = "把今天过好，就是对明天最好的准备。",
-        val quoteBy: String = "土豆片",
+        val quoteBy: String = "本地句子",
         val todos: List<String> = emptyList(),
         val countdowns: List<Pair<String, String>> = emptyList(),
         val poemTitle: String = "静夜思",
@@ -65,12 +65,15 @@ object Render {
         }
 
     private fun Canvas.head(title: String, right: String) {
-        drawText(fitLine(title, paint(40f, BLACK, true), 290f), M, 74f,
-            paint(40f, BLACK, bold = true))
-        val p = paint(24f, BLACK)
+        val p = paint(16f, BLACK)
         val label = fitLine(right, p, 165f)
-        drawText(label, W - M - p.measureText(label), 66f, p)
-        fill(M, 96f, W - M, 99f, RED)
+        val titleWidth = W - M * 2 - 23f - p.measureText(label) - 18f
+        fill(M, 37f, M + 13f, 50f, RED)
+        drawText(fitLine(title, paint(30f, BLACK, true), titleWidth), M + 23f, 62f,
+            paint(30f, BLACK, bold = true))
+        drawText(label, W - M - p.measureText(label), 55f, p)
+        fill(M, 88f, W - M, 91f, BLACK)
+        fill(M, 88f, M + (W - M * 2) / 5, 92f, RED)
     }
 
     private fun Canvas.foot(tag: String = "土豆片") {
@@ -94,6 +97,7 @@ object Render {
             "progress" -> c.drawProgress(card)
             "calendar" -> c.drawCalendar()
             "weather" -> c.drawWeather(card)
+            "weather2" -> c.drawWeather(card.copy(weatherCity = card.weatherCity.ifBlank { "天气色块" }))
             "countdown" -> c.drawCountdown(card)
             "poem" -> c.drawPoem(card)
             "custom" -> c.drawCustom(card)
@@ -156,8 +160,8 @@ object Render {
         rule(691f)
         val q = wrap(this, "“${card.quote}”", paint(20f), W - M * 2).take(2)
         q.forEachIndexed { index, line -> drawText(line, M, 717f + index * 25f, paint(20f)) }
-        val by = fitLine(card.quoteBy, paint(16f), 125f)
-        drawText(by, W - M - paint(16f).measureText(by), 775f, paint(16f))
+        val by = fitLine(card.quoteBy, paint(16f), W - M * 2)
+        drawText(by, W - M - paint(16f).measureText(by), 766f, paint(16f))
     }
 
     private fun Canvas.drawQuote(card: Card) {
@@ -165,21 +169,28 @@ object Render {
         head("每日一句", String.format(Locale.CHINA, "%d/%d",
             cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH)))
         drawText("“", M - 4f, 250f, paint(110f, RED))
-        var p = paint(40f, BLACK, bold = true)
-        while (p.textSize > 27f && wrap(this, card.quote, p, W - 2 * M - 40f).size > 7)
+        var p = paint(44f, BLACK, bold = true)
+        while (p.textSize > 22f && wrap(this, card.quote, p, W - 2 * M - 40f).size * p.textSize * 1.45f > 350f)
             p = paint(p.textSize - 2f, BLACK, true)
         val lines = wrap(this, card.quote, p, W - 2 * M - 40f)
         var y = 280f
         val lineHeight = p.textSize * 1.45f
-        val shown = lines.take(7)
+        val maxLines = (350f / lineHeight).toInt().coerceAtLeast(1)
+        val shown = lines.take(maxLines)
         fill(M + 6f, y - p.textSize, M + 12f, y + lineHeight * (shown.size - 1) + 8f, RED)
         shown.forEachIndexed { index, value ->
-            val text = if (index == 6 && lines.size > 7) fitLine(value + "…", p, W - M * 2 - 40f) else value
+            val text = if (index == maxLines - 1 && lines.size > maxLines) fitLine(value + "…", p, W - M * 2 - 40f) else value
             drawText(text, M + 40f, y, p); y += lineHeight
         }
-        drawText(fitLine("— ${card.quoteBy}", paint(22f), W - M * 2 - 40f),
-            M + 40f, minOf(y + 14f, 715f), paint(22f))
-        foot()
+        wrap(this, "— ${card.quoteBy.ifBlank { "佚名" }}", paint(20f), W - M * 2 - 40f)
+            .take(2).forEachIndexed { index, line -> drawText(line, M + 40f,
+                minOf(y + 25f, 667f) + index * 27f, paint(20f)) }
+        listOf(RED, BLUE, GREEN).forEachIndexed { i, color ->
+            drawCircle(M + i * 19f + 5f, 747f, 5f, Paint().apply { this.color = color })
+        }
+        val date = String.format(Locale.CHINA, "%d.%02d.%02d", cal.get(Calendar.YEAR),
+            cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH))
+        drawText(date, W - M - paint(16f).measureText(date), 753f, paint(16f))
     }
 
     private fun Canvas.drawTodo(card: Card) {
@@ -211,28 +222,37 @@ object Render {
         head("时间进度", cal.get(Calendar.YEAR).toString())
         val doy = cal.get(Calendar.DAY_OF_YEAR)
         val total = cal.getActualMaximum(Calendar.DAY_OF_YEAR)
-        val pct = doy * 100 / total
-        drawText("$pct", M, 280f, paint(140f, RED, bold = true))
-        val pp = paint(44f, BLACK, bold = true)
-        drawText("%", M + paint(140f, RED, true).measureText("$pct") + 8f, 250f, pp)
-        drawText("已过 $doy / $total 天", M, 330f, paint(24f))
-        rule(360f)
-
-        val rows = listOf("今天" to (cal.get(Calendar.HOUR_OF_DAY) * 100 / 24),
-                          "本周" to ((cal.get(Calendar.DAY_OF_WEEK) + 5) % 7 * 100 / 7),
-                          "本月" to (cal.get(Calendar.DAY_OF_MONTH) * 100 / cal.getActualMaximum(Calendar.DAY_OF_MONTH)),
-                          "今年" to pct)
-        var y = 410f
-        rows.forEach { (label, v) ->
-            drawText(label, M, y, paint(22f, BLACK, bold = true))
-            fill(M + 90f, y - 16f, W - M, y - 4f, BLACK)
-            fill(M + 92f, y - 14f,
-                M + 92f + (W - 2 * M - 94f) * (v.coerceIn(0, 100)) / 100f, y - 6f,
-                if (label == "今年") RED else GREEN)
-            val vp = paint(20f)
-            drawText("$v%", W - M - vp.measureText("$v%"), y, vp)
-            y += 62f
+        val pct = kotlin.math.round(doy * 100f / total).toInt()
+        val number = paint(96f, RED)
+        drawText("$pct", M, 205f, number)
+        drawText("%", M + number.measureText("$pct") + 8f, 203f, paint(40f, RED))
+        drawText("已过 $doy / $total 天", M + 2f, 244f, paint(21f))
+        val gap = (W - M * 2 - 12f) / 31f
+        repeat(total) { i ->
+            val circle = Paint().apply {
+                color = if (i < doy) RED else BLACK
+                style = if (i < doy) Paint.Style.FILL else Paint.Style.STROKE
+                strokeWidth = 1.6f
+            }
+            drawCircle(M + 6f + i % 32 * gap, 280f + i / 32 * gap, 5.2f, circle)
         }
+        rule(468f)
+        val today = (cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)) / 1440f
+        val week = ((cal.get(Calendar.DAY_OF_WEEK) + 5) % 7 + today) / 7f
+        val month = (cal.get(Calendar.DAY_OF_MONTH) - 1 + today) / cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+        listOf(Triple("今天", today, RED), Triple("本周", week, BLUE),
+            Triple("本月", month, GREEN)).forEachIndexed { index, (label, value, color) ->
+            val y = 508f + index * 58f
+            drawText(label, M, y, paint(20f, BLACK, true))
+            drawText("${kotlin.math.round(value * 100).toInt()}%", M + 58f, y, paint(20f))
+            val x = M + 136f
+            fill(x, y - 20f, W - M, y + 3f, BLACK)
+            fill(x + 3f, y - 17f, W - M - 3f, y, WHITE)
+            fill(x + 3f, y - 17f, x + 3f + (W - M - x - 6f) * value, y, color)
+        }
+        drawText("今年还剩", M, 704f, paint(20f, BLACK, true))
+        fill(M, 726f, M + 9f, 758f, RED)
+        drawText("${total - doy} 天", M + 22f, 753f, paint(30f))
         foot()
     }
 

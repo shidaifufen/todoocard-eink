@@ -39,6 +39,8 @@ internal val TEMPLATES = listOf(
     "poem" to "每日诗词",
     "custom" to "自定义卡片",
     "photo" to "照片轮播",
+    "bing" to "Bing 每日壁纸",
+    "ai" to "AI 生图",
 )
 
 internal fun handleSharedIntent(intent: Intent?,
@@ -89,17 +91,23 @@ private fun App(incomingIntent: Intent?) {
     var card by remember { mutableStateOf(PlanStore.card(ctx)) }
     var preview by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var photoPath by remember { mutableStateOf(PlanStore.lastPhoto) }
+    var imageKind by remember { mutableStateOf("photo") }
     var fields by remember { mutableStateOf(PlanStore.photoFields) }
     var edit by remember { mutableStateOf(PlanStore.photoEdit) }
     var albums by remember { mutableStateOf(PlanStore.albums(ctx)) }
     var carouselPhotos by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var selectedCarousel by remember { mutableStateOf<Uri?>(null) }
     var pendingSharedPush by remember { mutableStateOf<String?>(null) }
+    var refreshing by remember { mutableStateOf(false) }
+    var scanning by remember { mutableStateOf(false) }
+    var scanTimedOut by remember { mutableStateOf(false) }
+    var showAlbums by remember { mutableStateOf(false) }
+    var albumRevision by remember { mutableIntStateOf(0) }
     var status by remember { mutableStateOf("选择模板并预览，再推送到卡片") }
     var progress by remember { mutableIntStateOf(0) }
     var preparing by remember { mutableStateOf(false) }
     val pushState by PushService.status.collectAsState()
-    val busy = preparing || pushState.running
+    val busy = preparing || pushState.running || scanning || refreshing
     var found by remember { mutableStateOf<List<ScanResult>>(emptyList()) }
     var device by remember { mutableStateOf<ScanResult?>(null) }
     var pairedAddress by remember { mutableStateOf(PlanStore.deviceAddress) }
@@ -114,16 +122,68 @@ private fun App(incomingIntent: Intent?) {
         }
     }
 
-    val photoReady = photoPath.isNotBlank() && java.io.File(photoPath).isFile
-    LaunchedEffect(albums) {
+    val photoReady = imageKind == kind && photoPath.isNotBlank() && java.io.File(photoPath).isFile
+    LaunchedEffect(albums, albumRevision, tab) {
         carouselPhotos = withContext(Dispatchers.IO) { AlbumStore.listImages(ctx, albums) }
         if (selectedCarousel !in carouselPhotos) selectedCarousel = carouselPhotos.firstOrNull()
+    }
+    DisposableEffect(ctx) {
+        val activity = ctx as ComponentActivity
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                SchedulerWorker.schedule(ctx)
+                albumRevision++
+            }
+        }
+        activity.lifecycle.addObserver(observer)
+        onDispose { activity.lifecycle.removeObserver(observer) }
+    }
+    fun refreshCard() {
+        if (refreshing) return
+        val requestedKind = kind
+        scope.launch {
+            refreshing = true
+            status = "正在获取${templateName(requestedKind)}…"
+            if (requestedKind == "bing") {
+                runCatching { ImageSources.bing(ctx) }.onSuccess {
+                    photoPath = it; imageKind = "bing"; edit = PhotoEdit.Params(snapThreshold = edit.snapThreshold)
+                    status = ctx.getSharedPreferences("image_sources", 0).getString("bing_credit", "Bing 图片已更新").orEmpty()
+                }.onFailure { status = "壁纸更新失败：${it.message}" }
+                refreshing = false; return@launch
+            }
+            runCatching { CardSources.fresh(ctx, requestedKind, card) }.onSuccess {
+                card = it
+                status = "${templateName(requestedKind)}已更新"
+            }.onFailure { status = "更新失败，已保留原内容：${it.message}" }
+            refreshing = false
+        }
+    }
+    fun refreshAnalysis() {
+        if (refreshing) return
+        scope.launch {
+            refreshing = true; status = "正在获取这首诗的赏析…"
+            runCatching { ContentData.analysis(ctx, card) }.onSuccess {
+                card = card.copy(poemNote = it); PlanStore.saveCard(ctx, card); status = "赏析已更新"
+            }.onFailure { status = "赏析刷新失败，已保留原内容：${it.message}" }
+            refreshing = false
+        }
+    }
+    fun generateImage(prompt: String) {
+        if (refreshing) return
+        scope.launch {
+            refreshing = true; status = "正在生成图片，请稍候…"
+            runCatching { ImageSources.generate(ctx, prompt) }.onSuccess {
+                photoPath = it; imageKind = "ai"; edit = PhotoEdit.Params(snapThreshold = edit.snapThreshold)
+                status = "AI 图片已生成，可以调整裁切后推送"
+            }.onFailure { status = "生成失败：${it.message}" }
+            refreshing = false
+        }
     }
     LaunchedEffect(kind, card, photoPath, fields, edit, tab) {
         if (tab != 0) return@LaunchedEffect
         preview = withContext(Dispatchers.Default) {
             runCatching {
-                if (kind == "photo") {
+                if (kind in listOf("photo", "bing", "ai")) {
                     if (!photoReady) null else PhotoCard.render(photoPath, fields, edit)
                 } else Render.render(card.copy(kind = kind))
             }.getOrNull()
@@ -140,6 +200,7 @@ private fun App(incomingIntent: Intent?) {
             val path = withContext(Dispatchers.IO) { PhotoCard.importToFiles(ctx, uri) }
             if (path == null) { status = "照片读取失败，请重新选择"; return@launch }
             photoPath = path
+            imageKind = "photo"
             PlanStore.lastPhoto = path
             edit = PhotoEdit.Params(snapThreshold = edit.snapThreshold)
             PlanStore.photoEdit = edit
@@ -164,6 +225,7 @@ private fun App(incomingIntent: Intent?) {
             imported.forEach { path -> PlanStore.addAlbum(ctx, Uri.fromFile(java.io.File(path)).toString()) }
             val first = imported.first()
             photoPath = first
+            imageKind = "photo"
             PlanStore.lastPhoto = first
             edit = PhotoEdit.Params(snapThreshold = edit.snapThreshold)
             PlanStore.photoEdit = edit
@@ -191,26 +253,33 @@ private fun App(incomingIntent: Intent?) {
             })
     }
 
-    fun scan() {
+    fun scan(all: Boolean = false) {
+        if (scanning || pushState.running || preparing) return
         scope.launch {
-            status = "扫描中，请唤醒卡片"
+            scanning = true
+            scanTimedOut = false
+            status = if (all) "正在查找所有设备…" else "查找 FF:FF 开头的卡片，请唤醒设备"
+            PushStatus.update(ctx, "查找中 · 请唤醒卡片")
             found = emptyList()
             val ble = BleClient(ctx)
-            val list = withContext(Dispatchers.IO) { ble.scanAll(10_000) { status = it } }
-            found = list
-            val saved = PlanStore.deviceAddress
-            val auto = list.firstOrNull { (it.device.name ?: "").contains("todoo", true) }
-                ?: list.firstOrNull { it.device.address.startsWith("FF:FF", true) }
-                ?: list.firstOrNull { saved.isNotEmpty() && it.device.address == saved }
-                ?: list.firstOrNull { it.device.address.endsWith("39:01", ignoreCase = true) }
-            device = auto
-            if (auto != null) {
-                PlanStore.deviceAddress = auto.device.address
-                PlanStore.deviceName = auto.device.name ?: ""
-                pairedAddress = PlanStore.deviceAddress
-                pairedName = PlanStore.deviceName
-                status = "已选中 ${auto.device.name ?: auto.device.address}"
-            } else status = "扫描到 ${list.size} 台设备，请唤醒卡片后重试"
+            try {
+                val list = withContext(Dispatchers.IO) { ble.scanAll(10_000) }
+                found = DeviceDiscovery.filter(list, all)
+                val auto = DeviceDiscovery.target(found, PlanStore.deviceAddress)
+                device = auto
+                if (auto != null) {
+                    PlanStore.deviceAddress = auto.device.address
+                    PlanStore.deviceName = auto.device.name ?: ""
+                    pairedAddress = PlanStore.deviceAddress; pairedName = PlanStore.deviceName
+                    status = "已找到 ${auto.device.name ?: auto.device.address}"
+                } else status = if (all) "找到 ${found.size} 台设备，请在列表中选择" else "未找到 FF:FF 卡片，请唤醒后重试或查找所有设备"
+                scanTimedOut = !all && found.isEmpty()
+            } catch (e: Exception) { status = "扫描失败：${e.message}"; scanTimedOut = true }
+            finally {
+                ble.close(); scanning = false
+                PushStatus.update(ctx, status)
+                scope.launch { kotlinx.coroutines.delay(5000); if (!PushService.status.value.running) PushStatus.clear(ctx) }
+            }
         }
     }
 
@@ -227,8 +296,8 @@ private fun App(incomingIntent: Intent?) {
     fun bluetoothPermissions(): Array<String> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
         arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
     else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
-    fun requestScan() {
-        onPermissionsGranted = { scan() }
+    fun requestScan(all: Boolean = false) {
+        onPermissionsGranted = { scan(all) }
         permLauncher.launch(bluetoothPermissions())
     }
 
@@ -279,6 +348,15 @@ private fun App(incomingIntent: Intent?) {
             status = "已添加轮播相册"
         }
     }
+    val mediaPermissions = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()) {
+        showAlbums = MediaAlbums.canRead(ctx)
+        if (!showAlbums) status = "未取得相册权限，仍可通过系统照片选择器添加照片"
+        albumRevision++
+    }
+    fun requestAlbums() {
+        showAlbums = true
+    }
     fun addCarouselPhotos() {
         multiplePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
     }
@@ -326,7 +404,7 @@ private fun App(incomingIntent: Intent?) {
             try {
                 status = "正在准备卡片…"
                 val file = withContext(Dispatchers.IO) {
-                    val bmp = if (sentKind == "photo") {
+                    val bmp = if (sentKind in listOf("photo", "bing", "ai")) {
                         check(java.io.File(sentPath).isFile) { "请先选择照片" }
                         PhotoCard.render(sentPath, sentFields, sentEdit)
                     } else Render.render(sentCard)
@@ -405,13 +483,23 @@ private fun App(incomingIntent: Intent?) {
                 when (tab) {
                     0 -> StudioScreen(kind, card, preview, photoReady, status, progress, busy,
                         pairedName.ifEmpty { pairedAddress }, found, device?.device?.address,
-                        onKind = { kind = it }, onCard = { card = it; PlanStore.saveCard(ctx, it) },
+                        onKind = { next ->
+                            kind = next
+                            if (next in listOf("photo", "bing", "ai")) {
+                                photoPath = if (next == "photo") PlanStore.lastPhoto else ImageSources.cached(ctx, next)
+                                imageKind = next
+                                edit = if (next == "photo") PlanStore.photoEdit else PhotoEdit.Params(snapThreshold = edit.snapThreshold)
+                            }
+                        }, onCard = { card = it; PlanStore.saveCard(ctx, it) },
                         onPhoto = { tab = 2 },
-                        onScan = ::requestScan, onSelectDevice = ::selectDevice,
+                        onScan = { requestScan() }, onSelectDevice = ::selectDevice,
                         onSend = ::requestSend,
                         carouselCount = carouselPhotos.size,
                         onDraw = { drawCarousel()?.let { loadPhoto(it, openEditor = false) } },
-                        onAddPhotos = ::addCarouselPhotos)
+                        onAddPhotos = ::addCarouselPhotos,
+                        onRefresh = ::refreshCard, onAnalysis = ::refreshAnalysis, refreshing = refreshing,
+                        onScanAll = { requestScan(true) }, scanTimedOut = scanTimedOut,
+                        onGenerate = ::generateImage)
                     1 -> CarouselScreen(carouselPhotos, selectedCarousel, busy,
                         onAddPhotos = ::addCarouselPhotos,
                         onDraw = { drawCarousel() },
@@ -427,18 +515,18 @@ private fun App(incomingIntent: Intent?) {
                     2 -> LibraryScreen(carouselPhotos, photoPath, fields, edit,
                         onPick = { picker.launch(PickVisualMediaRequest(
                             ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                        onCamera = ::takePhoto, onAddAlbum = { albumLauncher.launch(null) },
+                        onCamera = ::takePhoto, onAddAlbum = ::requestAlbums,
                         onAddPhotos = ::addCarouselPhotos,
                         onAlbumPhoto = { loadPhoto(it) },
                         onFields = { fields = it; PlanStore.photoFields = it },
                         onEdit = { edit = it }, onUse = {
                             PlanStore.photoEdit = edit
-                            kind = "photo"; tab = 0
+                            kind = imageKind; if (imageKind == "photo") PlanStore.lastPhoto = photoPath; tab = 0
                         })
                     3 -> PlanScreen(ctx)
                     else -> SettingsScreen(pairedName, pairedAddress, fields, found,
                         device?.device?.address, status,
-                        onScan = ::requestScan, onSelect = ::selectDevice,
+                        onScan = { requestScan() }, onSelect = ::selectDevice,
                         onPair = ::pairDevice,
                         onUnpair = {
                             PlanStore.deviceAddress = ""
@@ -448,9 +536,19 @@ private fun App(incomingIntent: Intent?) {
                             device = null
                             status = "已解除配对"
                         },
-                        onFields = { fields = it; PlanStore.photoFields = it })
+                        onFields = { fields = it; PlanStore.photoFields = it },
+                        onScanAll = { requestScan(true) }, scanTimedOut = scanTimedOut)
                 }
             }
         }
+        if (showAlbums) AlbumPicker(albums,
+            onChoose = {
+                PlanStore.addAlbum(ctx, it); albums = PlanStore.albums(ctx)
+                albumRevision++; showAlbums = false; status = "已加入整个相册，新增照片会自动进入轮播"
+            }, onRemove = {
+                PlanStore.removeAlbum(it); albums = PlanStore.albums(ctx); albumRevision++
+            }, onGrant = { showAlbums = false; mediaPermissions.launch(MediaAlbums.permissions()) },
+            onFolder = { showAlbums = false; albumLauncher.launch(null) },
+            onDismiss = { showAlbums = false })
     }
 }

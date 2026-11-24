@@ -40,6 +40,9 @@ internal val StudioColors = lightColorScheme(
     primary = StudioGreen,
     onPrimary = Color.White,
     secondary = StudioRed,
+    secondaryContainer = Color(0xFFDDEDE7),
+    onSecondaryContainer = StudioGreen,
+    tertiaryContainer = Color(0xFFF8E8D8),
     background = StudioBackground,
     onBackground = StudioInk,
     surface = Color.White,
@@ -69,9 +72,20 @@ internal fun StudioScreen(
     carouselCount: Int,
     onDraw: () -> Unit,
     onAddPhotos: () -> Unit,
+    onRefresh: () -> Unit,
+    onAnalysis: () -> Unit,
+    refreshing: Boolean,
+    onScanAll: () -> Unit,
+    scanTimedOut: Boolean,
+    onGenerate: (String) -> Unit,
 ) {
     var editing by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().background(StudioBackground)) {
+    var generating by remember { mutableStateOf(false) }
+    var prompt by remember { mutableStateOf("") }
+    val isImage = kind in listOf("photo", "bing", "ai")
+    BoxWithConstraints(Modifier.fillMaxSize().background(StudioBackground)) {
+    val previewHeight = (maxHeight - 320.dp).coerceIn(200.dp, 560.dp)
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
             Text("卡片工坊", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = StudioInk)
             Spacer(Modifier.height(3.dp))
@@ -102,22 +116,24 @@ internal fun StudioScreen(
                 shape = RoundedCornerShape(8.dp)) { Text("抽一张") }
         }
         BoxWithConstraints(
-            Modifier.fillMaxWidth().weight(1f).padding(horizontal = 20.dp),
+            Modifier.fillMaxWidth().height(previewHeight).padding(horizontal = 20.dp),
             contentAlignment = Alignment.Center,
         ) {
-            val imageWidth = minOf(maxWidth - 20.dp, (maxHeight - 12.dp) * 2f / 3f)
+            val imageWidth = minOf(maxWidth - 20.dp, (maxHeight - 12.dp).coerceAtLeast(80.dp) * 2f / 3f)
             Box(
                 Modifier.width(imageWidth).aspectRatio(2f / 3f)
                     .background(Color.White, RoundedCornerShape(4.dp))
-                    .border(1.dp, Color(0xFFD9DED8), RoundedCornerShape(4.dp)),
+                    .border(1.dp, Color(0xFFD9DED8), RoundedCornerShape(4.dp))
+                    .clickable(enabled = kind in listOf("quote", "poem") && !busy && !refreshing,
+                        onClickLabel = "换一条内容", onClick = onRefresh),
                 contentAlignment = Alignment.Center,
             ) {
-                if (kind == "photo" && !photoReady) {
+                if (isImage && !photoReady) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Outlined.PhotoLibrary, null, Modifier.size(32.dp), tint = StudioMuted)
                         Spacer(Modifier.height(10.dp))
-                        Text("先选择一张照片", color = StudioMuted, fontSize = 13.sp)
-                        TextButton(onClick = onPhoto) { Text("打开相册") }
+                        Text(if (kind == "bing") "点击获取每日壁纸" else if (kind == "ai") "输入提示词生成图片" else "先选择一张照片", color = StudioMuted, fontSize = 13.sp)
+                        TextButton(onClick = { if (kind == "bing") onRefresh() else if (kind == "ai") generating = true else onPhoto() }) { Text(if (kind == "bing") "获取壁纸" else if (kind == "ai") "开始生成" else "打开相册") }
                     }
                 } else if (preview == null) CircularProgressIndicator(Modifier.size(26.dp), strokeWidth = 2.dp)
                 else Image(preview.asImageBitmap(), "卡片预览", Modifier.fillMaxSize().padding(3.dp),
@@ -128,14 +144,24 @@ internal fun StudioScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("屏幕预览", fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f))
+                if (kind in listOf("quote", "poem", "weather", "summary", "bing")) TextButton(
+                    enabled = !busy && !refreshing, onClick = onRefresh) {
+                    Text(if (refreshing) "更新中…" else if (kind == "weather") "刷新天气" else "换一张")
+                }
                 if (kind !in listOf("progress", "calendar")) TextButton(enabled = !busy, onClick = {
-                    if (kind == "photo") onPhoto() else editing = true
+                    if (isImage) onPhoto() else editing = true
                 }) {
-                    Icon(if (kind == "photo") Icons.Outlined.PhotoLibrary else Icons.Outlined.Edit,
+                    Icon(if (isImage) Icons.Outlined.PhotoLibrary else Icons.Outlined.Edit,
                         null, Modifier.size(18.dp))
                     Spacer(Modifier.width(5.dp))
-                    Text(if (kind == "photo") "编辑照片" else "编辑内容")
+                    Text(if (isImage) "编辑照片" else "编辑内容")
                 }
+            }
+            if (kind == "poem") TextButton(onClick = onAnalysis, enabled = !busy && !refreshing) {
+                Text(if (refreshing) "内容更新中…" else "只刷新这首诗的赏析")
+            }
+            if (kind == "ai") TextButton(onClick = { generating = true }, enabled = !busy && !refreshing) {
+                Text("输入提示词生成图片")
             }
             Text(
                 if (deviceName.isBlank()) "尚未连接卡片" else "目标设备 · $deviceName",
@@ -145,7 +171,8 @@ internal fun StudioScreen(
             Text(status.lineSequence().lastOrNull().orEmpty(), fontSize = 12.sp,
                 color = if (status.startsWith("失败")) StudioRed else StudioMuted,
                 maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (progress in 1..99) {
+            if (scanTimedOut) TextButton(onClick = onScanAll, enabled = !busy) { Text("未找到卡片？查找所有设备") }
+            if (busy && progress in 1..99) {
                 Spacer(Modifier.height(8.dp))
                 LinearProgressIndicator(progress = { progress / 100f }, Modifier.fillMaxWidth())
             }
@@ -167,10 +194,27 @@ internal fun StudioScreen(
             Spacer(Modifier.height(10.dp))
         }
     }
+    }
     if (editing) CardEditorDialog(kind, card, onDismiss = { editing = false }, onSave = {
         onCard(it)
         editing = false
     })
+    if (generating) AlertDialog(
+        onDismissRequest = { generating = false },
+        title = { Text("生成一张图片") },
+        text = {
+            OutlinedTextField(value = prompt, onValueChange = { prompt = it },
+                label = { Text("提示词") }, placeholder = { Text("例如：雨后窗边的绿植，简洁构图") },
+                minLines = 3, maxLines = 5)
+        },
+        confirmButton = {
+            TextButton(enabled = prompt.isNotBlank(), onClick = {
+                generating = false
+                onGenerate(prompt.trim())
+            }) { Text("生成") }
+        },
+        dismissButton = { TextButton(onClick = { generating = false }) { Text("取消") } },
+    )
     if (found.isNotEmpty() && selectedAddress == null) {
         DevicePicker(found, onSelectDevice)
     }
@@ -234,6 +278,7 @@ private fun CardEditorDialog(
     val scope = rememberCoroutineScope()
     var weatherBusy by remember { mutableStateOf(false) }
     var weatherStatus by remember { mutableStateOf("") }
+    var contentBusy by remember { mutableStateOf(false) }
     var places by remember { mutableStateOf<List<WeatherData.Place>>(emptyList()) }
     var weatherLocation by remember(initial) { mutableStateOf(initial) }
     val invalidCountdown = kind == "countdown" && countdowns.lines().any { line ->
@@ -256,6 +301,15 @@ private fun CardEditorDialog(
                         if (kind == "summary") {
                             EditorField("今日一句", quote, { quote = it }, lines = 2)
                             EditorField("署名", quoteBy, { quoteBy = it })
+                            RefreshContentButton(contentBusy) {
+                                scope.launch {
+                                    contentBusy = true
+                                    runCatching { ContentData.quote() }.onSuccess {
+                                        quote = it.text; quoteBy = it.author
+                                    }.onFailure { weatherStatus = it.message ?: "每日一句获取失败" }
+                                    contentBusy = false
+                                }
+                            }
                             Text("天气资料在天气看板中编辑，两张卡片共用。", fontSize = 12.sp,
                                 color = StudioMuted)
                         }
@@ -309,6 +363,15 @@ private fun CardEditorDialog(
                     "quote" -> {
                         EditorField("句子", quote, { quote = it }, "写一句想展示的话", 4)
                         EditorField("署名", quoteBy, { quoteBy = it })
+                        RefreshContentButton(contentBusy) {
+                            scope.launch {
+                                contentBusy = true
+                                runCatching { ContentData.quote() }.onSuccess {
+                                    quote = it.text; quoteBy = it.author
+                                }.onFailure { weatherStatus = it.message ?: "每日一句获取失败" }
+                                contentBusy = false
+                            }
+                        }
                     }
                     "countdown" -> {
                         EditorField("纪念日", countdowns, { countdowns = it },
@@ -321,6 +384,17 @@ private fun CardEditorDialog(
                         EditorField("作者", poemBy, { poemBy = it })
                         EditorField("诗句", poemLines, { poemLines = it }, "每行一句", 5)
                         EditorField("赏析", poemNote, { poemNote = it }, "选填", 3)
+                        RefreshContentButton(contentBusy) {
+                            scope.launch {
+                                contentBusy = true
+                                runCatching { ContentData.poem() }.onSuccess {
+                                    poemTitle = it.title; poemBy = listOf(it.dynasty, it.author)
+                                        .filter { value -> value.isNotBlank() }.joinToString(" · ")
+                                    poemLines = it.lines.joinToString("\n"); poemNote = it.note
+                                }.onFailure { weatherStatus = it.message ?: "诗词获取失败" }
+                                contentBusy = false
+                            }
+                        }
                     }
                     "custom" -> {
                         EditorField("标题", customTitle, { customTitle = it })
@@ -328,10 +402,12 @@ private fun CardEditorDialog(
                     }
                     else -> Text("这张卡片会根据当前日期自动更新。", color = StudioMuted)
                 }
+                if (kind != "weather" && weatherStatus.isNotBlank()) Text(weatherStatus,
+                    color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
             }
         },
         confirmButton = {
-            Button(enabled = !invalidCountdown && !weatherBusy, onClick = {
+            Button(enabled = !invalidCountdown && !weatherBusy && !contentBusy, onClick = {
                 onSave(initial.copy(
                     quote = quote.trim(), quoteBy = quoteBy.trim(),
                     todos = todos.lines().map { it.trim() }.filter { it.isNotEmpty() }.take(6),
@@ -342,7 +418,7 @@ private fun CardEditorDialog(
                             parts[0].trim() to parts[1].trim() else null
                     }.take(5),
                     poemTitle = poemTitle.trim(), poemBy = poemBy.trim(),
-                    poemLines = poemLines.lines().map { it.trim() }.filter { it.isNotEmpty() }.take(6),
+                    poemLines = poemLines.lines().map { it.trim() }.filter { it.isNotEmpty() }.take(8),
                     poemNote = poemNote.trim(), customTitle = customTitle.trim(),
                     customLines = customLines.lines().map { it.trim() }.filter { it.isNotEmpty() }.take(8),
                     weatherCity = weatherCity.trim(), weatherText = weatherText.trim(),
@@ -358,6 +434,13 @@ private fun CardEditorDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
+}
+
+@Composable
+private fun RefreshContentButton(busy: Boolean, onClick: () -> Unit) {
+    OutlinedButton(onClick = onClick, enabled = !busy, shape = RoundedCornerShape(8.dp)) {
+        Text(if (busy) "获取中…" else "从 API 换一条")
+    }
 }
 
 @Composable
