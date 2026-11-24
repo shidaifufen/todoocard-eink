@@ -467,11 +467,13 @@ object Render {
         WeatherVisuals.forecastBars(this, card.weatherForecast, firstBaseline = 438f,
             rowGap = 35f, leftInset = M + 14f)
         val half = M + (W - 2 * M) / 2
-        cell(M, 533f, half, 660f, BLUE)
+        cell(M, 533f, half, 720f, BLUE)
         drawText("日出 / 日落", M + 14f, 568f, paint(22f, WHITE, true))
-        drawText(card.weatherSunrise.ifBlank { "--:--" }, M + 14f, 606f, paint(27f, WHITE))
-        drawText(card.weatherSunset.ifBlank { "--:--" }, M + 14f, 644f, paint(27f, WHITE))
-        cell(half, 533f, right, 660f)
+        drawText("日出", M + 14f, 608f, paint(17f, WHITE))
+        drawText(card.weatherSunrise.ifBlank { "--:--" }, M + 68f, 608f, paint(27f, WHITE))
+        drawText("日落", M + 14f, 673f, paint(17f, WHITE))
+        drawText(card.weatherSunset.ifBlank { "--:--" }, M + 68f, 673f, paint(27f, WHITE))
+        cell(half, 533f, right, 720f)
         drawText("穿衣参考", half + 14f, 568f, paint(22f, BLACK, true))
         val t = card.weatherTemp.toIntOrNull()
         val advice = when {
@@ -484,7 +486,10 @@ object Render {
         wrap(this, advice, paint(20f), right - half - 28f).take(2).forEachIndexed { i, line ->
             drawText(line, half + 14f, 610f + i * 29f, paint(20f))
         }
-        drawText("Open-Meteo · 城市天气与空气质量", M, 755f, paint(16f))
+        drawText("更新 ${card.weatherUpdated.ifBlank { "手动资料" }}", half + 14f, 690f,
+            paint(14f))
+        cell(M, 720f, right, H - M)
+        drawText("Open-Meteo · 城市天气与空气质量", M + 14f, 746f, paint(16f))
     }
 
     private fun fitLine(text: String, p: Paint, width: Float): String {

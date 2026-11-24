@@ -86,9 +86,9 @@ class CardRenderTest {
         assertTrue("weather dashboard shows a blue temperature trend", (540..610).any { y ->
             (32 until 496).any { x -> dashboard.getPixel(x, y) == Color.BLUE }
         })
-        assertTrue("color block weather has no chart below its panels", (665..730).all { y ->
-            (32 until 496).all { x -> blocks.getPixel(x, y) == Color.WHITE }
-        })
+        assertEquals("sunrise panel fills the former bottom gap", Color.BLUE, blocks.getPixel(50, 705))
+        assertEquals("source footer joins the panels", Color.BLACK, blocks.getPixel(100, 720))
+        assertEquals("color block grid extends to the bottom margin", Color.BLACK, blocks.getPixel(100, 759))
     }
 
     @Test fun threeDayForecastDisplaysTemperatureBarsAndHandlesNegativeTemperatures() {
