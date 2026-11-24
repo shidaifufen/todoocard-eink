@@ -49,6 +49,10 @@ class CardRenderTest {
                 for (x in 0 until bitmap.width) assertEquals("$kind bottom x=$x",
                     Color.WHITE, bitmap.getPixel(x, 791))
             }
+        save("custom-composition", Render.render(sample.copy(kind = "custom", customComposition = true,
+            customBlocks = listOf(Render.CustomBlock(type = "bigdate", size = 44f),
+                Render.CustomBlock(type = "weather"), Render.CustomBlock(type = "rule"),
+                Render.CustomBlock(type = "quote", centered = true), Render.CustomBlock(type = "todos")))))
         save("poem-long", Render.render(sample.copy(kind = "poem",
             poemLines = List(6) { "长长的诗句也应该在卡片的边界之内正确排版，不能盖住赏析和页脚。" },
             poemNote = "这是一段较长的赏析文字，用于检查正文与页脚之间的留白。".repeat(6))))
@@ -86,6 +90,17 @@ class CardRenderTest {
         PlanStore.saveCard(context, card)
         PlanStore.init(context)
         assertEquals(card, PlanStore.card(context))
+    }
+
+    @Test fun photoLocationNotesStayWithTheirPhoto() {
+        val dir = RuntimeEnvironment.getApplication().cacheDir
+        val first = File(dir, "location-first.jpg").absolutePath
+        val second = File(dir, "location-second.jpg").absolutePath
+        PhotoCard.saveLocationNote(first, "深圳湾")
+        assertEquals("深圳湾", PhotoCard.location(first))
+        assertEquals("", PhotoCard.location(second))
+        PhotoCard.saveLocationNote(first, "")
+        assertEquals("", PhotoCard.locationNote(first))
     }
 
     @Test fun backgroundRefreshPreservesEditedFields() {
