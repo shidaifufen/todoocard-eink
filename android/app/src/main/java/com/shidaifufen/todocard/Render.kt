@@ -317,7 +317,8 @@ object Render {
             drawText(line, M, startY + index * lineHeight, chosenPaint)
         }
         if (hasNote) {
-            val noteTop = 582f
+            val lastPoemBaseline = startY + (displayLines.size - 1).coerceAtLeast(0) * lineHeight
+            val noteTop = (lastPoemBaseline + 52f).coerceIn(360f, 560f)
             rule(noteTop)
             drawText("译注 · 赏析", M, noteTop + 34f, paint(20f, RED, bold = true))
             wrap(this, card.poemNote, paint(18f), W - M * 2).take(5).forEachIndexed { index, line ->
