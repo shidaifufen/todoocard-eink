@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 @Composable
@@ -77,6 +78,14 @@ internal fun LibraryScreen(
     var compare by remember { mutableStateOf(false) }
     var showGrid by remember { mutableStateOf(true) }
     var showAdvanced by remember { mutableStateOf(false) }
+    val snapPreview by produceState<Bitmap?>(null, source, edit, band, compare) {
+        value = null
+        val bitmap = source
+        if (bitmap != null && edit.snapThreshold > 0 && !compare) {
+            delay(160)
+            value = withContext(Dispatchers.Default) { PhotoEdit.renderBitmap(bitmap, edit, band) }
+        }
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
         .background(StudioBackground).padding(horizontal = 20.dp)) {
         Spacer(Modifier.height(12.dp))
@@ -168,7 +177,9 @@ internal fun LibraryScreen(
                                 native.scale(size.width / Render.W, size.height / Render.H)
                                 val shown = if (compare) edit.copy(hue = 0f, exposure = 0f,
                                     saturation = 1f, contrast = 1f) else edit
-                                PhotoEdit.drawInto(native, bitmap, shown, band)
+                                val snapped = snapPreview
+                                if (snapped != null && !compare) native.drawBitmap(snapped, 0f, 0f, null)
+                                else PhotoEdit.drawInto(native, bitmap, shown, band)
                                 infoBand?.let { native.drawBitmap(it, 0f, 0f, null) }
                                 native.restore()
                             }
@@ -192,6 +203,9 @@ internal fun LibraryScreen(
                         shape = RoundedCornerShape(8.dp))
                 }
             }
+            if (edit.snapThreshold > 0 && !compare) Text(
+                if (snapPreview == null) "调整中，停下后更新杂色吸附预览" else "杂色吸附预览已更新",
+                color = StudioMuted, fontSize = 12.sp)
             if (tool == 0) {
             Row(Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
@@ -248,6 +262,16 @@ internal fun LibraryScreen(
             }
             Adjustment("曝光", edit.exposure, -2f..2f, { onEdit(edit.copy(exposure = it)) }, "%+.1f")
             Adjustment("饱和", edit.saturation, 0f..2f, { onEdit(edit.copy(saturation = it)) }, "%.1f")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("杂色吸附", Modifier.weight(1f), fontSize = 13.sp)
+                Switch(edit.snapThreshold > 0, onCheckedChange = {
+                    onEdit(edit.copy(snapThreshold = if (it) 60 else 0))
+                })
+            }
+            Text("适合截图和文字图片，清理白底彩点、锐化灰色边缘。照片开启后会减少灰阶层次。新选图片和分享图片沿用此设置。",
+                fontSize = 12.sp, color = StudioMuted)
+            if (edit.snapThreshold > 0) Adjustment("强度", edit.snapThreshold.toFloat(), 1f..100f,
+                { onEdit(edit.copy(snapThreshold = it.toInt())) }, "%.0f")
             TextButton(onClick = { showAdvanced = !showAdvanced }) {
                 Text(if (showAdvanced) "收起更多调整" else "更多调整")
             }

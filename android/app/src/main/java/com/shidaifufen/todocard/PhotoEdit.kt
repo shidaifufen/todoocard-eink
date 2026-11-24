@@ -25,9 +25,10 @@ object PhotoEdit {
         val saturation: Float = 1f,  // 0..2
         val exposure: Float = 0f,    // -2..2 (EV)
         val contrast: Float = 1f,    // 0.6..1.6
+        val snapThreshold: Int = 0, // 0 关闭；1..100 六色杂色吸附
     ) {
         val isDefault get() = zoom == 1f && dx == 0f && dy == 0f && hue == 0f &&
-                saturation == 1f && exposure == 0f && contrast == 1f
+                saturation == 1f && exposure == 0f && contrast == 1f && snapThreshold == 0
     }
 
     /** 色相旋转矩阵 */
@@ -71,10 +72,15 @@ object PhotoEdit {
     /** 渲染成卡片（band>0 时底部留出信息带） */
     fun render(path: String, p: Params, band: Int = 0): Bitmap {
         val src = decodePreview(path, 2400) ?: error("照片无法解码，请重新选择")
+        return try { renderBitmap(src, p, band) } finally { src.recycle() }
+    }
+
+    /** 预览与导出共用同一条裁切、调色、吸附路径。 */
+    fun renderBitmap(src: Bitmap, p: Params, band: Int = 0): Bitmap {
         val out = Bitmap.createBitmap(Render.W, Render.H, Bitmap.Config.ARGB_8888)
         val c = Canvas(out)
         drawInto(c, src, p, band)
-        src.recycle()
+        PaletteSnap.apply(out, p.snapThreshold)
         return out
     }
 

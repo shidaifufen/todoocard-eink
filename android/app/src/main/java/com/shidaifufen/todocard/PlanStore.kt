@@ -149,12 +149,14 @@ object PlanStore {
                 saturation = data.optDouble("saturation", 1.0).toFloat().coerceIn(0f, 2f),
                 exposure = data.optDouble("exposure", 0.0).toFloat().coerceIn(-2f, 2f),
                 contrast = data.optDouble("contrast", 1.0).toFloat().coerceIn(.6f, 1.6f),
+                snapThreshold = data.optInt("snapThreshold", 0).coerceIn(0, 100),
             )
         }.getOrDefault(PhotoEdit.Params())
         set(value) {
             val data = JSONObject().put("zoom", value.zoom).put("dx", value.dx).put("dy", value.dy)
                 .put("hue", value.hue).put("saturation", value.saturation)
                 .put("exposure", value.exposure).put("contrast", value.contrast)
+                .put("snapThreshold", value.snapThreshold)
             sp_global.edit().putString("photoEdit", data.toString()).apply()
         }
 

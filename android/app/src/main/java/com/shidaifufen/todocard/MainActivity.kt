@@ -141,7 +141,7 @@ private fun App(incomingIntent: Intent?) {
             if (path == null) { status = "照片读取失败，请重新选择"; return@launch }
             photoPath = path
             PlanStore.lastPhoto = path
-            edit = PhotoEdit.Params()
+            edit = PhotoEdit.Params(snapThreshold = edit.snapThreshold)
             PlanStore.photoEdit = edit
             kind = "photo"
             tab = if (autoSend || !openEditor) 0 else 2
@@ -165,7 +165,7 @@ private fun App(incomingIntent: Intent?) {
             val first = imported.first()
             photoPath = first
             PlanStore.lastPhoto = first
-            edit = PhotoEdit.Params()
+            edit = PhotoEdit.Params(snapThreshold = edit.snapThreshold)
             PlanStore.photoEdit = edit
             kind = "photo"
             tab = 0

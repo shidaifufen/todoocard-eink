@@ -72,7 +72,9 @@ class SchedulerWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, para
                     PhotoCard.importToFiles(applicationContext, u)
                 } ?: PlanStore.lastPhoto
                 if (p.isEmpty()) return
-                PhotoCard.render(p, PlanStore.photoFields)
+                PhotoCard.render(p, PlanStore.photoFields,
+                    if (albumUri == null) PlanStore.photoEdit else
+                        PhotoEdit.Params(snapThreshold = PlanStore.photoEdit.snapThreshold))
             } else {
                 var card = PlanStore.card(applicationContext)
                 if (kind in listOf("weather", "summary")) {
