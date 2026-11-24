@@ -67,6 +67,8 @@ object PushStatus {
         text.startsWith("失败") -> "推送失败"
         text.contains("查找") || text.contains("广播") -> "查找中"
         text.contains("已连接") -> "已连接"
+        text.contains("已找到") -> "已找到卡片"
+        text.contains("未找到") || text.contains("扫描失败") -> "未找到卡片"
         text.contains("连接中") -> "连接中"
         text.contains("显影") -> "显影中"
         progress != null -> "$progress%"

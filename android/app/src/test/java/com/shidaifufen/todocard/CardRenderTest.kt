@@ -28,15 +28,17 @@ class CardRenderTest {
     @Test fun exportAllCardsAndKeepTextInsidePage() {
         val sample = Render.Card(
             todos = listOf("完成今天最重要的一件事", "读完手边的一章书", "出门散步二十分钟", "整理明天的安排"),
-            quote = "把今天过好，就是对明天最好的准备。",
+            quote = "长风破浪会有时，直挂云帆济沧海。",
+            quoteBy = "李白《行路难》",
             countdowns = listOf("新年" to "2027-01-01", "一场期待已久的旅行" to "2027-03-20"),
             customLines = listOf("留一点时间给自己。", "记录生活里值得记住的小事。", "今天也要好好生活。"),
             weatherCity = "深圳", weatherTemp = "26", weatherText = "多云",
             weatherHigh = "28", weatherLow = "22", weatherAqi = "42",
             weatherForecast = listOf("周一 晴 22~28°", "周二 多云 21~27°", "周三 小雨 20~25°"),
             weatherUpdated = "11-24 08:00",
+            weatherHumidity = "60", weatherFeels = "27", weatherSunrise = "06:40", weatherSunset = "17:35",
         )
-        listOf("summary", "todo", "quote", "progress", "countdown", "poem", "custom", "calendar", "weather")
+        listOf("summary", "todo", "quote", "progress", "countdown", "poem", "custom", "calendar", "weather", "weather2")
             .forEach { kind ->
                 val bitmap = Render.render(sample.copy(kind = kind))
                 assertEquals(528, bitmap.width)

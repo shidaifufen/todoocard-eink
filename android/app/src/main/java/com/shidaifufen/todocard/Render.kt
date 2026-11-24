@@ -29,8 +29,8 @@ object Render {
 
     data class Card(
         val kind: String = "summary",
-        val quote: String = "把今天过好，就是对明天最好的准备。",
-        val quoteBy: String = "本地句子",
+        val quote: String = "长风破浪会有时，直挂云帆济沧海。",
+        val quoteBy: String = "李白《行路难》",
         val todos: List<String> = emptyList(),
         val countdowns: List<Pair<String, String>> = emptyList(),
         val poemTitle: String = "静夜思",
@@ -50,6 +50,11 @@ object Render {
         val weatherLatitude: String = "",
         val weatherLongitude: String = "",
         val weatherUpdated: String = "",
+        val weatherAuto: Boolean = true,
+        val weatherHumidity: String = "",
+        val weatherFeels: String = "",
+        val weatherSunrise: String = "",
+        val weatherSunset: String = "",
     )
 
     private fun paint(size: Float, color: Int = BLACK, bold: Boolean = false, mono: Boolean = false): Paint =
@@ -97,7 +102,7 @@ object Render {
             "progress" -> c.drawProgress(card)
             "calendar" -> c.drawCalendar()
             "weather" -> c.drawWeather(card)
-            "weather2" -> c.drawWeather(card.copy(weatherCity = card.weatherCity.ifBlank { "天气色块" }))
+            "weather2" -> c.drawWeatherBlocks(card)
             "countdown" -> c.drawCountdown(card)
             "poem" -> c.drawPoem(card)
             "custom" -> c.drawCustom(card)
@@ -268,8 +273,8 @@ object Render {
         card.countdowns.take(5).forEach { (name, date) ->
             drawText(fitLine(name, paint(28f, BLACK, true), 260f), M, y, paint(28f, BLACK, true))
             val days = runCatching {
-                val target = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.CHINA).parse(date)!!
-                ((target.time - System.currentTimeMillis()) / 86400000L).toInt()
+                val target = java.time.LocalDate.parse(date)
+                java.time.temporal.ChronoUnit.DAYS.between(java.time.LocalDate.now(), target).toInt()
             }.getOrDefault(0)
             val dp = paint(40f, RED, bold = true)
             drawText("${days}天", W - M - dp.measureText("${days}天"), y, dp)
@@ -280,7 +285,14 @@ object Render {
     }
 
     private fun Canvas.drawPoem(card: Card) {
-        head(card.poemTitle, card.poemBy)
+        fill(M, 37f, M + 13f, 50f, RED)
+        var titlePaint = paint(30f, BLACK, true)
+        while (titlePaint.textSize > 22f && titlePaint.measureText(card.poemTitle) > W - M * 2 - 23f)
+            titlePaint = paint(titlePaint.textSize - 2f, BLACK, true)
+        drawText(fitLine(card.poemTitle, titlePaint, W - M * 2 - 23f), M + 23f, 58f, titlePaint)
+        drawText(fitLine(card.poemBy, paint(18f), W - M * 2 - 23f), M + 23f, 88f, paint(18f))
+        rule(110f)
+        fill(M, 110f, M + 90f, 114f, RED)
         val hasNote = card.poemNote.isNotBlank()
         val startY = 190f
         val maxPoemHeight = if (hasNote) 360f else 505f
@@ -289,7 +301,7 @@ object Render {
         var lineHeight = 0f
         for (fontSize in 35 downTo 19 step 2) {
             val candidate = paint(fontSize.toFloat(), BLACK, bold = true)
-            val lines = card.poemLines.take(8).flatMap { wrap(this, it, candidate, W - M * 2) }
+            val lines = card.poemLines.take(80).flatMap { wrap(this, it, candidate, W - M * 2) }
             val height = fontSize * 1.48f
             chosenPaint = candidate
             wrapped = lines
@@ -307,8 +319,8 @@ object Render {
         if (hasNote) {
             val noteTop = 582f
             rule(noteTop)
-            drawText("赏析", M, noteTop + 34f, paint(20f, RED, bold = true))
-            wrap(this, card.poemNote, paint(18f), W - M * 2).take(3).forEachIndexed { index, line ->
+            drawText("译注 · 赏析", M, noteTop + 34f, paint(20f, RED, bold = true))
+            wrap(this, card.poemNote, paint(18f), W - M * 2).take(5).forEachIndexed { index, line ->
                 drawText(line, M, noteTop + 62f + index * 23f, paint(18f))
             }
         }
@@ -395,6 +407,67 @@ object Render {
             drawText(text, M + 28f, 606f + index * 47f, paint(22f))
         }
         drawText("Open-Meteo · ${card.weatherUpdated.ifBlank { "手动资料" }}", M, 765f, paint(16f))
+    }
+
+    private fun Canvas.drawWeatherBlocks(card: Card) {
+        fun cell(x: Float, y: Float, right: Float, bottom: Float, color: Int = WHITE) {
+            fill(x, y, right, bottom, BLACK)
+            fill(x + 2, y + 2, right - 2, bottom - 2, color)
+        }
+        val right = W - M
+        val mid = M + 278f
+        cell(M, 32f, right, 116f)
+        drawText(fitLine(card.weatherCity.ifBlank { "先选择城市" }, paint(29f, BLACK, true), 248f),
+            M + 14f, 75f, paint(29f, BLACK, true))
+        drawText("色块天气", M + 14f, 101f, paint(17f))
+        cell(mid, 32f, right, 116f, YELLOW)
+        val now = Calendar.getInstance()
+        drawText(WEEK[(now.get(Calendar.DAY_OF_WEEK) + 5) % 7], mid + 20f, 68f, paint(25f, BLACK, true))
+        drawText("%02d:%02d".format(now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE)),
+            mid + 20f, 99f, paint(26f))
+        cell(M, 116f, mid, 366f)
+        val tp = paint(88f, BLACK, true)
+        drawText(fitLine(card.weatherTemp.ifBlank { "--" } + "°", tp, 248f), M + 16f, 231f, tp)
+        drawText(fitLine(card.weatherText.ifBlank { "等待天气资料" }, paint(30f, BLACK, true), 248f),
+            M + 16f, 292f, paint(30f, BLACK, true))
+        drawText("今日 ${card.weatherLow.ifBlank { "--" }}～${card.weatherHigh.ifBlank { "--" }}°",
+            M + 16f, 340f, paint(21f))
+        val aqi = card.weatherAqi.toIntOrNull()
+        val color = when { aqi == null -> WHITE; aqi <= 50 -> GREEN; aqi <= 100 -> YELLOW; else -> RED }
+        val ink = if (color == RED) WHITE else BLACK
+        cell(mid, 116f, right, 248f, color)
+        drawText("空气 AQI·美标", mid + 12f, 147f, paint(17f, ink, true))
+        drawText(card.weatherAqi.ifBlank { "--" }, mid + 12f, 209f, paint(48f, ink))
+        cell(mid, 248f, right, 366f)
+        drawText("湿度 ${card.weatherHumidity.ifBlank { "--" }}%", mid + 12f, 294f, paint(20f))
+        drawText("体感 ${card.weatherFeels.ifBlank { "--" }}°", mid + 12f, 337f, paint(20f))
+        cell(M, 366f, right, 533f)
+        drawText("未来三天", M + 14f, 400f, paint(23f, BLUE, true))
+        card.weatherForecast.take(3).forEachIndexed { index, line ->
+            drawText(fitLine(line, paint(20f), W - M * 2 - 28f), M + 14f,
+                438f + index * 35f, paint(20f))
+        }
+        val half = M + (W - 2 * M) / 2
+        cell(M, 533f, half, 660f, BLUE)
+        drawText("日出 / 日落", M + 14f, 568f, paint(22f, WHITE, true))
+        drawText(card.weatherSunrise.ifBlank { "--:--" }, M + 14f, 606f, paint(27f, WHITE))
+        drawText(card.weatherSunset.ifBlank { "--:--" }, M + 14f, 644f, paint(27f, WHITE))
+        cell(half, 533f, right, 660f)
+        drawText("穿衣参考", half + 14f, 568f, paint(22f, BLACK, true))
+        val t = card.weatherTemp.toIntOrNull()
+        val advice = when {
+            t == null -> "选择城市后显示"
+            t < 10 -> "厚外套，注意保暖"
+            t < 18 -> "外套加长袖"
+            t < 26 -> "长袖或薄外套"
+            else -> "轻薄短袖，注意补水"
+        }
+        wrap(this, advice, paint(20f), right - half - 28f).take(2).forEachIndexed { i, line ->
+            drawText(line, half + 14f, 610f + i * 29f, paint(20f))
+        }
+        cell(M, 660f, right, 732f, YELLOW)
+        drawText("天气资料更新于 ${card.weatherUpdated.ifBlank { "尚未获取" }}", M + 14f, 702f, paint(18f))
+        drawText("Open-Meteo · 城市天气与空气质量", M, 765f, paint(16f))
     }
 
     private fun fitLine(text: String, p: Paint, width: Float): String {

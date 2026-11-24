@@ -33,6 +33,7 @@ internal val TEMPLATES = listOf(
     "quote" to "每日一句",
     "todo" to "今日待办",
     "weather" to "天气看板",
+    "weather2" to "色块天气",
     "calendar" to "月历",
     "progress" to "时间进度",
     "countdown" to "倒计时",
@@ -99,6 +100,8 @@ private fun App(incomingIntent: Intent?) {
     var selectedCarousel by remember { mutableStateOf<Uri?>(null) }
     var pendingSharedPush by remember { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
+    var sourceRevision by remember { mutableIntStateOf(0) }
+    val onlineContent = remember(kind, sourceRevision) { ContentOptions.online(ctx, kind) }
     var scanning by remember { mutableStateOf(false) }
     var scanTimedOut by remember { mutableStateOf(false) }
     var showAlbums by remember { mutableStateOf(false) }
@@ -179,8 +182,16 @@ private fun App(incomingIntent: Intent?) {
             refreshing = false
         }
     }
-    LaunchedEffect(kind, card, photoPath, fields, edit, tab) {
+    LaunchedEffect(kind) {
+        if (onlineContent && kind in listOf("summary", "quote", "poem", "weather", "weather2") &&
+            ctx.getSharedPreferences("content_refresh", 0).getString(kind, "") != java.time.LocalDate.now().toString()) refreshCard()
+    }
+    LaunchedEffect(kind, card, photoPath, fields, edit, tab, refreshing, onlineContent) {
         if (tab != 0) return@LaunchedEffect
+        if (onlineContent && kind in listOf("summary", "quote", "poem", "weather", "weather2") &&
+            ctx.getSharedPreferences("content_refresh", 0).getString(kind, "").isNullOrBlank()) {
+            preview = null; return@LaunchedEffect
+        }
         preview = withContext(Dispatchers.Default) {
             runCatching {
                 if (kind in listOf("photo", "bing", "ai")) {
@@ -490,7 +501,13 @@ private fun App(incomingIntent: Intent?) {
                                 imageKind = next
                                 edit = if (next == "photo") PlanStore.photoEdit else PhotoEdit.Params(snapThreshold = edit.snapThreshold)
                             }
-                        }, onCard = { card = it; PlanStore.saveCard(ctx, it) },
+                        }, onCard = {
+                            card = it; PlanStore.saveCard(ctx, it)
+                            if (kind in listOf("quote", "poem")) {
+                                ContentOptions.setOnline(ctx, kind, false); sourceRevision++
+                                status = "已应用手动内容，可随时切回联网更新"
+                            }
+                        },
                         onPhoto = { tab = 2 },
                         onScan = { requestScan() }, onSelectDevice = ::selectDevice,
                         onSend = ::requestSend,
@@ -499,7 +516,11 @@ private fun App(incomingIntent: Intent?) {
                         onAddPhotos = ::addCarouselPhotos,
                         onRefresh = ::refreshCard, onAnalysis = ::refreshAnalysis, refreshing = refreshing,
                         onScanAll = { requestScan(true) }, scanTimedOut = scanTimedOut,
-                        onGenerate = ::generateImage)
+                        onGenerate = ::generateImage, onlineContent = onlineContent,
+                        onSourceMode = { online ->
+                            ContentOptions.setOnline(ctx, kind, online); sourceRevision++
+                            if (online) refreshCard() else status = "已选择手动内容，可编辑后推送"
+                        })
                     1 -> CarouselScreen(carouselPhotos, selectedCarousel, busy,
                         onAddPhotos = ::addCarouselPhotos,
                         onDraw = { drawCarousel() },

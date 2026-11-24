@@ -36,6 +36,6 @@ object SchedulePlanner {
             }
             day = day.plusDays(1)
         }
-        return result.distinctBy { it.key }.sortedBy { it.at }
+        return result.distinctBy { it.at to it.kind }.sortedBy { it.at }
     }
 }

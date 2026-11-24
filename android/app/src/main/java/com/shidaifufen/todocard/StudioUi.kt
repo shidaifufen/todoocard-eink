@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -78,6 +79,8 @@ internal fun StudioScreen(
     onScanAll: () -> Unit,
     scanTimedOut: Boolean,
     onGenerate: (String) -> Unit,
+    onlineContent: Boolean,
+    onSourceMode: (Boolean) -> Unit,
 ) {
     var editing by remember { mutableStateOf(false) }
     var generating by remember { mutableStateOf(false) }
@@ -106,6 +109,11 @@ internal fun StudioScreen(
                 )
             }
         }
+        if (kind in listOf("summary", "quote", "poem", "weather", "weather2")) Row(
+            Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = onlineContent, onClick = { onSourceMode(true) }, enabled = !busy, label = { Text("联网更新") })
+            FilterChip(selected = !onlineContent, onClick = { onSourceMode(false) }, enabled = !busy, label = { Text("手动内容") })
+        }
         Spacer(Modifier.height(8.dp))
         if (kind == "photo") Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically) {
@@ -124,7 +132,7 @@ internal fun StudioScreen(
                 Modifier.width(imageWidth).aspectRatio(2f / 3f)
                     .background(Color.White, RoundedCornerShape(4.dp))
                     .border(1.dp, Color(0xFFD9DED8), RoundedCornerShape(4.dp))
-                    .clickable(enabled = kind in listOf("quote", "poem") && !busy && !refreshing,
+                    .clickable(enabled = onlineContent && kind in listOf("quote", "poem") && !busy && !refreshing,
                         onClickLabel = "换一条内容", onClick = onRefresh),
                 contentAlignment = Alignment.Center,
             ) {
@@ -135,7 +143,11 @@ internal fun StudioScreen(
                         Text(if (kind == "bing") "点击获取每日壁纸" else if (kind == "ai") "输入提示词生成图片" else "先选择一张照片", color = StudioMuted, fontSize = 13.sp)
                         TextButton(onClick = { if (kind == "bing") onRefresh() else if (kind == "ai") generating = true else onPhoto() }) { Text(if (kind == "bing") "获取壁纸" else if (kind == "ai") "开始生成" else "打开相册") }
                     }
-                } else if (preview == null) CircularProgressIndicator(Modifier.size(26.dp), strokeWidth = 2.dp)
+                } else if (preview == null) {
+                    if (refreshing) CircularProgressIndicator(Modifier.size(26.dp), strokeWidth = 2.dp)
+                    else Text("暂时无法获取内容，点击刷新重试", color = StudioMuted,
+                        modifier = Modifier.padding(20.dp))
+                }
                 else Image(preview.asImageBitmap(), "卡片预览", Modifier.fillMaxSize().padding(3.dp),
                     contentScale = ContentScale.Fit)
             }
@@ -144,9 +156,9 @@ internal fun StudioScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("屏幕预览", fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f))
-                if (kind in listOf("quote", "poem", "weather", "summary", "bing")) TextButton(
+                if (onlineContent && kind in listOf("quote", "poem", "weather", "weather2", "summary", "bing")) TextButton(
                     enabled = !busy && !refreshing, onClick = onRefresh) {
-                    Text(if (refreshing) "更新中…" else if (kind == "weather") "刷新天气" else "换一张")
+                    Text(if (refreshing) "更新中…" else if (kind in listOf("weather", "weather2")) "刷新天气" else "换一张")
                 }
                 if (kind !in listOf("progress", "calendar")) TextButton(enabled = !busy, onClick = {
                     if (isImage) onPhoto() else editing = true
@@ -254,6 +266,7 @@ private fun CardEditorDialog(
     onDismiss: () -> Unit,
     onSave: (Render.Card) -> Unit,
 ) {
+    val ctx = LocalContext.current
     var quote by remember(kind, initial) { mutableStateOf(initial.quote) }
     var quoteBy by remember(kind, initial) { mutableStateOf(initial.quoteBy) }
     var todos by remember(kind, initial) { mutableStateOf(initial.todos.joinToString("\n")) }
@@ -304,7 +317,7 @@ private fun CardEditorDialog(
                             RefreshContentButton(contentBusy) {
                                 scope.launch {
                                     contentBusy = true
-                                    runCatching { ContentData.quote() }.onSuccess {
+                                    runCatching { CardSources.nextQuote(ctx) }.onSuccess {
                                         quote = it.text; quoteBy = it.author
                                     }.onFailure { weatherStatus = it.message ?: "每日一句获取失败" }
                                     contentBusy = false
@@ -314,8 +327,24 @@ private fun CardEditorDialog(
                                 color = StudioMuted)
                         }
                     }
-                    "weather" -> {
+                    "weather", "weather2" -> {
                         EditorField("城市", weatherCity, { weatherCity = it })
+                        Text("默认按网络所在城市获取天气；城市可能受 VPN 影响，可在这里改为指定城市。",
+                            fontSize = 12.sp, color = StudioMuted)
+                        TextButton(enabled = !weatherBusy, onClick = {
+                            scope.launch {
+                                weatherBusy = true
+                                runCatching { WeatherData.automatic(initial) }.onSuccess { value ->
+                                    weatherCity = value.weatherCity; weatherText = value.weatherText
+                                    weatherTemp = value.weatherTemp; weatherHigh = value.weatherHigh
+                                    weatherLow = value.weatherLow; weatherAqi = value.weatherAqi
+                                    weatherForecast = value.weatherForecast.joinToString("\n")
+                                    weatherLocation = value; places = emptyList()
+                                    weatherStatus = "已恢复自动城市，保存后生效"
+                                }.onFailure { weatherStatus = it.message ?: "自动城市获取失败" }
+                                weatherBusy = false
+                            }
+                        }) { Text("使用网络所在城市") }
                         Button(enabled = weatherCity.isNotBlank() && !weatherBusy, onClick = {
                             scope.launch {
                                 weatherBusy = true
@@ -387,7 +416,7 @@ private fun CardEditorDialog(
                         RefreshContentButton(contentBusy) {
                             scope.launch {
                                 contentBusy = true
-                                runCatching { ContentData.poem() }.onSuccess {
+                                runCatching { CardSources.nextPoem(ctx) }.onSuccess {
                                     poemTitle = it.title; poemBy = listOf(it.dynasty, it.author)
                                         .filter { value -> value.isNotBlank() }.joinToString(" · ")
                                     poemLines = it.lines.joinToString("\n"); poemNote = it.note
@@ -402,7 +431,7 @@ private fun CardEditorDialog(
                     }
                     else -> Text("这张卡片会根据当前日期自动更新。", color = StudioMuted)
                 }
-                if (kind != "weather" && weatherStatus.isNotBlank()) Text(weatherStatus,
+                if (kind !in listOf("weather", "weather2") && weatherStatus.isNotBlank()) Text(weatherStatus,
                     color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
             }
         },
@@ -418,7 +447,7 @@ private fun CardEditorDialog(
                             parts[0].trim() to parts[1].trim() else null
                     }.take(5),
                     poemTitle = poemTitle.trim(), poemBy = poemBy.trim(),
-                    poemLines = poemLines.lines().map { it.trim() }.filter { it.isNotEmpty() }.take(8),
+                    poemLines = poemLines.lines().map { it.trim() }.filter { it.isNotEmpty() }.take(80),
                     poemNote = poemNote.trim(), customTitle = customTitle.trim(),
                     customLines = customLines.lines().map { it.trim() }.filter { it.isNotEmpty() }.take(8),
                     weatherCity = weatherCity.trim(), weatherText = weatherText.trim(),
@@ -429,6 +458,11 @@ private fun CardEditorDialog(
                     weatherLatitude = weatherLocation.weatherLatitude,
                     weatherLongitude = weatherLocation.weatherLongitude,
                     weatherUpdated = weatherLocation.weatherUpdated,
+                    weatherAuto = weatherLocation.weatherAuto,
+                    weatherHumidity = weatherLocation.weatherHumidity,
+                    weatherFeels = weatherLocation.weatherFeels,
+                    weatherSunrise = weatherLocation.weatherSunrise,
+                    weatherSunset = weatherLocation.weatherSunset,
                 ))
             }, shape = RoundedCornerShape(8.dp)) { Text("保存预览") }
         },

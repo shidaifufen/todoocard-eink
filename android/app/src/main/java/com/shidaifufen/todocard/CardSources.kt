@@ -9,25 +9,49 @@ import kotlinx.coroutines.withContext
 /** 计划和手动入口共用数据准备规则，API 失败时保留已保存内容。 */
 object CardSources {
     suspend fun fresh(ctx: Context, kind: String, card: Render.Card): Render.Card {
+        if (!ContentOptions.online(ctx, kind)) return card
         val refreshed = when (kind) {
-            "quote" -> ContentData.quote().let { card.copy(quote = it.text, quoteBy = it.author) }
-            "poem" -> ContentData.poem().let {
+            "quote" -> nextQuote(ctx).let { card.copy(quote = it.text, quoteBy = it.author) }
+            "poem" -> nextPoem(ctx).let {
                 val poem = card.copy(poemTitle = it.title,
                     poemBy = listOf(it.dynasty, it.author).filter(String::isNotBlank).joinToString(" · "),
                     poemLines = it.lines, poemNote = it.note)
                 if (it.note.isNotBlank()) poem else poem.copy(poemNote =
                     runCatching { ContentData.analysis(ctx, poem) }.getOrDefault(""))
             }
-            "weather" -> WeatherData.refresh(card)
+            "weather", "weather2" -> WeatherData.refresh(card)
             "summary" -> {
-                var next = runCatching { WeatherData.refresh(card) }.getOrDefault(card)
-                runCatching { ContentData.quote() }.onSuccess { next = next.copy(quote = it.text, quoteBy = it.author) }
-                next
+                val weather = WeatherData.refresh(card)
+                val quote = nextQuote(ctx)
+                weather.copy(quote = quote.text, quoteBy = quote.author)
             }
             else -> card
         }
+        if (kind in listOf("summary", "quote", "poem", "weather", "weather2")) ctx.getSharedPreferences("content_refresh", 0).edit()
+            .putString(kind, java.time.LocalDate.now().toString()).apply()
         PlanStore.saveCard(ctx, refreshed)
         return refreshed
+    }
+
+    suspend fun nextQuote(ctx: Context): ContentData.Quote {
+        repeat(6) {
+            val quote = ContentData.quote()
+            if (ContentOptions.claim(ctx, "quote", quote.text)) {
+                return quote
+            }
+        }
+        error("句子服务连续返回近期内容，请稍后再换；没有替换为本地句子")
+    }
+
+    suspend fun nextPoem(ctx: Context): ContentData.Poem {
+        repeat(6) {
+            val poem = ContentData.poem()
+            val identity = poem.title + poem.author
+            if (ContentOptions.claim(ctx, "poem", identity)) {
+                return poem
+            }
+        }
+        error("诗词服务连续返回近期作品，请稍后再换；没有替换为本地诗词")
     }
 
     suspend fun scheduledBitmap(ctx: Context, kind: String): Bitmap {
@@ -47,7 +71,7 @@ object CardSources {
                     snapThreshold = PlanStore.photoEdit.snapThreshold)) }
             finally { if (uri != null) java.io.File(path).delete() }
         }
-        val card = runCatching { fresh(ctx, kind, PlanStore.card(ctx)) }.getOrElse { PlanStore.card(ctx) }
+        val card = fresh(ctx, kind, PlanStore.card(ctx))
         return withContext(Dispatchers.Default) { Render.render(card.copy(kind = kind)) }
     }
 }

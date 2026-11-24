@@ -7,6 +7,14 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 
 class SchedulePlannerTest {
+    @Test fun overlappingRulesForSameCardOnlySendOnce() {
+        val zone = ZoneId.of("Asia/Shanghai")
+        val at = ZonedDateTime.of(2026, 11, 24, 9, 0, 0, 0, zone).toInstant().toEpochMilli()
+        val slots = SchedulePlanner.slots(listOf(PlanStore.Fixed("09:00", "quote")),
+            listOf(PlanStore.Interval(60, "09:00", "10:00", "workday", "quote")), at, at, zone)
+        assertEquals(1, slots.size)
+    }
+
     @Test fun fixedAndIntervalSlotsAreSortedAndUnique() {
         val zone = ZoneId.of("Asia/Shanghai")
         val from = ZonedDateTime.of(2026, 11, 24, 8, 0, 0, 0, zone).toInstant().toEpochMilli()

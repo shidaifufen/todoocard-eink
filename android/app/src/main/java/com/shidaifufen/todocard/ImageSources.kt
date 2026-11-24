@@ -43,11 +43,14 @@ object ImageSources {
     }
     suspend fun bing(ctx: Context): String = withContext(Dispatchers.IO) {
         val prefs = ctx.getSharedPreferences("image_sources", 0)
-        val index = prefs.getInt("bing_index", -1).plus(1) % 8
-        val data = JSONObject(String(download("https://www.bing.com/HPImageArchive.aspx?format=js&idx=$index&n=1&mkt=zh-CN"), Charsets.UTF_8))
-            .getJSONArray("images").getJSONObject(0)
+        val all = JSONObject(String(download("https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=8&mkt=zh-CN"), Charsets.UTF_8))
+            .getJSONArray("images")
+        val data = (0 until all.length()).map { all.getJSONObject(it) }
+            .firstOrNull { !ContentOptions.wasSeen(ctx, "bing", it.optString("urlbase")) }
+            ?: error("最近 8 天的壁纸都已看过，明天再来会有新图")
         val path = save(ctx, "bing", download("https://www.bing.com" + data.getString("url")))
-        prefs.edit().putInt("bing_index", index).putString("bing_credit", data.optString("copyright")).apply()
+        ContentOptions.remember(ctx, "bing", data.optString("urlbase"))
+        prefs.edit().putString("bing_credit", data.optString("copyright")).apply()
         path
     }
     suspend fun generate(ctx: Context, prompt: String): String = withContext(Dispatchers.IO) {

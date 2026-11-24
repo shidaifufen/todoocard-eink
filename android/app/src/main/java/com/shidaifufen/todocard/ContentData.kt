@@ -30,16 +30,22 @@ object ContentData {
     }
 
     suspend fun quote(): Quote = withContext(Dispatchers.IO) {
-        val data = getJson("https://v1.hitokoto.cn/?encode=json&max_length=60")
+        parseQuote(getJson("https://v1.hitokoto.cn/?encode=json&max_length=60&t=${System.currentTimeMillis()}"))
+    }
+
+    internal fun parseQuote(data: JSONObject): Quote {
         val text = data.optString("hitokoto").trim()
         check(text.isNotBlank()) { "没有拿到句子" }
         val author = listOf(data.optString("from_who"), data.optString("from"))
             .firstOrNull { it.isNotBlank() && it != "null" } ?: "佚名"
-        Quote(text, author)
+        return Quote(text, author)
     }
 
     suspend fun poem(): Poem = withContext(Dispatchers.IO) {
-        val data = getJson("https://v2.jinrishici.com/one.json?t=${System.currentTimeMillis()}")
+        parsePoem(getJson("https://v2.jinrishici.com/one.json?t=${System.currentTimeMillis()}"))
+    }
+
+    internal fun parsePoem(data: JSONObject): Poem {
         val origin = data.optJSONObject("data")?.optJSONObject("origin")
             ?: error("没有拿到诗词")
         val lines = mutableListOf<String>()
@@ -59,7 +65,7 @@ object ContentData {
         val dynasty = origin.optString("dynasty").trim()
         val note = translation.joinToString(" ").takeIf { it.isNotBlank() }
             ?: ""
-        Poem(origin.optString("title").ifBlank { "今日诗词" }, author, dynasty, lines.take(8), note)
+        return Poem(origin.optString("title").ifBlank { "今日诗词" }, author, dynasty, lines.take(80), note)
     }
 
     suspend fun analysis(ctx: android.content.Context, card: Render.Card): String = withContext(Dispatchers.IO) {
@@ -71,7 +77,7 @@ object ContentData {
             AiRequests.post(config, "chat/completions", body).getJSONArray("choices")
                 .getJSONObject(0).getJSONObject("message").getString("content")
         } else {
-            val url = "https://text.pollinations.ai/" + java.net.URLEncoder.encode(prompt, "UTF-8").replace("+", "%20")
+            val url = "https://text.pollinations.ai/" + java.net.URLEncoder.encode(prompt, "UTF-8").replace("+", "%20") + "?seed=${System.nanoTime()}"
             val c = URL(url).openConnection() as HttpURLConnection
             c.connectTimeout = 10_000; c.readTimeout = 15_000
             try {

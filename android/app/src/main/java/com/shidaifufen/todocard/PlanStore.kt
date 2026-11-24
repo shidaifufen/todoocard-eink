@@ -110,6 +110,11 @@ object PlanStore {
                 weatherLatitude = data.optString("weatherLatitude"),
                 weatherLongitude = data.optString("weatherLongitude"),
                 weatherUpdated = data.optString("weatherUpdated"),
+                weatherAuto = data.optBoolean("weatherAuto", data.optString("weatherLatitude").isBlank()),
+                weatherHumidity = data.optString("weatherHumidity"),
+                weatherFeels = data.optString("weatherFeels"),
+                weatherSunrise = data.optString("weatherSunrise"),
+                weatherSunset = data.optString("weatherSunset"),
             )
         }.getOrDefault(Render.Card())
     }
@@ -130,6 +135,9 @@ object PlanStore {
             .put("weatherForecast", JSONArray(card.weatherForecast))
             .put("weatherLatitude", card.weatherLatitude).put("weatherLongitude", card.weatherLongitude)
             .put("weatherUpdated", card.weatherUpdated)
+            .put("weatherAuto", card.weatherAuto)
+            .put("weatherHumidity", card.weatherHumidity).put("weatherFeels", card.weatherFeels)
+            .put("weatherSunrise", card.weatherSunrise).put("weatherSunset", card.weatherSunset)
         sp(c).edit().putString("card", data.toString()).apply()
     }
 
