@@ -424,10 +424,8 @@ object Render {
         WeatherVisuals.icon(this, card.weatherCode, 371f, 165f, 116f)
         rule(495f)
         WeatherVisuals.chart(this, card.weatherHours, 505f, 122f)
-        drawText("未来三天", M, 657f, paint(21f, BLACK, true))
-        card.weatherForecast.take(3).forEachIndexed { index, item ->
-            drawText(fitLine(item, paint(18f), W - M * 2), M, 684f + index * 25f, paint(18f))
-        }
+        drawText("未来三天 · 气温范围", M, 657f, paint(21f, BLACK, true))
+        WeatherVisuals.forecastBars(this, card.weatherForecast)
         drawText("Open-Meteo · ${card.weatherUpdated.ifBlank { "手动资料" }}", M, 765f, paint(16f))
     }
 

@@ -91,6 +91,17 @@ class CardRenderTest {
         })
     }
 
+    @Test fun threeDayForecastDisplaysTemperatureBarsAndHandlesNegativeTemperatures() {
+        val parsed = WeatherVisuals.parseDayRange("11-25 小雨 -3~6°")!!
+        assertEquals("11-25 小雨", parsed.label)
+        assertEquals(-3, parsed.low)
+        assertEquals(6, parsed.high)
+        val card = Render.render(Render.Card(kind = "weather", weatherForecast = listOf(
+            "11-25 小雨 -3~6°", "11-26 晴 1~9°", "11-27 多云 3~10°")))
+        assertTrue((670..733).any { y -> (210..375).any { x -> card.getPixel(x, y) == Color.BLUE } })
+        assertNull(WeatherVisuals.parseDayRange("手动填写的天气"))
+    }
+
     @Test fun editedContentSurvivesRestart() {
         val context = RuntimeEnvironment.getApplication()
         PlanStore.init(context)

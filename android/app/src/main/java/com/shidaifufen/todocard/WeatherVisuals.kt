@@ -5,6 +5,47 @@ import kotlin.math.*
 
 /** WMO symbols drawn as vectors: no dependency on system emoji fonts. */
 internal object WeatherVisuals {
+    internal data class DayRange(val label: String, val low: Int, val high: Int)
+    internal fun parseDayRange(text: String): DayRange? {
+        val match = Regex("(-?\\d+)\\s*[~～至]\\s*(-?\\d+)\\s*°?\\s*$").find(text.trim()) ?: return null
+        val first = match.groupValues[1].toIntOrNull() ?: return null
+        val second = match.groupValues[2].toIntOrNull() ?: return null
+        return DayRange(text.substring(0, match.range.first).trim(), minOf(first, second), maxOf(first, second))
+    }
+
+    /** Horizontal range bars leave enough room for the date, weather and both temperatures. */
+    fun forecastBars(c: Canvas, forecasts: List<String>) {
+        val rows = forecasts.take(3)
+        val ranges = rows.map(::parseDayRange)
+        val valid = ranges.filterNotNull()
+        if (rows.isEmpty()) {
+            c.drawText("刷新天气后显示三天预报", 32f, 700f, Paint().apply { color = Color.BLACK; textSize = 17f })
+            return
+        }
+        val lo = valid.minOfOrNull { it.low } ?: 0
+        val hi = valid.maxOfOrNull { it.high } ?: 1
+        val span = (hi - lo).coerceAtLeast(1)
+        val text = Paint().apply { color = Color.BLACK; textSize = 16f; typeface = Typeface.SANS_SERIF }
+        rows.forEachIndexed { index, raw ->
+            val y = 681f + index * 24f
+            val item = ranges[index]
+            if (item == null) {
+                var label = raw
+                while (text.measureText(label) > 460f && label.length > 1) label = label.dropLast(1)
+                c.drawText(label, 32f, y, text)
+            } else {
+                var label = item.label
+                while (text.measureText(label) > 158f && label.length > 1) label = label.dropLast(1)
+                c.drawText(label, 32f, y, text)
+                val left = 210f + (item.low - lo) * 160f / span
+                val right = 210f + (item.high - lo) * 160f / span
+                c.drawRoundRect(left, y - 12f, maxOf(left + 5f, right), y - 3f, 4f, 4f,
+                    Paint().apply { color = Color.BLUE })
+                c.drawText("${item.low}~${item.high}°", 382f, y, text)
+            }
+        }
+    }
+
     fun icon(c: Canvas, code: Int, x: Float, y: Float, size: Float) {
         c.save(); c.translate(x, y); c.scale(size / 100f, size / 100f)
         val ink = Paint().apply { color = Color.BLACK; strokeWidth = 4f; style = Paint.Style.STROKE }
