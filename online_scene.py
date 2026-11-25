@@ -12,7 +12,7 @@ from urllib.request import Request, urlopen
 from PIL import Image, ImageDraw, ImageOps
 
 import card_render as render
-from image_tone import INKS, VIVID, tune
+from image_tone import INKS, VIVID, panel_preview, tune
 
 CATEGORIES = {
     "online_music": "随机音乐封面", "online_movie": "随机电影海报",
@@ -100,6 +100,7 @@ def text(draw, value, x, y, size, width, color="black", bold=False):
             value = value[:-1]
         value += "…"
     draw.text((x, y), value, font=font, fill=color, anchor="lt")
+    return draw.textbbox((x, y), value, font=font, anchor="lt")[3]
 
 
 def analyze_cover(image):
@@ -157,7 +158,8 @@ def art_card(mode, title, entry):
         theme, cover = (INKS[0], cover) if movie else analyze_cover(cover)
         artwork = ImageOps.fit(cover, size, Image.Resampling.LANCZOS)
     image = Image.new("RGB", (W, H), theme)
-    image.paste(tune(artwork, VIVID), (0, 0))
+    adjusted = tune(artwork, VIVID)
+    image.paste(adjusted if movie else panel_preview(adjusted), (0, 0))
     painter = ImageDraw.Draw(image)
     if movie:
         named_year = re.search(r"\s*\(((?:18|19|20)\d{2})\)$", title)
@@ -173,9 +175,10 @@ def art_card(mode, title, entry):
         ink = "black" if theme in (INKS[1], INKS[2]) else "white"
         accent = "blue" if theme in (INKS[1], INKS[2]) else "yellow"
         painter.rectangle((28, 551, 92, 559), fill=accent)
-        text(painter, title, 28, 575, 41, 472, ink, True)
-        text(painter, entry.get("im:artist", {}).get("label"), 28, 662, 24, 472, ink)
+        title_bottom = text(painter, title, 28, 575, 41, 472, ink, True)
+        text(painter, entry.get("im:artist", {}).get("label"), 28, title_bottom + 9, 24, 472, ink)
         text(painter, "Apple Music", 28, 758, 17, 472, ink)
+        image = render.snap_palette(image, keep=[(0, 0, W, W)])
     return image
 
 

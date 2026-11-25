@@ -195,6 +195,7 @@ object PlanStore {
                 gamma = data.optDouble("gamma", 1.0).toFloat().coerceIn(.5f, 2f),
                 sharpness = data.optDouble("sharpness", 0.0).toFloat().coerceIn(0f, 1f),
                 shadows = data.optDouble("shadows", 0.0).toFloat().coerceIn(0f, 1f),
+                brightness = data.optDouble("brightness").takeIf { it.isFinite() }?.toFloat()?.coerceIn(.65f, 1.45f),
             )
         }.getOrDefault(PhotoEdit.Params())
         set(value) {
@@ -204,6 +205,7 @@ object PlanStore {
                 .put("snapThreshold", value.snapThreshold)
                 .put("fit", value.fit).put("gamma", value.gamma).put("sharpness", value.sharpness)
                 .put("shadows", value.shadows)
+            value.brightness?.let { data.put("brightness", it) }
             sp_global.edit().putString("photoEdit", data.toString()).apply()
         }
 

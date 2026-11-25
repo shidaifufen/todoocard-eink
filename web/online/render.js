@@ -9,25 +9,28 @@ function rect(g, x, y, w, h, color) {
   g.fillRect(x, y, w, h);
 }
 
-function line(g, value, x, y, width, size, color = BLACK, bold = false, minSize = size, outline) {
+function line(g, value, x, y, width, size, color = BLACK, bold = false, minSize = size, outline, center = false) {
   const font = (bold ? '700 ' : '400 ');
   let text = String(value || '');
   g.font = font + size + 'px ' + family;
   while (size > minSize && g.measureText(text).width > width) {
     g.font = font + --size + 'px ' + family;
   }
+  while (text.length && g.measureText(text).width > width) {
+    const short = text.endsWith('…') ? text.slice(0, -2) : text.slice(0, -1);
+    text = short ? short + '…' : '';
+  }
+  const metrics = g.measureText(text);
+  if (center) y += (metrics.actualBoundingBoxAscent - metrics.actualBoundingBoxDescent) / 2;
   if (outline) {
     g.lineWidth = 3;
     g.lineJoin = 'round';
     g.strokeStyle = outline;
     g.strokeText(text, x, y);
   }
-  while (text.length && g.measureText(text).width > width) {
-    const short = text.endsWith('…') ? text.slice(0, -2) : text.slice(0, -1);
-    text = short ? short + '…' : '';
-  }
   g.fillStyle = color;
   g.fillText(text, x, y);
+  return y + metrics.actualBoundingBoxDescent;
 }
 
 function wrap(g, text, width) {
@@ -58,11 +61,12 @@ function block(g, value, x, y, width, height, size, color = BLACK, bold = false,
     size -= 2;
   }
   const cap = Math.max(1, Math.floor((height - size * 1.2) / step) + 1);
+  let bottom = y;
   for (let i = 0; i < Math.min(rows.length, cap); i++) {
     const row = i === cap - 1 && rows.length > cap ? rows[i] + '…' : rows[i];
-    line(g, row, x, y + i * step, width, size, color, bold, size, outline);
+    bottom = line(g, row, x, y + i * step, width, size, color, bold, size, outline);
   }
-  return rows.length <= cap;
+  return { fits: rows.length <= cap, bottom };
 }
 
 function artwork(g, img, x, y, width, height, tone, crop = [0, 0, img.naturalWidth, img.naturalHeight]) {
@@ -89,20 +93,23 @@ function music(g, item, img, verses, tone, style, { theme = BLACK, ink = 'auto',
     const bounds = artwork(g, img, 0, 0, W, W, tone, crop);
     rect(g, 0, W, W, H-W, theme);
     rect(g, 28, 551, 64, 8, accent);
-    block(g, item.title, 28, 574, 472, 87, size(41), textColor, true, true, outline);
-    line(g, item.by, 28, 664, 472, size(24), textColor, false, 18, outline);
-    if (style === 'single' && verses[0]) line(g, verses[0], 28, 706, 472, size(26), textColor, true, 18, outline);
-    line(g, item.source + (style === 'single' && verses[0] ? ' · 歌词 LRCLIB' : ''), 28, 754, 472, size(18), textColor, false, size(18), outline);
+    const title = block(g, item.title, 28, 574, 472, 87, size(41), textColor, true, true, outline);
+    const artistBottom = line(g, item.by, 28, title.bottom + 9, 472, size(24), textColor, false, 18, outline);
+    const creditTop = 754;
+    if (style === 'single' && verses[0]) {
+      line(g, verses[0], 28, (artistBottom + creditTop) / 2, 472, size(26), textColor, true, 18, outline, true);
+    }
+    line(g, item.source + (style === 'single' && verses[0] ? ' · 歌词 LRCLIB' : ''), 28, creditTop, 472, size(18), textColor, false, size(18), outline);
     return { bounds, fits: true };
   }
   rect(g, 0, 0, W, 276, theme);
   const bounds = artwork(g, img, 0, 0, 276, 276, tone, crop);
   rect(g, 298, 43, 60, 7, accent);
-  block(g, item.title, 298, 78, 202, 113, size(38), textColor, true, true, outline);
-  line(g, item.by, 298, 210, 202, size(22), textColor, false, 18, outline);
+  const title = block(g, item.title, 298, 78, 202, 113, size(38), textColor, true, true, outline);
+  line(g, item.by, 298, title.bottom + 9, 202, size(22), textColor, false, 18, outline);
   rect(g, 0, 276, W, H - 276, lyricBackground);
   const lyricInk = lyricBackground === WHITE ? BLACK : WHITE;
-  const fits = block(g, verses.join('\n'), 32, 310, 464, 411, size(34), lyricInk, true, false);
+  const { fits } = block(g, verses.join('\n'), 32, 310, 464, 411, size(34), lyricInk, true, false);
   rect(g, 32, 736, 464, 3, BLUE);
   line(g, item.source + ' · 歌词 LRCLIB', 32, 754, 464, size(18), lyricInk);
   return { bounds, fits };
@@ -150,7 +157,7 @@ export function paint(canvas, kind, item, artwork, verses = [], tone = vivid, st
   else dictionary(g, kind, item);
   g.restore();
   finishGraphics(g,imageBounds);
-  return fits;
+  return { fits, imageBounds };
 }
 
 export function paintPrompt(canvas) {

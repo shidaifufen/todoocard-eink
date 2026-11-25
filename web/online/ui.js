@@ -74,12 +74,12 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
       const style = $('style').value;
       const color = theme.value === 'auto' ? cover?.color : theme.value;
       $('theme-swatch').style.backgroundColor = color;
-      const fits = paint(canvas, kind, item, artwork, selectedLyrics(), tone, style, {
+      const { fits, imageBounds } = paint(canvas, kind, item, artwork, selectedLyrics(), tone, style, {
         theme: color, ink: $('ink').value, fontScale: Number($('font').value) / 100, crop: cover?.crop,
       });
       if (kind === 'music' && style !== 'cover') showSelection(fits);
       ready = true;
-      onCard(canvas, item);
+      onCard(canvas, item, imageBounds);
     } else {
       if (showPrompt) paintPrompt(canvas);
       ready = false;

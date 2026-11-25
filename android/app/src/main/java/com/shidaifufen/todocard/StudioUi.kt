@@ -220,8 +220,6 @@ internal fun StudioScreen(
                 if (layoutOpen) {
                     PhotoToneAdjustments(photoEdit, onPhotoEdit)
                     LayoutSlider("杂色吸附", photoEdit.snapThreshold / 100f, 0f..1f) { onPhotoEdit(photoEdit.copy(snapThreshold = (it * 100).toInt())) }
-                    TextButton(onClick = { onPhotoEdit(PhotoEdit.Params(zoom = photoEdit.zoom, dx = photoEdit.dx,
-                        dy = photoEdit.dy, fit = photoEdit.fit)) }) { Text("恢复原色") }
                 }
             }
             if (!isImage && kind != "online") {

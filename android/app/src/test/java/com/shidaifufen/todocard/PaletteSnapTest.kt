@@ -20,6 +20,48 @@ import java.io.File
 @Config(sdk = [34])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class PaletteSnapTest {
+    @Test fun onlineArtworkQuantizationPreservesWhiteLyricsAndSolidHeaders() {
+        val source = Bitmap.createBitmap(Render.W, Render.H, Bitmap.Config.ARGB_8888)
+        source.eraseColor(Color.WHITE)
+        val canvas = Canvas(source)
+        canvas.drawRect(0f, 0f, 276f, 276f, Paint().apply { color = Color.rgb(137, 119, 186) })
+        canvas.drawRect(276f, 0f, Render.W.toFloat(), 276f, Paint().apply { color = Color.BLUE })
+        canvas.drawRect(32f, 320f, 240f, 328f, Paint().apply { color = Color.BLACK })
+        val png = java.io.ByteArrayOutputStream().also { source.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        val encoded = android.util.Base64.encodeToString(png.toByteArray(), android.util.Base64.NO_WRAP)
+        val rendered = OnlineCard.decode("0,0,276,276|$encoded")
+        val codes = Payload.quantize(rendered)
+        for (y in 0 until Render.H) for (x in 0 until Render.W) {
+            if (x < 276 && y < 276) continue
+            val expected = source.getPixel(x, y)
+            val offset = y * Render.W + x
+            val pair = codes[offset / 2].toInt() and 255
+            val code = if (offset % 2 == 0) pair ushr 4 else pair and 15
+            if (rendered.getPixel(x, y) != expected || code != when (expected) {
+                    Color.WHITE -> 1; Color.BLUE -> 5; else -> 0
+                }) fail("Solid pixel changed at $x,$y")
+        }
+        rendered.recycle()
+        source.recycle()
+    }
+
+    @Test fun vividToneUsesSceneParametersAndKeepsCrop() {
+        val edit = PhotoEdit.Params(zoom = 1.6f, dx = .4f, hue = 20f, shadows = .3f).vivid()
+        assertEquals(1.6f, edit.zoom, 0f)
+        assertEquals(.4f, edit.dx, 0f)
+        assertEquals(1.07f, edit.brightness!!, 0f)
+        assertEquals(1.2f, edit.contrast, 0f)
+        assertEquals(1.3f, edit.saturation, 0f)
+        assertEquals(40, edit.snapThreshold)
+        val gray = Bitmap.createBitmap(Render.W, Render.H, Bitmap.Config.ARGB_8888)
+        gray.eraseColor(Color.rgb(112, 112, 112))
+        val output = PhotoEdit.renderBitmap(gray, edit.copy(zoom = 1f, dx = 0f))
+        val expected = (112 - 128) * 1.2 + 128 + 7 * 2.55
+        assertEquals(expected, Color.red(output.getPixel(200, 200)).toDouble(), 1.0)
+        output.recycle()
+        gray.recycle()
+    }
+
     @Test fun snapsScreenshotEdgesAndKeepsDistantPhotoColors() {
         val colors = intArrayOf(Color.rgb(246, 248, 250), Color.rgb(45, 42, 44),
             Color.rgb(236, 15, 24), Color.rgb(16, 18, 238),

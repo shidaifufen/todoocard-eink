@@ -15,6 +15,43 @@ object PaletteSnap {
         snap(bitmap, limit)
     }
 
+    internal fun applySceneTone(bitmap: Bitmap, strength: Int, height: Int) {
+        if (strength <= 0) return
+        val width = bitmap.width
+        val pixels = IntArray(width * height)
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+        val radius = strength * 1.1f
+        val limit = 3f * radius * radius
+        for (index in pixels.indices) {
+            val color = pixels[index]
+            if (color in palette) continue
+            val r = Color.red(color)
+            val g = Color.green(color)
+            val b = Color.blue(color)
+            val luma = .299f * r + .587f * g + .114f * b
+            pixels[index] = when {
+                maxOf(r, g, b) - minOf(r, g, b) < strength * .45f && luma <= strength * .8f -> Color.BLACK
+                maxOf(r, g, b) - minOf(r, g, b) < strength * .45f && luma >= 255 - strength * .8f -> Color.WHITE
+                else -> {
+                    var best = color
+                    var distance = limit
+                    for (ink in palette) {
+                        val dr = r - Color.red(ink)
+                        val dg = g - Color.green(ink)
+                        val db = b - Color.blue(ink)
+                        val squared = dr * dr + dg * dg + db * db
+                        if (squared < distance) {
+                            best = ink
+                            distance = squared.toFloat()
+                        }
+                    }
+                    best
+                }
+            }
+        }
+        bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
+    }
+
     /** Text and vector cards are finished with exact panel colors before they are saved or sent. */
     internal fun finishCard(bitmap: Bitmap): Bitmap = bitmap.also {
         snap(it, 3 * 255 * 255)

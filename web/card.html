@@ -1435,7 +1435,7 @@ function setOnlineReady(ready) {
 }
 mountOnline(document.getElementById('onlinePicker'), onlineCanvas, {
   showPrompt: false,
-  onCard: () => {
+  onCard: (_canvas, _item, bounds) => {
     const revision = ++onlineRevision;
     setOnlineReady(false);
     onlineStatus.textContent = '正在生成六色预览…';
@@ -1444,7 +1444,8 @@ mountOnline(document.getElementById('onlinePicker'), onlineCanvas, {
       if (revision !== onlineRevision) return;
       const body = await image;
       if (!body) throw new Error('无法生成卡面');
-      const response = await fetch('/api/card/online', { method: 'POST', body });
+      const area = bounds ? [bounds.x, bounds.y, bounds.width, bounds.height].join(',') : '';
+      const response = await fetch('/api/card/online?art=' + encodeURIComponent(area), { method: 'POST', body });
       if (!response.ok) throw new Error('保存失败，请重新生成卡片');
       if (revision !== onlineRevision) return;
       const url = URL.createObjectURL(await response.blob());

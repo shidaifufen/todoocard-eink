@@ -32,10 +32,16 @@ object PhotoEdit {
         val gamma: Float = 1f,
         val sharpness: Float = 0f,
         val shadows: Float = 0f,
+        val brightness: Float? = null, // Online scene brightness as a multiplier of the 0–255 range.
     ) {
         val isDefault get() = zoom == 1f && dx == 0f && dy == 0f && hue == 0f &&
                 saturation == 1f && exposure == 0f && contrast == 1f && snapThreshold == 0 &&
-                !fit && gamma == 1f && sharpness == 0f && shadows == 0f
+                !fit && gamma == 1f && sharpness == 0f && shadows == 0f && (brightness == null || brightness == 1f)
+
+        fun vivid() = copy(hue = 0f, saturation = 1.3f, exposure = 0f, contrast = 1.2f,
+            snapThreshold = 40, gamma = 1f, sharpness = 0f, shadows = 0f, brightness = 1.07f)
+
+        fun resetTone() = Params(zoom = zoom, dx = dx, dy = dy, fit = fit)
     }
 
     /** 色相旋转矩阵 */
@@ -54,8 +60,17 @@ object PhotoEdit {
 
     fun buildMatrix(p: Params): ColorMatrix {
         val cm = ColorMatrix()
-        cm.setSaturation(p.saturation)
-        cm.postConcat(hueMatrix(p.hue))
+        if (p.brightness == null) cm.setSaturation(p.saturation)
+        else {
+            val weights = floatArrayOf(.299f, .587f, .114f)
+            val matrix = ColorMatrix().array
+            for (row in 0..2) for (column in 0..2) {
+                matrix[row * 5 + column] = weights[column] * (1f - p.saturation) +
+                    if (row == column) p.saturation else 0f
+            }
+            cm.set(matrix)
+        }
+        if (p.hue != 0f) cm.postConcat(hueMatrix(p.hue))
         // 曝光：整体增益
         val gain = Math.pow(2.0, p.exposure.toDouble()).toFloat()
         cm.postConcat(ColorMatrix(floatArrayOf(
@@ -64,8 +79,9 @@ object PhotoEdit {
             0f, 0f, gain, 0f, 0f,
             0f, 0f, 0f, 1f, 0f,
         )))
-        if (p.contrast != 1f) {
-            val t = (1f - p.contrast) * 127.5f
+        if (p.contrast != 1f || p.brightness != null) {
+            val t = if (p.brightness == null) (1f - p.contrast) * 127.5f
+                else (1f - p.contrast) * 128f + (p.brightness - 1f) * 255f
             cm.postConcat(ColorMatrix(floatArrayOf(
                 p.contrast, 0f, 0f, 0f, t,
                 0f, p.contrast, 0f, 0f, t,
@@ -88,7 +104,8 @@ object PhotoEdit {
         val c = Canvas(out)
         drawInto(c, src, p, band)
         finishArtwork(out, Render.H - band, p)
-        PaletteSnap.apply(out, p.snapThreshold)
+        if (p.brightness == null) PaletteSnap.apply(out, p.snapThreshold)
+        else PaletteSnap.applySceneTone(out, p.snapThreshold, Render.H - band)
         return out
     }
 
@@ -154,7 +171,7 @@ object PhotoEdit {
         val left = (width - dw) / 2 + p.dx.coerceIn(-1f, 1f) * (dw - width).coerceAtLeast(0f) / 2
         val top = (height - dh) / 2 + p.dy.coerceIn(-1f, 1f) * (dh - height).coerceAtLeast(0f) / 2
         val colorAdjusted = p.hue != 0f || p.saturation != 1f ||
-            p.exposure != 0f || p.contrast != 1f
+            p.exposure != 0f || p.contrast != 1f || p.brightness != null
         val paint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
             if (colorAdjusted) colorFilter = ColorMatrixColorFilter(buildMatrix(p))
         }

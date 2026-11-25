@@ -7,7 +7,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.drawable.Icon
 import android.os.Build
 import androidx.core.app.NotificationCompat
 
@@ -15,6 +14,18 @@ import androidx.core.app.NotificationCompat
 object PushStatus {
     internal const val CHANNEL = "manual_push"
     internal const val ID = 2120
+    private const val PROMOTION_EXTRA = "android.requestPromotedOngoing"
+
+    fun promotionAllowed(ctx: Context): Boolean? {
+        if (Build.VERSION.SDK_INT < 36) return null
+        val manager = ctx.getSystemService(NotificationManager::class.java)
+        return runCatching { manager.javaClass.getMethod("canPostPromotedNotifications").invoke(manager) as Boolean }
+            .getOrNull()
+    }
+
+    fun promotionSettings(ctx: Context): Intent =
+        Intent("android.settings.APP_NOTIFICATION_PROMOTION_SETTINGS")
+            .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, ctx.packageName)
 
     fun ensureChannel(ctx: Context) {
         val manager = ctx.getSystemService(NotificationManager::class.java)
@@ -49,13 +60,8 @@ object PushStatus {
                 .invoke(style, progress == null)
             if (progress != null) styleClass.getMethod("setProgress", Int::class.javaPrimitiveType)
                 .invoke(style, progress.coerceIn(0, 100))
-            runCatching {
-                styleClass.getMethod("setProgressTrackerIcon", Icon::class.java)
-                    .invoke(style, Icon.createWithResource(ctx, R.drawable.ic_push_status))
-            }
             builder.setStyle(style as android.app.Notification.Style)
             builder.setOngoing(true)
-            builder.setColorized(true)
             runCatching {
                 builder.javaClass.getMethod("setShortCriticalText", String::class.java)
                     .invoke(builder, criticalText(text, progress))
@@ -64,7 +70,12 @@ object PushStatus {
                 builder.javaClass.getMethod("setRequestPromotedOngoing", Boolean::class.javaPrimitiveType)
                     .invoke(builder, true)
             }
-            builder.build()
+            builder.build().also { promoted ->
+                val eligible = runCatching {
+                    promoted.javaClass.getMethod("hasPromotableCharacteristics").invoke(promoted)
+                }.getOrNull()
+                if (eligible == false) android.util.Log.d("TodooPush", "System does not consider this notification promotable")
+            }
         }.getOrDefault(notification)
     }
 
@@ -98,6 +109,7 @@ object PushStatus {
             .setAutoCancel(finished)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .apply {
+                if (Build.VERSION.SDK_INT >= 36) extras.putBoolean(PROMOTION_EXTRA, true)
                 setProgress(100, if (finished && text.contains("成功")) 100 else progress ?: 0, progress == null && !finished)
             }
 }

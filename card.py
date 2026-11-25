@@ -2677,9 +2677,18 @@ def make_routes():
                 if image.size != (CARD_W, CARD_H):
                     raise ValueError("卡面必须是 528×792 PNG")
                 source = image.convert("RGB")
+            area = request.query.get("art")
+            bounds = None
+            if area:
+                x, y, width, height = map(int, area.split(","))
+                if not (0 <= x < CARD_W and 0 <= y < CARD_H and
+                        0 < width <= CARD_W - x and 0 < height <= CARD_H - y):
+                    raise ValueError("图片区域无效")
+                bounds = (x, y, width, height)
         except (OSError, ValueError, SyntaxError, Image.DecompressionBombError):
             return web.json_response({"ok": False, "error": "卡面必须是 528×792 PNG"}, status=400)
-        data = LP.png(await asyncio.to_thread(image_tone.panel_preview, source))
+        data = LP.png(await asyncio.to_thread(image_tone.panel_preview, source) if area is None else
+                      await asyncio.to_thread(image_tone.finish_scene, source, bounds))
         target = current().cards_dir / "online.png"
         with tempfile.NamedTemporaryFile(dir=target.parent, delete=False) as output:
             temporary = Path(output.name)

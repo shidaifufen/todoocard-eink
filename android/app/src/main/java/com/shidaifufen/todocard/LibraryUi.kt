@@ -263,14 +263,14 @@ internal fun LibraryScreen(
             }
             if (tool == 1) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("自然", "插画净色", "黑白").forEachIndexed { index, label ->
+                listOf("自然", "鲜明", "插画净色", "黑白").forEachIndexed { index, label ->
                     OutlinedButton(onClick = {
-                        val neutral = edit.copy(hue = 0f, contrast = 1f, saturation = 1f,
-                            exposure = 0f, gamma = 1f, sharpness = 0f, snapThreshold = 0, shadows = 0f)
+                        val neutral = edit.resetTone()
                         onEdit(when (index) {
-                            1 -> neutral.copy(exposure = .10f, contrast = 1.18f, gamma = 1.05f,
+                            1 -> edit.vivid()
+                            2 -> neutral.copy(exposure = .10f, contrast = 1.18f, gamma = 1.05f,
                                 saturation = 1.05f, sharpness = .12f, snapThreshold = 45)
-                            2 -> neutral.copy(saturation = 0f)
+                            3 -> neutral.copy(saturation = 0f)
                             else -> neutral
                         })
                         sixColors = true
@@ -279,7 +279,7 @@ internal fun LibraryScreen(
                         shape = RoundedCornerShape(8.dp)) { Text(label) }
                 }
             }
-            PhotoToneAdjustments(edit, onEdit)
+            PhotoToneAdjustments(edit, onEdit, showPresets = false)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("杂色吸附", Modifier.weight(1f), fontSize = 13.sp)
                 Switch(edit.snapThreshold > 0, onCheckedChange = {
@@ -311,10 +311,17 @@ internal fun LibraryScreen(
 }
 
 @Composable
-internal fun PhotoToneAdjustments(edit: PhotoEdit.Params, onEdit: (PhotoEdit.Params) -> Unit) {
+internal fun PhotoToneAdjustments(edit: PhotoEdit.Params, onEdit: (PhotoEdit.Params) -> Unit, showPresets: Boolean = true) {
+    if (showPresets) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = { onEdit(edit.resetTone()) }) { Text("原色") }
+        FilledTonalButton(onClick = { onEdit(edit.vivid()) }) { Text("鲜明") }
+    }
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
         .padding(horizontal = 14.dp, vertical = 8.dp)) {
-        Adjustment("亮度", edit.exposure, -2f..2f, { onEdit(edit.copy(exposure = it)) }, "%+.2f EV")
+        val brightness = edit.brightness
+        if (brightness != null) Adjustment("亮度", brightness * 100f, 65f..145f,
+            { onEdit(edit.copy(brightness = it / 100f)) }, "%.0f%%")
+        else Adjustment("亮度", edit.exposure, -2f..2f, { onEdit(edit.copy(exposure = it)) }, "%+.2f EV")
         Adjustment("暗部提亮", edit.shadows * 100f, 0f..100f, { onEdit(edit.copy(shadows = it / 100f)) }, "%.0f%%")
         Adjustment("对比度", edit.contrast * 100f, 60f..160f, { onEdit(edit.copy(contrast = it / 100f)) }, "%.0f%%")
         Adjustment("Gamma", edit.gamma, .5f..2f, { onEdit(edit.copy(gamma = it)) }, "%.2f")
@@ -452,10 +459,15 @@ internal fun SettingsScreen(
                     modifier = Modifier.padding(top = 4.dp))
                 TextButton(onClick = { aiSettings = true }) { Text("配置诗词赏析 / AI 生图接口") }
                 TextButton(onClick = {
-                    runCatching { settingsContext.startActivity(android.content.Intent(
+                    val opened = android.os.Build.VERSION.SDK_INT >= 36 &&
+                        runCatching { settingsContext.startActivity(PushStatus.promotionSettings(settingsContext)) }.isSuccess
+                    if (!opened) runCatching { settingsContext.startActivity(android.content.Intent(
                         android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                         .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, settingsContext.packageName)) }
                 }) { Text("系统通知与实时活动设置") }
+                if (PushStatus.promotionAllowed(settingsContext) == false) {
+                    Text("系统未允许土豆片显示实时活动", fontSize = 12.sp, color = StudioMuted)
+                }
                 Text("推送会显示查找、连接、进度、显影与结果，结束后约 5 秒自动收起。胶囊样式由系统控制。",
                     fontSize = 12.sp, color = StudioMuted)
             }

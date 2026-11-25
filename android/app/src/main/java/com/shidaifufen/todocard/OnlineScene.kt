@@ -42,15 +42,31 @@ internal object OnlineCard {
 
     fun decode(raw: String): Bitmap {
         require(raw.length <= 3 * 1024 * 1024) { "卡片文件过大" }
-        val bytes = Base64.decode(raw, Base64.DEFAULT)
+        val bytes = Base64.decode(raw.substringAfter('|'), Base64.DEFAULT)
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         require(bounds.outWidth == Render.W && bounds.outHeight == Render.H && bounds.outMimeType == "image/png") {
             "无法读取当前卡面"
         }
         val source = checkNotNull(BitmapFactory.decodeByteArray(bytes, 0, bytes.size)) { "无法读取当前卡面" }
-        try { return PhotoEdit.panelPreview(source) }
-        finally { source.recycle() }
+        try {
+            if ('|' !in raw) return PhotoEdit.panelPreview(source)
+            val result = source.copy(Bitmap.Config.ARGB_8888, true)
+            val area = raw.substringBefore('|')
+            if (area.isEmpty()) return result
+            val values = area.split(',').map(String::toInt)
+            require(values.size == 4) { "图片区域无效" }
+            val (x, y, width, height) = values
+            require(x in 0 until Render.W && y in 0 until Render.H &&
+                width in 1..(Render.W - x) && height in 1..(Render.H - y)) { "图片区域无效" }
+            val artwork = Bitmap.createBitmap(source, x, y, width, height)
+            try {
+                val ink = PhotoEdit.panelPreview(artwork)
+                try { android.graphics.Canvas(result).drawBitmap(ink, x.toFloat(), y.toFloat(), null) }
+                finally { ink.recycle() }
+            } finally { if (artwork !== source) artwork.recycle() }
+            return result
+        } finally { source.recycle() }
     }
 
     fun save(ctx: Context, bitmap: Bitmap) {

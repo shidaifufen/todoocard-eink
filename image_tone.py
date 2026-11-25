@@ -71,3 +71,11 @@ def panel_preview(image):
     preview = Image.new("RGB", image.size)
     preview.putdata([lookup[code] for byte in packed for code in (byte >> 4, byte & 15)][:image.width * image.height])
     return preview
+
+
+def finish_scene(image, bounds):
+    if bounds:
+        x, y, width, height = bounds
+        art = image.crop((x, y, x + width, y + height))
+        image.paste(panel_preview(art), (x, y))
+    return image
