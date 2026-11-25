@@ -95,7 +95,7 @@ internal fun StudioScreen(
     onScanAll: () -> Unit,
     scanTimedOut: Boolean,
     onGenerate: (String) -> Unit,
-    onlineControls: (@Composable () -> Unit)?,
+    onlineControls: @Composable () -> Unit,
     onlineSaving: Boolean,
     photoEdit: PhotoEdit.Params,
     onPhotoEdit: (PhotoEdit.Params) -> Unit,
@@ -136,7 +136,7 @@ internal fun StudioScreen(
             FilterChip(selected = !onlineContent, onClick = { onSourceMode(false) }, enabled = !busy, label = { Text("手动内容") })
         }
         Spacer(Modifier.height(8.dp))
-        if (onlineControls != null) {
+        if (kind == "online") {
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) { onlineControls() }
         }
         if (kind == "photo") Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp),
