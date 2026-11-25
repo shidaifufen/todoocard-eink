@@ -1,6 +1,7 @@
 package com.shidaifufen.todocard
 
 import android.content.Intent
+import android.content.ClipData
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -77,5 +78,62 @@ class PaletteSnapTest {
         val received = mutableListOf<List<Uri>>()
         handleSharedIntent(intent, { received.add(it) }, { fail("unexpected text share") })
         assertEquals(listOf(listOf(first, second)), received)
+    }
+
+    @Test fun renderedPoemUsesSolidWhiteAndInkThroughPayloadPreparation() {
+        val ctx = RuntimeEnvironment.getApplication()
+        PlanStore.init(ctx)
+        val poem = Render.Card(kind = "poem", poemTitle = "秋风辞", poemBy = "西汉 · 刘彻",
+            poemLines = listOf("秋风起兮白云飞，草木黄落兮雁南归。", "兰有秀兮菊有芳，怀佳人兮不能忘。",
+                "泛楼船兮济汾河，横中流兮扬素波。", "箫鼓鸣兮发棹歌，欢乐极兮哀情多。", "少壮几时兮奈老何！"),
+            poemNote = "秋风吹起，白云飞。草木枯黄，雁往南飞。思念的人久久不能忘。")
+        val palette = setOf(Color.WHITE, Color.BLACK, Color.RED, Color.BLUE, Color.GREEN, Color.YELLOW)
+        val image = Render.render(poem)
+        try {
+            val pixels = IntArray(image.width * image.height)
+            image.getPixels(pixels, 0, image.width, 0, 0, image.width, image.height)
+            assertTrue(pixels.all { it in palette })
+            assertTrue(pixels.count { it == Color.WHITE } > pixels.size * .8)
+            assertTrue(pixels.count { it == Color.BLACK } > 1000)
+            assertTrue(pixels.count { it == Color.RED } > 100)
+            val payloadPixels = Payload.quantize(image)
+            for (i in pixels.indices) {
+                if (pixels[i] != Color.WHITE) continue
+                val packed = payloadPixels[i / 2].toInt() and 0xff
+                val ink = if (i % 2 == 0) packed ushr 4 else packed and 0x0f
+                if (ink != 1) fail("White pixel at index $i changed during quantization")
+            }
+            val out = File("build/reports/card-previews").apply { mkdirs() }
+            File(out, "autumn-poem-clean.png").outputStream().use {
+                assertTrue(image.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+        } finally {
+            image.recycle()
+        }
+    }
+
+    @Test fun imageSharesMergeClipItemsAndStreamExtras() {
+        val first = Uri.parse("content://photos/one")
+        val second = Uri.parse("content://photos/two")
+        val clip = ClipData("photos", arrayOf("image/png"), ClipData.Item(first)).apply {
+            addItem(ClipData.Item(second))
+            addItem(ClipData.Item(Uri.parse("https://example.com/not-a-local-image")))
+        }
+        val intent = Intent(Intent.ACTION_SEND_MULTIPLE).setType("image/png")
+            .putParcelableArrayListExtra(Intent.EXTRA_STREAM, arrayListOf(first))
+            .apply { clipData = clip }
+        handleSharedIntent(intent, { assertEquals(listOf(first, second), it) }, { fail("unexpected text share") })
+        assertEquals(listOf(first, second), sharedImageUris(emptyList(), clip))
+    }
+
+    @Test fun textCardFinishingSnapsAllOffPalettePixels() {
+        val source = intArrayOf(Color.rgb(246, 248, 250), Color.rgb(40, 42, 44),
+            Color.rgb(125, 70, 130), Color.rgb(250, 100, 100), Color.BLUE)
+        val image = Bitmap.createBitmap(source, source.size, 1, Bitmap.Config.ARGB_8888)
+            .copy(Bitmap.Config.ARGB_8888, true)
+        PaletteSnap.finishCard(image)
+        val actual = IntArray(source.size)
+        image.getPixels(actual, 0, source.size, 0, 0, source.size, 1)
+        assertArrayEquals(intArrayOf(Color.WHITE, Color.BLACK, Color.BLUE, Color.RED, Color.BLUE), actual)
     }
 }

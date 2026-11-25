@@ -4,9 +4,13 @@ import android.Manifest
 import android.bluetooth.le.ScanResult
 import android.content.Context
 import android.content.Intent
+import android.content.ClipData
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.view.DragAndDropPermissions
+import android.view.DragEvent
+import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -50,6 +54,12 @@ internal val TEMPLATES = listOf(
     "online" to "在线场景",
 )
 
+internal fun sharedImageUris(streams: List<Uri>, clip: ClipData? = null): List<Uri> =
+    (streams.asSequence() + (0 until (clip?.itemCount ?: 0)).asSequence()
+        .mapNotNull { clip?.getItemAt(it)?.uri })
+        .filter { it.scheme == "content" || it.scheme == "file" }
+        .distinct().take(30).toList()
+
 internal fun handleSharedIntent(intent: Intent?,
                                onPhotos: (List<Uri>) -> Unit, onText: (String) -> Unit) {
     when (intent?.action) {
@@ -57,19 +67,22 @@ internal fun handleSharedIntent(intent: Intent?,
             val uri = (if (Build.VERSION.SDK_INT >= 33)
                 intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
             else @Suppress("DEPRECATION") intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
-                ?: intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
-            if (uri != null) onPhotos(listOf(uri))
-            else intent.getStringExtra(Intent.EXTRA_TEXT)?.let(onText)
+            val images = sharedImageUris(listOfNotNull(uri, intent.data), intent.clipData)
+            if (images.isNotEmpty()) onPhotos(images.take(1))
+            else (intent.getCharSequenceExtra(Intent.EXTRA_TEXT) ?: intent.clipData
+                ?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text)?.toString()?.let(onText)
         }
         Intent.ACTION_SEND_MULTIPLE -> {
             val uris = if (Build.VERSION.SDK_INT >= 33)
                 intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
             else @Suppress("DEPRECATION") intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
-            (uris ?: intent.clipData?.let { clip ->
-                (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }
-            }?.toCollection(ArrayList()))?.distinct()?.take(30)?.takeIf { it.isNotEmpty() }?.let(onPhotos)
+            val images = sharedImageUris(uris.orEmpty(), intent.clipData)
+            if (images.isNotEmpty()) onPhotos(images)
         }
-        Intent.ACTION_VIEW -> intent.data?.let { onPhotos(listOf(it)) }
+        Intent.ACTION_VIEW -> {
+            val images = sharedImageUris(listOfNotNull(intent.data), intent.clipData)
+            if (images.isNotEmpty()) onPhotos(images)
+        }
         Intent.ACTION_PROCESS_TEXT -> intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)
             ?.toString()?.let(onText)
     }
@@ -81,7 +94,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         incomingIntent = if (savedInstanceState == null) intent else null
-        setContent { App(incomingIntent) }
+        setContent { App(this, incomingIntent) }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -92,7 +105,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun App(incomingIntent: Intent?) {
+private fun App(activity: MainActivity, incomingIntent: Intent?) {
     val ctx = LocalContext.current
     remember(ctx) { PlanStore.init(ctx); true }
     val scope = rememberCoroutineScope()
@@ -249,7 +262,7 @@ private fun App(incomingIntent: Intent?) {
         }
     }
 
-    fun loadSharedPhotos(uris: List<Uri>) {
+    fun loadSharedPhotos(uris: List<Uri>, permission: DragAndDropPermissions? = null) {
         if (uris.isEmpty()) return
         scope.launch {
             status = "正在导入 ${uris.size} 张分享照片…"
@@ -273,12 +286,30 @@ private fun App(incomingIntent: Intent?) {
             albums = PlanStore.albums(ctx)
             status = if (imported.size == uris.size) "已导入 ${imported.size} 张，正准备推送第一张" else
                 "已导入 ${imported.size}/${uris.size} 张，正准备推送第一张"
+        }.invokeOnCompletion { permission?.release() }
+    }
+
+    val dropWindow = activity.findViewById<View>(android.R.id.content)
+    DisposableEffect(dropWindow, scope) {
+        dropWindow?.setOnDragListener { _, event ->
+            when (event.action) {
+                DragEvent.ACTION_DRAG_STARTED -> event.clipDescription?.hasMimeType("image/*") == true
+                DragEvent.ACTION_DROP -> {
+                    val images = sharedImageUris(emptyList(), event.clipData)
+                    if (images.isEmpty()) false else {
+                        loadSharedPhotos(images, activity.requestDragAndDropPermissions(event))
+                        true
+                    }
+                }
+                else -> true
+            }
         }
+        onDispose { dropWindow?.setOnDragListener(null) }
     }
 
     LaunchedEffect(incomingIntent) {
         handleSharedIntent(incomingIntent,
-            onPhotos = ::loadSharedPhotos,
+            onPhotos = { loadSharedPhotos(it) },
             onText = { text ->
                 if (text.isNotBlank()) {
                     card = card.copy(customTitle = "分享内容",

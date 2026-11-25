@@ -164,7 +164,8 @@ printf '<?xml version="1.0" encoding="utf-8" standalone="yes" ?>\n<map>\n    <st
 | 相册（SAF + 缩略图） | ✅ | 代码 + UI 渲染 |
 | 计划/时间轴/历史 | ✅ | 真机截图 |
 | 配对 + 等广播推送 | ✅ | 真机扫码 + 用户确认推送成功 |
-| 系统分享 / 荣耀传送门 | ✅ | Manifest 配置 |
+| Android 系统分享 | ✅ | 接收图片与文字 Intent |
+| 荣耀任意门服务 | 待接入 | 需获取厂商服务接入规范，并在 MagicOS 11 验证服务显示及图片交付 |
 | QuickLZ 与桌面版一致 | ✅ | CI 逐字节断言（`raw.bin` vs `expected.qlz`） |
 | BLE 传输 | ✅ | 用户确认推送成功；协议按官方抓包对齐 |
 

@@ -14,9 +14,12 @@ internal object LayoutRender {
             val canvas = Canvas(bitmap)
             canvas.drawColor(Color.WHITE)
             val values = values(card)
+            var containsPhoto = false
             for (node in template.nodes) {
                 val n = JSONObject(node.json)
                 if (n.optString("showIf").let { it.isNotBlank() && values[it].isNullOrBlank() }) continue
+                if (node.type == "builtin" && n.optString("kind") == "custom" && Render.hasCustomPhotos(card))
+                    containsPhoto = true
                 canvas.save()
                 try {
                     canvas.clipRect(node.x, node.y, node.x + node.width, node.y + node.height)
@@ -24,7 +27,7 @@ internal object LayoutRender {
                     draw(canvas, node, n, card, values)
                 } finally { canvas.restore() }
             }
-            return bitmap
+            return if (containsPhoto) bitmap else PaletteSnap.finishCard(bitmap)
         } catch (error: Exception) { bitmap.recycle(); throw error }
     }
 

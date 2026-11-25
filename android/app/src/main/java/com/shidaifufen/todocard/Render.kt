@@ -110,7 +110,14 @@ object Render {
 
     private fun Canvas.rule(y: Float) = fill(M, y, W - M, y + 2f, BLACK)
 
-    fun render(card: Card): Bitmap = LayoutStore.template(card.kind)?.let { LayoutRender.render(card, it) } ?: renderNative(card)
+    fun render(card: Card): Bitmap {
+        LayoutStore.template(card.kind)?.let { return LayoutRender.render(card, it) }
+        val bitmap = renderNative(card)
+        return if (card.kind == "custom" && hasCustomPhotos(card)) bitmap else PaletteSnap.finishCard(bitmap)
+    }
+
+    internal fun hasCustomPhotos(card: Card) =
+        card.customBlocks.any { it.enabled && it.type == "image" && it.imagePath.isNotBlank() }
 
     internal fun renderNative(card: Card): Bitmap {
         layout.set(card)
