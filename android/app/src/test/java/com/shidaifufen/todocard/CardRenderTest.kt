@@ -26,7 +26,7 @@ class CardRenderTest {
             setAttribute(ExifInterface.TAG_FOCAL_LENGTH, "541/100")
             setAttribute(ExifInterface.TAG_FOCAL_LENGTH_IN_35MM_FILM, "23")
             setAttribute(ExifInterface.TAG_F_NUMBER, "1.6")
-            setAttribute(ExifInterface.TAG_EXPOSURE_TIME, "0.003131128")
+            setAttribute(ExifInterface.TAG_EXPOSURE_TIME, "1/319")
             setAttribute(ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY, "50")
             setLatLong(31.8, 117.28)
             saveAttributes()
