@@ -9,7 +9,7 @@
 
 ## 安卓版（原生 Kotlin）
 
-- 安装包：[Android 1.7.1](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.7.1-android)（固定签名，可覆盖升级 1.3.0 及以后使用相同签名的版本）
+- 安装包 [Android 1.8.0](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.8.0-android)。使用固定签名，可覆盖升级已采用该签名的版本。安装后可在「设置 → 在线升级」检查并安装后续正式版。
 - 源码：`android/`；构建：push 到 main 触发 `.github/workflows/build-android.yml`
 - 功能：卡片模板、照片裁切与调色、相册、每日计划与发送历史、配对后等广播推送、Android 系统分享与跨窗口拖放图片
 - 荣耀任意门由 MagicOS 推荐服务。土豆片的厂商服务接入及 MagicOS 11 真机验证待完成。[荣耀任意门说明](https://www.honor.com/cn/support/content/zh-cn15868678/)
@@ -17,7 +17,7 @@
 
 ### 在线场景与看板版式
 
-在卡片列表打开「在线场景」，可按名称搜索或随手抽一张。音乐使用 Apple Music 封面，可选大封面或从 LRCLIB 选择歌词片段。电影搜索使用 Wikipedia 与 Apple TV 热门榜，随机海报取自 Apple TV 榜单。英语短语由 Datamuse 提供，成语词条支持汉字和拼音查询，来源为 chinese-xinhua。
+在卡片列表打开「在线场景」，可按名称搜索或随手抽一张。音乐使用 Apple Music 封面，「大封面＋一句」可选一行歌词，「封面＋歌词」点选起止行后自动选中中间各行。歌词来自 LRCLIB。电影海报铺满卡片，底部显示片名和上映年份。计划中可分别选择随机音乐封面、电影海报、英语短语和成语。
 
 先升级一次应用，之后修改引擎支持的布局无需重新打包。进入 **设置 → 外观 → 看板版式包 → 从 GitHub 导入 / 更新**，粘贴公开的 JSON 文件链接，获取并预览后应用。也可以下载 JSON 后选择“导入版式”。相册、内容、设备、计划及密钥与版式单独保存；手动和定时推送共用导入版式。
 
@@ -38,8 +38,8 @@ Windows、macOS 和纯网页版也可以导入同一份 JSON。在「看板版�
 
 | 平台 | 下载 |
 |---|---|
-| macOS (Apple Silicon) | [macOS 1.0.18](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.0.18-macos) |
-| Windows (x64) | [Windows 1.0.18](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.0.18-windows) |
+| macOS (Apple Silicon) | [macOS 1.0.19](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.0.19-macos) |
+| Windows (x64) | [Windows 1.0.19](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.0.19-windows) |
 
 1. 解压到任意文件夹（路径别带特殊符号）
 2. macOS 双击 `start-mac.command`（首次右键 → 打开）；Windows 双击 `土豆片卡片工坊.exe`
