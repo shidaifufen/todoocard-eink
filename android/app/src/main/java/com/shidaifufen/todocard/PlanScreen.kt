@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -80,9 +81,10 @@ fun PlanScreen(ctx: android.content.Context, onReplay: (PlanStore.Hist) -> Unit)
             }
             itvs.forEachIndexed { i, t ->
                 val days = when (t.days) { "workday" -> "工作日"; "weekend" -> "周末"; else -> "每天" }
+                val cards = if (t.templates.size == 1) templateName(t.templates.first()) else "从 ${t.templates.size} 张卡片中随机推送"
                 PlanRow(
                     time = "${t.start}–${t.end}",
-                    title = "每 ${t.everyMin} 分钟 · $days · ${templateName(t.template)}",
+                    title = "每 ${t.everyMin} 分钟 · $days · $cards",
                     enabled = t.enabled,
                     onToggle = { v ->
                         itvs = itvs.toMutableList().also { it[i] = t.copy(enabled = v) }
@@ -291,7 +293,7 @@ private fun IntervalEditDialog(initial: PlanStore.Interval, title: String, onDis
         onDismissRequest = onDismiss,
         title = { Text(title, fontSize = 16.sp) },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 TimeField("开始", item.start) { item = item.copy(start = it) }
                 TimeField("结束", item.end) { item = item.copy(end = it) }
                 Spacer(Modifier.height(10.dp))
@@ -307,11 +309,22 @@ private fun IntervalEditDialog(initial: PlanStore.Interval, title: String, onDis
                     }
                 }
                 Spacer(Modifier.height(10.dp))
-                Text("模板", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                TemplatePicker(item.template) { item = item.copy(template = it) }
+                Text("推送卡片 · 已选 ${item.templates.size} 张", fontSize = 13.sp)
+                Text("每次到点随机推送其中一张", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                val choices = TEMPLATES.filter { it.first != "online" || "online" in initial.templates } + OnlinePlanCategories
+                choices.forEach { (key, name) ->
+                    val checked = key in item.templates
+                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                        .toggleable(checked, role = androidx.compose.ui.semantics.Role.Checkbox, onValueChange = {
+                            item = item.copy(templates = if (it) item.templates + key else item.templates - key)
+                        }), verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp))
+                        Text(name)
+                    }
+                }
             }
         },
-        confirmButton = { TextButton(onClick = { onConfirm(item) }) { Text("保存") } },
+        confirmButton = { TextButton(enabled = item.templates.isNotEmpty(), onClick = { onConfirm(item) }) { Text("保存") } },
         dismissButton = {
             Row {
                 onDelete?.let { TextButton(onClick = it) { Text("删除", color = MaterialTheme.colorScheme.error) } }

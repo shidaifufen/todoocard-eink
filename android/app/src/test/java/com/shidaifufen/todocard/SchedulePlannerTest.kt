@@ -7,6 +7,17 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 
 class SchedulePlannerTest {
+    @Test fun mixedIntervalCreatesOneSlotPerTimeAndKeepsItsCandidates() {
+        val zone = ZoneId.of("Asia/Shanghai")
+        val at = ZonedDateTime.of(2026, 11, 24, 9, 0, 0, 0, zone).toInstant().toEpochMilli()
+        val mixed = PlanStore.Interval(30, "09:00", "10:00", "all", listOf("quote", "online_music", "quote"))
+        val slots = SchedulePlanner.slots(emptyList(), listOf(mixed), at, at + 3600_000, zone)
+        assertEquals(listOf(at, at + 1800_000, at + 3600_000), slots.map { it.at })
+        assertTrue(slots.all { it.templates == listOf("online_music", "quote") })
+        val reversed = mixed.copy(templates = mixed.templates.reversed().distinct())
+        assertEquals(slots, SchedulePlanner.slots(emptyList(), listOf(reversed), at, at + 3600_000, zone))
+    }
+
     @Test fun overlappingRulesForSameCardOnlySendOnce() {
         val zone = ZoneId.of("Asia/Shanghai")
         val at = ZonedDateTime.of(2026, 11, 24, 9, 0, 0, 0, zone).toInstant().toEpochMilli()

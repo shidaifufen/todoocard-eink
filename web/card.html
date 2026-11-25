@@ -987,17 +987,21 @@ function renderItv(){
   const box = $('itvList'); if (!box) return;
   const list = STATE.intervals || [];
   box.innerHTML = '';
-  list.forEach((it, i) => {
+  list.forEach(it => {
     const div = document.createElement('div');
     div.className = 'sched';
-    const opts = Object.keys(TPL_LABEL).map(k =>
-      `<option value="${k}"${it.kind===k?' selected':''}>${TPL_LABEL[k]}</option>`).join('');
+    const selected = it.kinds || [it.kind || 'photo'];
+    div.dataset.id = it.id || '';
+    const opts = Object.entries(TPL_LABEL).map(([key, label]) =>
+      `<label><input class="i-kind" type="checkbox" value="${key}"${selected.includes(key) ? ' checked' : ''}> ${label}</label>`).join('');
     const days = [['all','每天'],['workday','工作日'],['weekend','周末']].map(([v,n]) =>
       `<option value="${v}"${(it.days||'all')===v?' selected':''}>${n}</option>`).join('');
     div.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px;'
       + 'border:1px solid var(--line);border-radius:10px;margin-bottom:8px';
     div.innerHTML = `
-      <select class="i-kind" style="width:150px">${opts}</select>
+      <details style="width:100%"><summary>推送卡片 · 已选 <span class="i-count">${selected.length}</span> 张</summary>
+        <div style="display:flex;flex-wrap:wrap;gap:8px 14px;padding:8px 0">${opts}</div>
+      </details>
       <span class="hint" style="margin:0">每</span>
       <input class="i-every" type="number" min="5" step="5" value="${it.every_min||60}" style="width:70px">
       <span class="hint" style="margin:0">分钟</span>
@@ -1008,26 +1012,34 @@ function renderItv(){
       <label style="display:flex;align-items:center;gap:4px;margin:0">
         <input class="i-on" type="checkbox"${it.enabled!==false?' checked':''}> 启用</label>
       <button style="margin-left:auto;padding:2px 10px" onclick="this.parentNode.remove(); saveItv()">删</button>`;
+    div.addEventListener('change', () => {
+      div.querySelector('.i-count').textContent = div.querySelectorAll('.i-kind:checked').length;
+    });
     box.appendChild(div);
   });
 }
 function addItv(){
-  STATE.intervals = STATE.intervals || [];
-  STATE.intervals.push({kind:'photo', every_min:60, start:'07:00', end:'23:00', days:'all', enabled:true});
+  STATE.intervals = collectItv();
+  STATE.intervals.push({id: 'itv-' + crypto.randomUUID(), kinds:['photo'], every_min:60, start:'07:00', end:'23:00', days:'all', enabled:true});
   renderItv();
 }
-async function saveItv(){
-  const items = [...document.querySelectorAll('#itvList .sched')].map((el, i) => ({
-    id: 'itv' + i,
-    kind: el.querySelector('.i-kind').value,
+function collectItv(){
+  return [...document.querySelectorAll('#itvList .sched')].map((el, i) => ({
+    id: el.dataset.id || 'itv' + i,
+    kinds: [...el.querySelectorAll('.i-kind:checked')].map(control => control.value),
     every_min: +el.querySelector('.i-every').value || 60,
     start: el.querySelector('.i-start').value || '07:00',
     end: el.querySelector('.i-end').value || '23:00',
     days: el.querySelector('.i-days').value,
     enabled: el.querySelector('.i-on').checked,
   }));
+}
+async function saveItv(){
+  const items = collectItv();
+  if (items.some(item => !item.kinds.length)) { toast('每条间隔任务至少选一张卡片'); return; }
   const d = await postJSON('/api/card/config', {intervals: items});
-  if (d.ok && d.card) STATE = d.card;
+  if (!d.ok) { toast(d.error || '间隔任务保存失败'); return; }
+  if (d.card) STATE = d.card;
   toast('间隔任务已保存（' + items.length + ' 条）');
   loadTimeline();
 }

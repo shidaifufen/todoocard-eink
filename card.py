@@ -200,13 +200,19 @@ class CardService:
 
     def save_cfg(self, patch: dict) -> dict:
         cur = dict(self.cfg)
+        if "intervals" in patch:
+            cur["intervals"] = [
+                {**job, "kinds": kinds, "kind": kinds[0]}
+                for job in (patch["intervals"] or []) if isinstance(job, dict)
+                if (kinds := interval_kinds(job))
+            ]
         if "image_tone" in patch:
             cur["image_tone"] = image_tone.settings(patch["image_tone"])
         for key in ("enabled", "device_id", "device_name", "folders", "schedule",
                     "todos", "weather", "cooldown_days", "photo_mode", "photo_overlay",
                     "bing_enabled", "ai", "ai_prompt", "button_photo", "countdowns",
                     "recursive", "scale", "custom", "fill", "theme", "poem_note", "poem_full",
-                    "poem_ai", "standby", "line_gap", "auto_fit", "tpl_scale", "tpl_line", "photo_fields", "intervals", "fav", "history_keep", "plan_photo"):
+                    "poem_ai", "standby", "line_gap", "auto_fit", "tpl_scale", "tpl_line", "photo_fields", "fav", "history_keep", "plan_photo"):
             if key in patch:
                 cur[key] = patch[key]
         if "schedule" in patch:
@@ -1981,6 +1987,9 @@ class CardService:
         for job in (self.cfg.get("intervals") or []):
             if not job.get("enabled", True):
                 continue
+            kinds = interval_kinds(job)
+            if not kinds:
+                continue
             every = max(5, int(job.get("every_min") or 60))
             sh, sm = (int(x) for x in str(job.get("start") or "07:00").split(":"))
             eh, em = (int(x) for x in str(job.get("end") or "23:00").split(":"))
@@ -1990,8 +1999,8 @@ class CardService:
                 stop = datetime.combine(d, datetime.min.time()).replace(hour=eh, minute=em)
                 while t <= stop:
                     if t >= real and start <= t <= end:
-                        out.append({"ts": int(t.timestamp()), "kind": job.get("kind", "photo"),
-                                    "label": TEMPLATES.get(job.get("kind", "photo"), job.get("kind")),
+                        out.append({"ts": int(t.timestamp()), "kind": kinds[0],
+                                    "label": TEMPLATES[kinds[0]] if len(kinds) == 1 else f"从 {len(kinds)} 张卡片随机推送",
                                     "source": f"每 {every} 分钟"})
                     t = t + timedelta(minutes=every)
                 d = d + timedelta(days=1)
@@ -2026,6 +2035,9 @@ class CardService:
                     for _job in (self.cfg.get("intervals") or []):
                         if not _job.get("enabled", True):
                             continue
+                        kinds = interval_kinds(_job)
+                        if not kinds:
+                            continue
                         _fixed_minutes = set()
                         for _it in (self.cfg.get("schedule") or []):
                             try:
@@ -2043,9 +2055,10 @@ class CardService:
                             _win = max(1, int(self.cfg.get("catch_up_min", 30) or 30))
                             if now.timestamp() > _ts + _win * 60:
                                 continue
-                            if _job.get("kind") == "photo" and not self._scan_photos():
+                            kind = random.Random(_key).choice(sorted(kinds))
+                            if kind == "photo" and not self._scan_photos():
                                 continue
-                            res = await self.send(_job.get("kind", "photo"), requeue=True,
+                            res = await self.send(kind, requeue=False,
                                                   wait_sec=45, plan_ts=_ts)
                             if res.get("ok"):
                                 runs[_key] = int(now.timestamp())
@@ -2257,6 +2270,13 @@ TEMPLATES = {
     "online": "在线场景",
     **online_scene.CATEGORIES,
 }
+
+
+def interval_kinds(job: dict) -> list[str]:
+    kinds = job.get("kinds")
+    if not isinstance(kinds, list):
+        kinds = [job.get("kind", "photo")]
+    return list(dict.fromkeys(kind for kind in kinds if isinstance(kind, str) and kind in TEMPLATES))
 
 
 def _retryable(text: str) -> bool:

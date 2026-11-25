@@ -44,13 +44,14 @@ class ScheduleReceiver : BroadcastReceiver() {
             val due = SchedulePlanner.slots(PlanStore.fixed(ctx), PlanStore.intervals(ctx),
                 scheduledAt, scheduledAt)
             due.filter { !preferences.contains(it.key) }.forEach { slot ->
+                val kind = slot.templates.random()
                 preferences.edit().putLong(slot.key, now).commit()
                 try {
                     ctx.startForegroundService(Intent(ctx, PushService::class.java)
-                        .putExtra("kind", slot.kind).putExtra("scheduled", true)
+                        .putExtra("kind", kind).putExtra("scheduled", true)
                         .putExtra("scheduledAt", slot.at))
                 } catch (e: Exception) {
-                    PlanStore.addHistory(ctx, PlanStore.Hist(now, slot.kind, false, 0,
+                    PlanStore.addHistory(ctx, PlanStore.Hist(now, kind, false, 0,
                         "计划未能启动：请开启精确定时与蓝牙权限。${e.message.orEmpty().take(90)}"))
                 }
             }

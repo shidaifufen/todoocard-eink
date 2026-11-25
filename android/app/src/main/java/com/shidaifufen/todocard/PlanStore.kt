@@ -14,9 +14,12 @@ object PlanStore {
         val start: String,
         val end: String,
         val days: String,          // all / workday / weekend
-        val template: String,
+        val templates: List<String>,
         val enabled: Boolean = true,
-    )
+    ) {
+        constructor(everyMin: Int, start: String, end: String, days: String, template: String, enabled: Boolean = true) :
+            this(everyMin, start, end, days, listOf(template), enabled)
+    }
 
     data class Hist(val ts: Long, val template: String, val ok: Boolean, val seconds: Int, val msg: String,
                     val snapshot: String = "", val replay: Boolean = false)
@@ -43,8 +46,11 @@ object PlanStore {
         val arr = JSONArray(raw)
         return (0 until arr.length()).map {
             val o = arr.getJSONObject(it)
+            val templates = o.optJSONArray("templates")?.let { items ->
+                List(items.length()) { items.optString(it) }.filter(String::isNotBlank).distinct()
+            }.orEmpty().ifEmpty { listOf(o.optString("template", "photo")) }
             Interval(o.optInt("every", 60), o.optString("start", "09:00"), o.optString("end", "22:00"),
-                o.optString("days", "all"), o.optString("template", "photo"), o.optBoolean("enabled", false))
+                o.optString("days", "all"), templates, o.optBoolean("enabled", false))
         }
     }
 
@@ -52,7 +58,8 @@ object PlanStore {
         val arr = JSONArray()
         list.forEach {
             arr.put(JSONObject().put("every", it.everyMin).put("start", it.start).put("end", it.end)
-                .put("days", it.days).put("template", it.template).put("enabled", it.enabled))
+                .put("days", it.days).put("templates", JSONArray(it.templates))
+                .put("template", it.templates.first()).put("enabled", it.enabled))
         }
         sp(c).edit().putString("intervals", arr.toString()).apply()
     }
