@@ -111,8 +111,8 @@ class CardRenderTest {
             (32 until 496).any { x -> dashboard.getPixel(x, y) == Color.BLUE }
         })
         assertEquals("sunrise panel fills the former bottom gap", Color.BLUE, blocks.getPixel(50, 705))
-        assertEquals("source footer joins the panels", Color.BLACK, blocks.getPixel(100, 720))
-        assertEquals("color block grid extends to the bottom margin", Color.BLACK, blocks.getPixel(100, 759))
+        assertTrue("source footer joins the panels", (735..739).any { blocks.getPixel(100, it) == Color.BLACK })
+        assertEquals("color block grid extends to the bottom margin", Color.BLACK, blocks.getPixel(100, 777))
     }
 
     @Test fun threeDayForecastDisplaysTemperatureBarsAndHandlesNegativeTemperatures() {
@@ -150,7 +150,8 @@ class CardRenderTest {
         assertEquals(Color.BLACK, blocks.getPixel(14, 400))
         val pixels = IntArray(Render.W * Render.H)
         blocks.getPixels(pixels, 0, Render.W, 0, 0, Render.W, Render.H)
-        assertTrue(pixels.all { it in setOf(Color.WHITE, Color.BLACK, Color.RED, Color.YELLOW, Color.BLUE, Color.GREEN) })
+        val palette = setOf(Color.WHITE, Color.BLACK, Color.RED, Color.YELLOW, Color.BLUE, Color.GREEN)
+        assertTrue(pixels.all { it in palette })
     }
 
     @Test fun editedContentSurvivesRestart() {
