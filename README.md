@@ -9,7 +9,7 @@
 
 ## 安卓版（原生 Kotlin）
 
-- 安装包：[Android 1.5.2](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.5.2-android)（固定签名，可覆盖升级 1.3.0 及以后使用相同签名的版本）
+- 安装包：[Android 1.6.0](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.6.0-android)（固定签名，可覆盖升级 1.3.0 及以后使用相同签名的版本）
 - 源码：`android/`；构建：push 到 main 触发 `.github/workflows/build-android.yml`
 - 功能：8 模板、照片裁切/调色、相册（SAF）、每日计划 + 间隔推送 + 时间轴、配对后自动等广播推送、系统分享/荣耀传送门
 - 交接与真机调试：见 [HANDOFF-ANDROID.md](HANDOFF-ANDROID.md)
@@ -35,8 +35,8 @@ Windows、macOS 和纯网页版也可以导入同一份 JSON。新版式会出�
 
 | 平台 | 下载 |
 |---|---|
-| macOS (Apple Silicon) | [macOS 1.0.15](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.0.15-macos) |
-| Windows (x64) | [Windows 1.0.15](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.0.15-windows) |
+| macOS (Apple Silicon) | [macOS 1.0.16](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.0.16-macos) |
+| Windows (x64) | [Windows 1.0.16](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.0.16-windows) |
 
 1. 解压到任意文件夹（路径别带特殊符号）
 2. macOS 双击 `start-mac.command`（首次右键 → 打开）；Windows 双击 `土豆片卡片工坊.exe`
