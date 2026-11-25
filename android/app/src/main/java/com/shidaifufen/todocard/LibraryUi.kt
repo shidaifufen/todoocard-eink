@@ -354,6 +354,8 @@ internal fun SettingsScreen(
             }
         }
         Spacer(Modifier.height(18.dp))
+        AppUpdateRow()
+        Spacer(Modifier.height(12.dp))
         when (section) {
             0 -> {
                 Text("我的卡片", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)

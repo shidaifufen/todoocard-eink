@@ -1,3 +1,5 @@
+import { finishGraphics, tuneImage, vivid } from './tone.js';
+
 const BLACK = '#000', WHITE = '#fff', BLUE = '#00f', YELLOW = '#ff0', RED = '#f00';
 const W = 528, H = 792;
 const family = '"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif';
@@ -7,9 +9,13 @@ function rect(g, x, y, w, h, color) {
   g.fillRect(x, y, w, h);
 }
 
-function line(g, value, x, y, width, size, color = BLACK, bold = false) {
-  g.font = (bold ? '700 ' : '400 ') + size + 'px ' + family;
+function line(g, value, x, y, width, size, color = BLACK, bold = false, minSize = size) {
+  const font = (bold ? '700 ' : '400 ');
   let text = String(value || '');
+  g.font = font + size + 'px ' + family;
+  while (size > minSize && g.measureText(text).width > width) {
+    g.font = font + --size + 'px ' + family;
+  }
   while (text.length && g.measureText(text).width > width) {
     const short = text.endsWith('…') ? text.slice(0, -2) : text.slice(0, -1);
     text = short ? short + '…' : '';
@@ -52,38 +58,50 @@ function block(g, value, x, y, width, height, size, color = BLACK, bold = false)
   }
 }
 
-function contain(g, img, x, y, w, h) {
-  const ratio = Math.min(w / img.naturalWidth, h / img.naturalHeight);
-  const sw = Math.round(img.naturalWidth * ratio), sh = Math.round(img.naturalHeight * ratio);
-  g.drawImage(img, x + (w - sw) / 2, y + (h - sh) / 2, sw, sh);
+function artwork(g, img, x, y, width, height, tone, fill = false) {
+  const ratio = (fill ? Math.max : Math.min)(width / img.naturalWidth, height / img.naturalHeight);
+  const w = Math.round(img.naturalWidth * ratio), h = Math.round(img.naturalHeight * ratio);
+  const left = x + Math.floor((width - w) / 2), top = y + Math.floor((height - h) / 2);
+  g.save();
+  g.beginPath(); g.rect(x, y, width, height); g.clip();
+  g.drawImage(img, left, top, w, h);
+  g.restore();
+  const bounds = { x: Math.max(x,left), y: Math.max(y,top), width: Math.min(width,w), height: Math.min(height,h) };
+  tuneImage(g,bounds.x,bounds.y,bounds.width,bounds.height,tone);
+  return bounds;
 }
 
-function music(g, item, img, verses) {
-  if (!verses.length) {
-    contain(g, img, 0, 0, W, W);
-    rect(g, 0, W, W, H - W, BLACK);
-    rect(g, 28, 559, 64, 8, YELLOW);
-    block(g, item.title, 28, 588, 472, 104, 46, WHITE, true);
-    line(g, item.by, 28, 709, 472, 27, WHITE);
-    line(g, item.source, 28, 758, 472, 17, WHITE);
-    return;
+function music(g, item, img, verses, tone, style) {
+  if (style !== 'lyrics' || !verses.length) {
+    const bounds = artwork(g, img, 0, 0, W, W, tone);
+    rect(g, 0, W, W, H-W, BLACK);
+    rect(g, 28, 551, 64, 8, YELLOW);
+    block(g, item.title, 28, 575, 472, 79, 41, WHITE, true);
+    line(g, item.by, 28, 662, 472, 24, WHITE);
+    if (style === 'single' && verses[0]) line(g, verses[0], 28, 707, 472, 26, WHITE, true, 18);
+    line(g, item.source + (style === 'single' && verses[0] ? ' · 歌词 LRCLIB' : ''), 28, 758, 472, 17, WHITE);
+    return bounds;
   }
   rect(g, 0, 0, W, 276, BLACK);
-  contain(g, img, 22, 22, 232, 232);
+  const bounds = artwork(g, img, 22, 22, 232, 232, tone);
   rect(g, 282, 43, 60, 7, YELLOW);
   block(g, item.title, 282, 78, 220, 113, 38, WHITE, true);
   line(g, item.by, 282, 205, 220, 22, WHITE);
   block(g, verses.join('\n'), 32, 310, 464, 399, 40, BLACK, true);
-  rect(g, 32, 736, 464, 3, YELLOW);
+  rect(g, 32, 736, 464, 3, BLUE);
   line(g, item.source + ' · 歌词 LRCLIB', 32, 754, 464, 16);
+  return bounds;
 }
 
-function movie(g, item, img) {
-  rect(g, 0, 0, W, H, BLACK);
-  contain(g, img, 0, 0, W, 690);
-  rect(g, 0, 690, W, 102, BLACK);
-  line(g, item.title, 26, 705, 476, 34, WHITE, true);
-  line(g, item.source, 26, 754, 476, 17, WHITE);
+function movie(g, item, img, tone) {
+  artwork(g,img,0,0,W,H,tone,true);
+  const mask = g.createLinearGradient(0,590,0,H);
+  mask.addColorStop(0,'#0000'); mask.addColorStop(.65,'#000e'); mask.addColorStop(1,BLACK);
+  rect(g,0,590,W,H-590,mask);
+  rect(g,0,686,W,H-686,BLACK);
+  line(g,item.title,26,700,476,38,WHITE,true);
+  if (item.year) line(g,item.year,26,754,476,22,YELLOW,true);
+  return {x:0,y:0,width:W,height:686};
 }
 
 function dictionary(g, kind, item) {
@@ -105,16 +123,18 @@ function dictionary(g, kind, item) {
   line(g, item.source, 30, 756, 468, 18, WHITE);
 }
 
-export function paint(canvas, kind, item, artwork, verses = []) {
+export function paint(canvas, kind, item, artwork, verses = [], tone = vivid, style = "cover") {
   const g = canvas.getContext('2d');
   g.save();
   g.textBaseline = 'top';
   g.textAlign = 'left';
   rect(g, 0, 0, W, H, WHITE);
-  if (kind === 'music') music(g, item, artwork, verses);
-  else if (kind === 'movie') movie(g, item, artwork);
+  let imageBounds;
+  if (kind === 'music') imageBounds = music(g, item, artwork, verses, tone, style);
+  else if (kind === 'movie') imageBounds = movie(g, item, artwork, tone);
   else dictionary(g, kind, item);
   g.restore();
+  finishGraphics(g,imageBounds);
 }
 
 export function paintPrompt(canvas) {

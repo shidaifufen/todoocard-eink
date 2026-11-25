@@ -29,6 +29,8 @@ import urllib.request
 
 import card_render as R
 import layout_pack as LP
+import image_tone
+import online_scene
 from ble_lock import BLE_GUARD
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -198,6 +200,8 @@ class CardService:
 
     def save_cfg(self, patch: dict) -> dict:
         cur = dict(self.cfg)
+        if "image_tone" in patch:
+            cur["image_tone"] = image_tone.settings(patch["image_tone"])
         for key in ("enabled", "device_id", "device_name", "folders", "schedule",
                     "todos", "weather", "cooldown_days", "photo_mode", "photo_overlay",
                     "bing_enabled", "ai", "ai_prompt", "button_photo", "countdowns",
@@ -862,7 +866,7 @@ class CardService:
         except Exception:
             return ""
 
-    def compose_photo(self, photo_path: Path) -> Path:
+    def compose_photo(self, photo_path: Path, kind="photo", output: Path | None = None) -> Path:
         """把照片放进 528×792 画布。开了 overlay 就在底部压一条白色信息带。
 
         裁切用 cover（等比放大到铺满，再居中裁），比 contain 留黑边更像"相框"。
@@ -870,12 +874,16 @@ class CardService:
         from PIL import Image, ImageDraw, ImageOps
 
         W, H = CARD_W, CARD_H
+        out = output or self.cards_dir / f"{kind}.png"
+        tone = image_tone.settings(self.cfg.get("image_tone"))
+
+        def artwork(height):
+            with Image.open(photo_path) as src:
+                image = _cover(ImageOps.exif_transpose(src).convert("RGB"), W, height)
+            return image_tone.tune(image, tone)
+
         if not self.cfg.get("photo_overlay", True):
-            # 不需要信息带时也统一到卡片尺寸，免得交给上游自己猜
-            img = Image.open(photo_path).convert("RGB")
-            img = _cover(img, W, H)
-            out = self.cards_dir / "photo.png"
-            img.save(out)
+            artwork(H).save(out)
             return out
 
         meta = self._photo_exif(photo_path)
@@ -885,12 +893,7 @@ class CardService:
                          or meta.get("gps") or meta.get("iso") or meta.get("focal")
                          or meta.get("aperture") or meta.get("shutter"))
         if not _has_meta:
-            canvas = Image.new("RGB", (W, H), WHITE)
-            src = Image.open(photo_path)
-            src = ImageOps.exif_transpose(src).convert("RGB")
-            canvas.paste(_cover(src, W, H), (0, 0))
-            out = self.cards_dir / "photo.png"
-            canvas.save(out)
+            artwork(H).save(out)
             return out
 
         # 先决定信息带要有几行：没有的行就不画，整条带子跟着缩，不拿占位文字凑数
@@ -938,22 +941,14 @@ class CardService:
         _pad_top = max(7, int((8 if _single else 11) * _k))
         _pad_bot = max(5, int((6 if _single else 8) * _k))
         if not (_show_date or _show_time or extra or wx_txt):
-            # 全都关掉：直接铺满，不留信息带
-            canvas = Image.new("RGB", (W, H), WHITE)
-            src = Image.open(photo_path)
-            src = ImageOps.exif_transpose(src).convert("RGB")
-            canvas.paste(_cover(src, W, H), (0, 0))
-            out = self.cards_dir / "photo.png"
-            canvas.save(out)
+            artwork(H).save(out)
             return out
         _heights = ([_h_date] if (_show_date or _show_time) else []) + [_h_meta] * len(extra)
         _content = sum(_heights) + _gap * (len(_heights) - 1)
         band = _content + _pad_top + _pad_bot
         photo_h = H - band
         canvas = Image.new("RGB", (W, H), WHITE)
-        src = Image.open(photo_path)
-        src = ImageOps.exif_transpose(src).convert("RGB")
-        canvas.paste(_cover(src, W, photo_h), (0, 0))
+        canvas.paste(artwork(photo_h), (0, 0))
 
         d = ImageDraw.Draw(canvas)
         d.rectangle([0, photo_h, W, H], fill=WHITE)
@@ -995,7 +990,6 @@ class CardService:
 
         # 照片区继续抖动，信息带吸附成 6 色（否则白底上会飘彩色噪点）
         canvas = R.snap_palette(canvas, keep=[(0, 0, W, photo_h)])
-        out = self.cards_dir / "photo.png"
         canvas.save(out)
         return out
 
@@ -1530,8 +1524,12 @@ class CardService:
             return LP.render(template, ctx, min(1.5, max(.8, scale / 1.1)), min(1.8, max(.6, spacing)))
 
     # ── 统一出图 ──
-    def build_card(self, kind: str, consume: bool = True, fresh: bool = False):
+    def build_card(self, kind: str, consume: bool = True, fresh: bool = False, output: Path | None = None):
         """按模板出图，返回 (路径, 展示名)。"""
+        if kind in online_scene.CATEGORIES:
+            saved = self.cards_dir / f"{kind}.png"
+            online_scene.draw(kind).save(saved)
+            return saved, TEMPLATES[kind]
         if kind == "online":
             saved = self.cards_dir / "online.png"
             if not saved.is_file():
@@ -1570,12 +1568,12 @@ class CardService:
             photo = pin
             if not photo:
                 raise RuntimeError("照片文件夹是空的（在网页里添加目录）")
-            return self.compose_photo(Path(photo)), Path(photo).name
+            return self.compose_photo(Path(photo), output=output), Path(photo).name
         if kind == "bing":
             wp = self.bing_wallpaper(random.randint(0, 7) if fresh else None)
             if not wp:
                 raise RuntimeError("Bing 壁纸还没取到（检查网络或稍后再试）")
-            return self.compose_photo(wp), "Bing 壁纸"
+            return self.compose_photo(wp, kind, output), "Bing 壁纸"
         if kind == "summary":
             return self.render_summary(), "每日总结"
 
@@ -1629,7 +1627,7 @@ class CardService:
             else:
                 # 没生成过就只画本地海报，绝不因为"点开预览"就偷偷烧一次生成
                 image, err = None, None
-            ctx["ai"] = {"prompt": prompt, "image": image}
+            ctx["ai"] = {"prompt": prompt, "image": image, "tone": image_tone.settings(self.cfg.get("image_tone"))}
             img = R.render_ai(ctx)
         else:
             raise RuntimeError(f"未知模板: {kind}")
@@ -1642,7 +1640,7 @@ class CardService:
         # 周条和页脚挤到一起，所以不对它们做纵向均摊。
         if self.cfg.get("fill", True) and kind not in ("calendar", "custom"):
             img = R.distribute_vertical(img, max_gap=int(64 * 1.1 * float(self.cfg.get("line_gap", 1.0) or 1.0)))
-        out = self.cards_dir / f"{kind}.png"
+        out = output or self.cards_dir / f"{kind}.png"
         img.save(out)
         return out, TEMPLATES.get(kind, kind)
 
@@ -2214,6 +2212,7 @@ class CardService:
             "ai_prompt": self.cfg.get("ai_prompt", ""),
             "ai_last": self._ai_last or {},
             "templates": TEMPLATES,
+            "image_tone": image_tone.settings(self.cfg.get("image_tone")),
             "countdowns": self.cfg.get("countdowns") or [],
             "quote": self.daily_quote(),
             "paired_ts": int(self.cfg.get("paired_ts", 0) or 0),
@@ -2256,6 +2255,7 @@ TEMPLATES = {
     "ai": "AI 生图",
     "custom": "自定义卡片",
     "online": "在线场景",
+    **online_scene.CATEGORIES,
 }
 
 
@@ -2676,9 +2676,10 @@ def make_routes():
             with Image.open(BytesIO(data), formats=["PNG"]) as image:
                 if image.size != (CARD_W, CARD_H):
                     raise ValueError("卡面必须是 528×792 PNG")
-                image.verify()
+                source = image.convert("RGB")
         except (OSError, ValueError, SyntaxError, Image.DecompressionBombError):
             return web.json_response({"ok": False, "error": "卡面必须是 528×792 PNG"}, status=400)
+        data = LP.png(await asyncio.to_thread(image_tone.panel_preview, source))
         target = current().cards_dir / "online.png"
         with tempfile.NamedTemporaryFile(dir=target.parent, delete=False) as output:
             temporary = Path(output.name)
@@ -2688,11 +2689,25 @@ def make_routes():
                 os.replace(temporary, target)
             finally:
                 temporary.unlink(missing_ok=True)
-        return web.json_response({"ok": True})
+        return web.Response(body=data, content_type="image/png", headers={"Cache-Control": "no-store"})
 
     async def _preview(request):
         kind = request.query.get("kind", "summary")
         fresh = request.query.get("fresh") == "1"
+        if kind in ("photo", "bing", "ai"):
+            def tuned_preview():
+                from PIL import Image
+                with tempfile.TemporaryDirectory() as folder:
+                    target, _ = current().build_card(kind, consume=False, fresh=fresh, output=Path(folder) / "card.png")
+                    with Image.open(target) as image:
+                        return LP.png(image_tone.panel_preview(image))
+
+            try:
+                data = await asyncio.to_thread(tuned_preview)
+            except Exception:
+                p = current().render_placeholder("暂时没有可用的图片")
+                return web.FileResponse(p, headers={"Cache-Control": "no-store"})
+            return web.Response(body=data, content_type="image/png", headers={"Cache-Control": "no-store"})
         p = await current().preview(kind, fresh=fresh)
         if p.suffix.lower() == ".png":
             return web.FileResponse(p, headers={"Cache-Control": "no-store"})

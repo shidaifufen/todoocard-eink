@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - "android/**"
+      - "web/online/**"
       - ".github/workflows/build-android.yml"
       - "tools/android-startup-smoke.sh"
 

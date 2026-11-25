@@ -1,7 +1,8 @@
 import { findItems, kinds, loadArt, randomItems, songLyrics } from './sources.js';
+import { mountTone, vivid } from './tone.js';
 import { paint, paintPrompt } from './render.js';
 
-export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {} } = {}) {
+export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {}, showPrompt = true } = {}) {
   root.innerHTML = [
     '<div class="online-picker">',
     '<label>类型<select aria-label="类型" data-online="kind"></select></label>',
@@ -10,8 +11,9 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
     '<p data-online="status" role="status"></p>',
     '<label data-online="result-row" hidden>匹配结果<select aria-label="匹配结果" data-online="results"></select></label>',
     '<section data-online="music" hidden><label>版面<select aria-label="版面" data-online="style">',
-    '<option value="cover">大封面</option><option value="lyrics">封面＋歌词</option></select></label>',
-    '<label data-online="lyrics-row" hidden>歌词片段<select aria-label="歌词片段" data-online="lyrics"></select></label></section></div>',
+    '<option value="cover">大封面</option><option value="single">大封面＋一句</option><option value="lyrics">封面＋歌词</option></select></label>',
+    '<div data-online="lyrics-row" hidden><div class="lyric-summary"><output data-online="selection" aria-live="polite"></output><button type="button" data-online="clear-lyrics">清除</button></div><div data-online="lyrics" class="lyric-lines" role="group" aria-label="歌词片段"></div></div></section>',
+    '<details data-online="tone" hidden></details></div>',
   ].join('');
   const $ = name => root.querySelector('[data-online="' + name + '"]');
   for (const [value, { name }] of Object.entries(kinds)) $('kind').add(new Option(name, value));
@@ -21,17 +23,50 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
   const seen = new Set();
   const current = () => root.isConnected;
   let ready = false;
+  let anchor = -1, end = -1, selectingEnd = false, tone = vivid, redraw;
+  mountTone($('tone'), tone, next => {
+    tone = next;
+    cancelAnimationFrame(redraw);
+    redraw = requestAnimationFrame(draw);
+  });
+
+  function selectedLyrics() {
+    if ($('style').value === 'cover' || anchor < 0) return [];
+    return verses.slice(Math.min(anchor, end), Math.max(anchor, end) + 1);
+  }
+
+  function showSelection() {
+    const first = Math.min(anchor, end), last = Math.max(anchor, end);
+    const selected = selectedLyrics();
+    const hint = $('style').value === 'single' ? '点选一句' : selectingEnd ? '点选结束行' : '点选起始行';
+    const characters = [...selected.join('')].length;
+    $('selection').textContent = selected.length ? `已选 ${selected.length} 行 · ${characters} 字 · ${hint}` : hint;
+    $('clear-lyrics').disabled = !selected.length;
+    [...$('lyrics').children].forEach((button,i) =>
+      button.setAttribute('aria-pressed', String(i>=first && i<=last)));
+  }
+
+  function selectLine(index) {
+    if ($('style').value === 'single' || !selectingEnd) {
+      anchor = end = index;
+      selectingEnd = $('style').value !== 'single';
+    } else {
+      end = index;
+      selectingEnd = false;
+    }
+    showSelection();
+    draw();
+  }
 
   function draw() {
     if (!current()) return;
     if (item) {
-      const start = Number($('lyrics').value);
-      const selected = $('style').value === 'lyrics' && verses.length ? verses.slice(start, start + 3) : [];
-      paint(canvas, kind, item, artwork, selected);
+      const style = $('style').value;
+      paint(canvas, kind, item, artwork, selectedLyrics(), tone, style);
       ready = true;
       onCard(canvas, item);
     } else {
-      paintPrompt(canvas);
+      if (showPrompt) paintPrompt(canvas);
       ready = false;
       onEmpty();
     }
@@ -40,7 +75,7 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
   async function refreshLyrics() {
     const token = ++lyricOperation;
     const track = item;
-    if (!track || $('style').value !== 'lyrics') {
+    if (!track || $('style').value === 'cover') {
       $('lyrics-row').hidden = true;
       if (track) status.textContent = '';
       draw();
@@ -52,9 +87,16 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
       if (!current() || token !== lyricOperation || item !== track) return;
       verses = lines;
       $('lyrics').replaceChildren();
-      lines.forEach((line, i) => $('lyrics').add(new Option(line, i)));
+      lines.forEach((line, i) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = line;
+        button.onclick = () => selectLine(i);
+        $('lyrics').append(button);
+      });
+      if (lines.length) showSelection();
       $('lyrics-row').hidden = !lines.length;
-      status.textContent = lines.length ? '选择第一句，卡片显示接下来的最多三句。' : '这首歌暂无匹配歌词，已显示大封面。';
+      status.textContent = lines.length ? ($('style').value === 'single' ? '卡片底部显示一行歌词' : '起止行之间的歌词会一起选中') : '这首歌暂无匹配歌词，已显示大封面。';
     } catch {
       if (!current() || token !== lyricOperation || item !== track) return;
       $('lyrics-row').hidden = true;
@@ -69,13 +111,16 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
     item = hit;
     artwork = art;
     verses = [];
+    anchor = end = -1;
+    selectingEnd = false;
+    $('tone').hidden = !artwork;
     $('lyrics').replaceChildren();
     $('lyrics-row').hidden = true;
     if (seen.size >= 150) seen.delete(seen.values().next().value);
     seen.add(item.id);
     status.textContent = '已生成卡面';
     draw();
-    if (kind === 'music' && $('style').value === 'lyrics') void refreshLyrics();
+    if (kind === 'music' && $('style').value !== 'cover') void refreshLyrics();
   }
 
   async function choose(fetchItems, random) {
@@ -98,7 +143,7 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
             if (!current() || ticket !== operation) return;
             result = [];
             $('result-row').hidden = true;
-            return;
+            return true;
           } catch (error) {
             candidates.splice(index, 1);
             if (!candidates.length || attempt === 2) throw error;
@@ -131,6 +176,7 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
     $('lyrics-row').hidden = true;
     status.textContent = '';
     item = null;
+    $('tone').hidden = true;
     draw();
   };
   $('form').onsubmit = event => {
@@ -147,8 +193,24 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
     try { await select(hit, ticket); }
     catch (error) { if (current() && ticket === operation) status.textContent = error.message; }
   };
-  $('lyrics').onchange = draw;
-  $('style').onchange = refreshLyrics;
+  $('style').onchange = () => {
+    if ($('style').value === 'single') end = anchor;
+    selectingEnd = false;
+    draw();
+    void refreshLyrics();
+  };
+  $('clear-lyrics').onclick = () => {
+    anchor = end = -1;
+    selectingEnd = false;
+    showSelection();
+    draw();
+  };
   $('kind').onchange();
-  return { get ready() { return ready; } };
+  return { get ready() { return ready; }, random: category => {
+    if ($('kind').value !== category) {
+      $('kind').value = category;
+      $('kind').onchange();
+    }
+    return choose(() => randomItems(category), true);
+  } };
 }

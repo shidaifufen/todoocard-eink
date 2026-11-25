@@ -95,7 +95,10 @@ internal fun StudioScreen(
     onScanAll: () -> Unit,
     scanTimedOut: Boolean,
     onGenerate: (String) -> Unit,
-    onOnline: () -> Unit,
+    onlineControls: (@Composable () -> Unit)?,
+    onlineSaving: Boolean,
+    photoEdit: PhotoEdit.Params,
+    onPhotoEdit: (PhotoEdit.Params) -> Unit,
     onlineContent: Boolean,
     onSourceMode: (Boolean) -> Unit,
 ) {
@@ -133,10 +136,8 @@ internal fun StudioScreen(
             FilterChip(selected = !onlineContent, onClick = { onSourceMode(false) }, enabled = !busy, label = { Text("手动内容") })
         }
         Spacer(Modifier.height(8.dp))
-        if (kind == "online") {
-            FilledTonalButton(onClick = onOnline, enabled = !busy, modifier = Modifier.padding(horizontal = 20.dp)) {
-                Text("搜索或随机抽一张")
-            }
+        if (onlineControls != null) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) { onlineControls() }
         }
         if (kind == "photo") Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically) {
@@ -183,7 +184,7 @@ internal fun StudioScreen(
                     enabled = !busy && !refreshing, onClick = onRefresh) {
                     Text(if (refreshing) "更新中…" else if (kind in listOf("weather", "weather2")) "刷新天气" else "换一张")
                 }
-                if (kind !in listOf("progress", "calendar")) TextButton(enabled = !busy, onClick = {
+                if (kind !in listOf("progress", "calendar", "online")) TextButton(enabled = !busy, onClick = {
                     if (isImage) onPhoto() else editing = true
                 }) {
                     Icon(if (isImage) Icons.Outlined.PhotoLibrary else Icons.Outlined.Edit,
@@ -195,7 +196,19 @@ internal fun StudioScreen(
             if (kind == "poem") TextButton(onClick = onAnalysis, enabled = !busy && !refreshing) {
                 Text(if (refreshing) "赏析获取中…" else if (card.poemNote.isBlank()) "为这首诗写 AI 赏析" else "重新生成 AI 赏析")
             }
-            if (!isImage) {
+            if (isImage && photoReady) {
+                TextButton(enabled = !busy, onClick = { layoutOpen = !layoutOpen }) {
+                    Text(if (layoutOpen) "收起调色" else "图片调色")
+                }
+                if (layoutOpen) {
+                    LayoutSlider("亮度", photoEdit.exposure + 1f, .65f..1.45f) { onPhotoEdit(photoEdit.copy(exposure = it - 1f)) }
+                    LayoutSlider("对比度", photoEdit.contrast, .6f..1.6f) { onPhotoEdit(photoEdit.copy(contrast = it)) }
+                    LayoutSlider("饱和度", photoEdit.saturation, 0f..2f) { onPhotoEdit(photoEdit.copy(saturation = it)) }
+                    LayoutSlider("杂色吸附", photoEdit.snapThreshold / 100f, 0f..1f) { onPhotoEdit(photoEdit.copy(snapThreshold = (it * 100).toInt())) }
+                    TextButton(onClick = { onPhotoEdit(photoEdit.copy(exposure = 0f, contrast = 1f, saturation = 1f, snapThreshold = 0)) }) { Text("恢复原色") }
+                }
+            }
+            if (!isImage && kind != "online") {
                 TextButton(onClick = { layoutOpen = !layoutOpen }) { Text(if (layoutOpen) "收起排版" else "字号、行距与元素间距") }
                 if (layoutOpen) {
                     LayoutSlider("文字大小", card.fontScale, .8f..1.3f) { onLayout(card.copy(fontScale = it)) }
@@ -228,7 +241,7 @@ internal fun StudioScreen(
                     Spacer(Modifier.width(6.dp))
                     Text("扫描设备")
                 }
-                Button(onClick = onSend, enabled = preview != null && !busy,
+                Button(onClick = onSend, enabled = preview != null && !busy && (kind != "online" || !onlineSaving),
                     modifier = Modifier.weight(1.2f).height(48.dp), shape = RoundedCornerShape(8.dp)) {
                     Icon(Icons.Outlined.Send, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))

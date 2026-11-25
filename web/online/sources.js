@@ -89,10 +89,13 @@ async function chart(kind, country) {
   const entries = feed.feed?.entry || [];
   return entries.flatMap(item => {
     const artwork = imageURL(item['im:image']?.at(-1)?.label, 600, kind === 'movie' ? 900 : 600);
-    const title = clean(item['im:name']?.label), by = clean(item['im:artist']?.label);
+    const fullTitle = clean(item['im:name']?.label), by = clean(item['im:artist']?.label);
+    const namedYear = kind === 'movie' ? fullTitle.match(/\s*\(((?:18|19|20)\d{2})\)$/) : null;
+    const title = namedYear ? fullTitle.slice(0,namedYear.index) : fullTitle;
+    const year = kind === 'movie' ? namedYear?.[1] || item['im:releaseDate']?.label?.slice(0,4) : undefined;
     if (!artwork || !title) return [];
     const id = kind === 'music' ? 'song:' + normalized(by + ' / ' + title) : 'movie:' + normalized(title);
-    return [{ id, title, by, artwork, source: kind === 'music' ? 'Apple Music' : 'Apple TV' }];
+    return [{ id, title, by, year, artwork, source: kind === 'music' ? 'Apple Music' : 'Apple TV' }];
   });
 }
 
@@ -112,7 +115,7 @@ function wikipediaFilms(query, language) {
     if (/actor|actress|producer|director|screenwriter|演员|演員|导演|導演/i.test(description) &&
         !/film (?:by|directed|starring)|movie (?:by|directed|starring)|[0-9]{4}.*(?:电影|電影)/i.test(description)) return [];
     const title = item.title.replace(/\s*[（(](?:\d{4}\s*)?(?:film|movie|電影|电影)[）)]\s*$/i, '');
-    return [{ id: 'movie:' + normalized(title), title, by: description, artwork: artwork.href, source: 'Wikipedia' }];
+    return [{ id: 'movie:' + normalized(title), title, by: description, year: (description + ' ' + item.title).match(/\b(?:18|19|20)\d{2}\b/)?.[0], artwork: artwork.href, source: 'Wikipedia' }];
   }));
 }
 

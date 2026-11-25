@@ -1077,11 +1077,12 @@ def render_ai(ctx: dict):
 
     if img_path:
         from PIL import Image
+        from image_tone import NEUTRAL, tune
         band = 104
         src = Image.open(img_path).convert("RGB")
         w0, h0 = src.size
         src = src.crop((0, 0, w0, int(h0 * 0.96)))       # 去掉出图服务角标
-        img.paste(_cover(src, CARD_W, CARD_H - band), (0, 0))
+        img.paste(tune(_cover(src, CARD_W, CARD_H - band), ai.get("tone", NEUTRAL)), (0, 0))
         d.rectangle([0, CARD_H - band, CARD_W, CARD_H], fill=WHITE)
         d.line([0, CARD_H - band, CARD_W, CARD_H - band], fill=BLACK, width=3)
         lines = wrap(d, prompt, font("light", 15), CARD_W - 48, word_wrap=True)[:2]

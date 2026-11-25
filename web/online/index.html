@@ -3,29 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src https://itunes.apple.com https://lrclib.net https://api.datamuse.com https://raw.githubusercontent.com https://zh.wikipedia.org https://en.wikipedia.org; img-src https://*.mzstatic.com https://upload.wikimedia.org">
 <title>在线场景</title>
+<link rel="stylesheet" href="controls.css">
 <style>
-  :root{color-scheme:light dark}
-  body{margin:0 auto;padding:16px;max-width:520px;font:16px/1.5 system-ui,sans-serif}
-  label{display:block;margin:0 0 12px}
-  input,select{display:block;width:100%;box-sizing:border-box;margin-top:4px;padding:9px;font:inherit}
-  button{padding:8px 14px;font:inherit;border-radius:8px}
-  .online-actions{display:flex;gap:8px}
-  canvas{display:block;width:min(76%,300px);height:auto;margin:16px auto;border:1px solid #808080;border-radius:8px}
-  [hidden]{display:none!important}
+  body{margin:0;padding:4px 0;color:var(--scene-ink);font:14px/1.4 system-ui,sans-serif}
+  canvas{display:none}
 </style>
 </head>
 <body>
-<div id="picker"></div>
-<canvas id="card" width="528" height="792" aria-label="卡片预览"></canvas>
-<script type="module">
-  import { mountOnline } from './ui.js';
-  const canvas = document.querySelector('#card');
-  const picker = mountOnline(document.querySelector('#picker'), canvas);
-  window.exportCard = () => picker.ready ? canvas.toDataURL('image/png').split(',')[1] : null;
-  window.setDark = value => {
-    document.documentElement.style.colorScheme = value ? 'dark' : 'light';
-  };
-</script>
+<div id="picker" class="online-controls"></div>
+<canvas id="card" width="528" height="792"></canvas>
+<script type="module" src="inline.js"></script>
 </body>
 </html>

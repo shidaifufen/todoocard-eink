@@ -84,6 +84,18 @@ object PhotoEdit {
         return out
     }
 
+    internal fun panelPreview(bitmap: Bitmap): Bitmap {
+        val ink = intArrayOf(android.graphics.Color.BLACK, android.graphics.Color.WHITE,
+            android.graphics.Color.YELLOW, android.graphics.Color.RED, 0,
+            android.graphics.Color.BLUE, android.graphics.Color.GREEN)
+        val packed = Payload.quantize(bitmap)
+        val pixels = IntArray(bitmap.width * bitmap.height) { i ->
+            val byte = packed[i / 2].toInt() and 0xff
+            ink[if (i % 2 == 0) byte ushr 4 else byte and 15]
+        }
+        return Bitmap.createBitmap(pixels, bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+    }
+
     /** 手势预览复用已解码图片；只重绘画布，不重新解码或分配卡片位图。 */
     fun drawInto(c: Canvas, src: Bitmap, p: Params, band: Int = 0) {
         val width = Render.W.toFloat()

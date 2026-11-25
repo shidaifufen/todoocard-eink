@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>土豆片 · 卡片控制台</title>
 <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+<link rel="stylesheet" href="./online/controls.css">
 <style>
   :root{--bg:#0d0e11;--panel:#15161a;--panel2:#1c1e24;--line:#2a2d35;--text:#e9eaee;--sub:#9a9daa;--dim:#6d7180;
         --accent:#4f8cff;--ok:#38c98a;--danger:#ff5c5c;--warm:#ffb020}
@@ -13,6 +14,7 @@
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);
        font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",Arial,sans-serif}
+  .online-controls{--scene-ink:var(--text);--scene-panel:var(--panel2)}
   .app{max-width:1560px;margin:0 auto;padding:18px 22px 60px;display:grid;
        grid-template-columns:250px minmax(0,1fr);gap:18px;align-items:start}
   @media (max-width:980px){.app{grid-template-columns:1fr;padding:12px}}
@@ -175,20 +177,19 @@
             <div class="pl">生成中…</div>
           </div>
           <div class="btnrow">
-            <button class="primary" onclick="openSend()">发送这个模板</button>
-            <button onclick="preview(currentTpl, true)">换一张预览</button>
+            <button id="tplSend" class="primary" onclick="openSend()">发送这个模板</button>
+            <button id="tplFresh" onclick="preview(currentTpl, true)">换一张预览</button>
           </div>
           <div class="hint" id="tplHint">发送会覆盖卡片画面；失败会进队列，卡片一出现就自动补发。</div>
         </div>
         <div>
           <h3>本模板设置</h3>
           <div id="editor"></div>
-          <div id="onlineEditor" hidden>
+          <div id="onlineEditor" class="online-controls" hidden>
             <div id="onlinePicker"></div>
-            <canvas id="onlineCanvas" width="528" height="792" aria-label="在线卡片预览" style="display:block;width:min(100%,240px);height:auto;margin:12px auto"></canvas>
-            <button id="applyOnline" disabled>应用卡片</button>
             <div id="onlineSaveStatus" class="hint" role="status"></div>
           </div>
+          <details id="imageTone" class="online-controls" hidden></details>
         </div>
       </div>
     </section>
@@ -488,7 +489,7 @@ function renderNav(){
   scenes.dataset.scenes = '1';
   scenes.onclick = () => switchPanel('scenes');
   nav.appendChild(scenes);
-  Object.keys(TPL_LABEL).forEach(k => {
+  Object.keys(TPL_LABEL).filter(k => !k.startsWith('online_')).forEach(k => {
     const b = document.createElement('button');
     b.dataset.tpl = k;
     b.innerHTML = `<span class="ico">▤</span>${TPL_LABEL[k]}`;
@@ -520,6 +521,7 @@ document.querySelectorAll('#setNav button').forEach(b => b.onclick = () => switc
 // ── 发送前确认：出图 + 最后微调 ──
 let SEND_TPL = null;
 function openSend(){
+  if ($('tplSend').disabled) return;
   SEND_TPL = currentTpl;
   const mask = $('sendMask');
   mask.style.display = 'flex';
@@ -562,6 +564,7 @@ async function applySendTuning(){
   refreshSendImg();
 }
 async function confirmSend(){
+  if (SEND_TPL === 'online' && !onlineSendReady) return;
   $('sendHint').textContent = '已提交，正在推送…（进度看顶部状态）';
   const r = await postJSON('/api/card/send', {kind: SEND_TPL});
   if (!r.ok) { $('sendHint').textContent = r.error || '提交失败'; return; }
@@ -614,6 +617,9 @@ function appendTplTuning(){
 
 function renderEditor(){
   const box = $('editor');
+  $('tplSend').disabled = currentTpl === 'online' && !onlineSendReady;
+  $('tplFresh').hidden = currentTpl === 'online';
+  $('imageTone').hidden = !['photo','bing','ai'].includes(currentTpl);
   $('onlineEditor').hidden = currentTpl !== 'online';
   box.hidden = currentTpl === 'online';
   if (currentTpl === 'online') return;
@@ -813,13 +819,15 @@ async function load(){
   if (panel === 'tpl') { renderEditor(); appendTplTuning(); }
 }
 
+let onlineSendReady = true;
+let inlinePreview;
 async function preview(kind, fresh){
   const img = $('previewImg'), box = $('previewBox');
   const seq = ++previewSeq;
   box.classList.add('loading');
   img.onload = () => { if (seq === previewSeq) box.classList.remove('loading'); };
   img.onerror = () => { if (seq === previewSeq){ box.classList.remove('loading'); toast('这张生成失败，点「换一张预览」重试'); } };
-  img.src = `${API}/api/card/preview?kind=${encodeURIComponent(kind)}&t=${Date.now()}` + (fresh ? '&fresh=1' : '');
+  img.src = kind === 'online' && inlinePreview ? inlinePreview : `${API}/api/card/preview?kind=${encodeURIComponent(kind)}&t=${Date.now()}` + (fresh ? '&fresh=1' : '');
   if (fresh && (kind === 'quote' || kind === 'poem')) setTimeout(load, 1500);
 }
 
@@ -1066,8 +1074,9 @@ async function restoreSched(){
 }
 
 async function runNow(kind){
-  toast('已触发：' + (TPL_LABEL[kind]||kind));
-  await postJSON('/api/card/send', {kind});
+  const result = await postJSON('/api/card/send', {kind});
+  toast(result.ok ? '已触发：' + (TPL_LABEL[kind]||kind) : result.error || '发送失败');
+  if (!result.ok || kind.startsWith('online_')) return;
   switchPanel('tpl'); currentTpl = kind; renderNav(); switchPanel('tpl');
 }
 
@@ -1399,7 +1408,7 @@ async function boot(){
   const qp = new URLSearchParams(location.search);
   const wantPanel = qp.get('panel');
   const want = qp.get('kind');
-  if (want && TPL_LABEL[want]) currentTpl = want;
+  if (want && TPL_LABEL[want] && !want.startsWith('online_')) currentTpl = want;
   switchPanel(wantPanel || 'tpl');
   setInterval(load, 30000);
 }
@@ -1412,33 +1421,68 @@ boot();
 <script type="module">
 import { mountLayouts } from './layout-ui.js';
 import { mountOnline } from './online/ui.js';
+import { mountTone, neutral } from './online/tone.js';
 
-const onlineCanvas = document.getElementById('onlineCanvas');
-const applyOnline = document.getElementById('applyOnline');
+const onlineCanvas = document.createElement('canvas');
+onlineCanvas.width = 528;
+onlineCanvas.height = 792;
 const onlineStatus = document.getElementById('onlineSaveStatus');
-const onlinePicker = mountOnline(document.getElementById('onlinePicker'), onlineCanvas, {
+let onlineSave = Promise.resolve();
+let onlineRevision = 0;
+function setOnlineReady(ready) {
+  onlineSendReady = ready;
+  if (currentTpl === 'online') $('tplSend').disabled = !ready;
+}
+mountOnline(document.getElementById('onlinePicker'), onlineCanvas, {
+  showPrompt: false,
   onCard: () => {
-    applyOnline.disabled = false;
-    onlineStatus.textContent = '应用后可推送这张卡片。';
+    const revision = ++onlineRevision;
+    setOnlineReady(false);
+    onlineStatus.textContent = '正在生成六色预览…';
+    const image = new Promise(resolve => onlineCanvas.toBlob(resolve, 'image/png'));
+    onlineSave = onlineSave.then(async () => {
+      if (revision !== onlineRevision) return;
+      const body = await image;
+      if (!body) throw new Error('无法生成卡面');
+      const response = await fetch('/api/card/online', { method: 'POST', body });
+      if (!response.ok) throw new Error('保存失败，请重新生成卡片');
+      if (revision !== onlineRevision) return;
+      const url = URL.createObjectURL(await response.blob());
+      if (revision !== onlineRevision) { URL.revokeObjectURL(url); return; }
+      if (inlinePreview) URL.revokeObjectURL(inlinePreview);
+      inlinePreview = url;
+      setOnlineReady(true);
+      if (currentTpl === 'online') preview('online');
+      onlineStatus.textContent = '';
+    }).catch(error => {
+      if (revision === onlineRevision) onlineStatus.textContent = error.message;
+    });
   },
-  onEmpty: () => { applyOnline.disabled = true; onlineStatus.textContent = ''; },
+  onEmpty: () => {
+    if (!onlineRevision) return;
+    onlineRevision++;
+    setOnlineReady(false);
+    onlineStatus.textContent = '';
+    if (inlinePreview) URL.revokeObjectURL(inlinePreview);
+    inlinePreview = '';
+    if (currentTpl === 'online') $('previewImg').removeAttribute('src');
+  },
 });
-applyOnline.onclick = async () => {
-  if (!onlinePicker.ready) return;
-  applyOnline.disabled = true;
-  try {
-    const body = await new Promise(resolve => onlineCanvas.toBlob(resolve, 'image/png'));
-    if (!body) throw new Error('无法生成卡面');
-    const response = await fetch('/api/card/online', { method: 'POST', body });
-    if (!response.ok) throw new Error('保存失败，请重试');
-    if (currentTpl === 'online') preview('online');
-    onlineStatus.textContent = '已应用，可以推送';
-  } catch (error) {
-    onlineStatus.textContent = error.message;
-  } finally {
-    applyOnline.disabled = !onlinePicker.ready;
-  }
-};
+const imageTone = $('imageTone');
+let toneTimer;
+let toneSave = Promise.resolve();
+fetch('/api/card').then(response => response.json()).then(data => {
+  mountTone(imageTone, {...neutral,...data.card?.image_tone}, tone => {
+    clearTimeout(toneTimer);
+    toneTimer = setTimeout(() => {
+      toneSave = toneSave.then(async () => {
+        const result = await postJSON('/api/card/config', { image_tone: tone });
+        if (!result.ok) throw new Error(result.error || '调色保存失败');
+        if (['photo','bing','ai'].includes(currentTpl)) preview(currentTpl);
+      }).catch(error => toast(error.message));
+    }, 125);
+  });
+}).catch(error => toast(error.message));
 
 async function layoutRequest(action, body, kind) {
   const query = new URLSearchParams();

@@ -112,7 +112,9 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
     val layoutRevision by LayoutStore.revision.collectAsState()
     var tab by remember { mutableIntStateOf(0) }
     var kind by remember { mutableStateOf("summary") }
-    var showOnline by remember { mutableStateOf(false) }
+    var onlineSaving by remember { mutableStateOf(false) }
+    val onlineSaveMutex = remember { kotlinx.coroutines.sync.Mutex() }
+    var onlineSequence by remember { mutableIntStateOf(0) }
     var onlineRevision by remember { mutableIntStateOf(0) }
     var card by remember { mutableStateOf(PlanStore.card(ctx)) }
     var preview by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
@@ -234,7 +236,9 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
         preview = withContext(Dispatchers.Default) {
             runCatching {
                 if (kind in listOf("photo", "bing", "ai")) {
-                    if (!photoReady) null else PhotoCard.render(photoPath, fields, edit)
+                    if (!photoReady) null else PhotoCard.render(photoPath, fields, edit).let { image ->
+                        try { PhotoEdit.panelPreview(image) } finally { image.recycle() }
+                    }
                 } else if (kind == "online") OnlineCard.read(ctx)
                 else Render.render(card.copy(kind = kind))
             }.getOrNull()
@@ -616,7 +620,34 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                         onRefresh = { refreshCard() }, onAnalysis = ::refreshAnalysis, refreshing = refreshing,
                         onScanAll = { requestScan(true) }, scanTimedOut = scanTimedOut,
                         onGenerate = ::generateImage, onlineContent = onlineContent,
-                        onOnline = { showOnline = true },
+                        onlineControls = if (kind == "online") {
+                            OnlineSceneInline(!busy, dark) { raw ->
+                                val sequence = ++onlineSequence
+                                onlineSaving = true
+                                scope.launch {
+                                    try {
+                                        withContext(Dispatchers.Default) {
+                                            onlineSaveMutex.lock()
+                                            try {
+                                                val image = OnlineCard.decode(raw)
+                                                try { withContext(Dispatchers.IO) { OnlineCard.save(ctx, image) } }
+                                                finally { image.recycle() }
+                                            } finally { onlineSaveMutex.unlock() }
+                                        }
+                                        onlineRevision++
+                                    } catch (error: kotlinx.coroutines.CancellationException) {
+                                        throw error
+                                    } catch (error: Exception) {
+                                        status = "失败：${error.message ?: "在线卡片保存失败"}"
+                                    } finally {
+                                        if (sequence == onlineSequence) onlineSaving = false
+                                    }
+                                }
+                            }
+                        } else null,
+                        onlineSaving = onlineSaving,
+                        photoEdit = edit, onPhotoEdit = { edit = it },
+
                         onSourceMode = { online ->
                             ContentOptions.setOnline(ctx, kind, online); sourceRevision++
                             if (online) refreshCard() else status = "已选择手动内容，可编辑后推送"
@@ -667,10 +698,6 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                 }
             }
         }
-        if (showOnline) OnlineSceneDialog(ctx, dark, onDismiss = { showOnline = false }, onUse = {
-            onlineRevision++
-            showOnline = false
-        })
         if (showAlbums) AlbumPicker(albums,
             onChoose = {
                 PlanStore.addAlbum(ctx, it); albums = PlanStore.albums(ctx)

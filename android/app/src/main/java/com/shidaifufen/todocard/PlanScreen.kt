@@ -246,7 +246,7 @@ private fun TimeField(label: String, value: String, onChange: (String) -> Unit) 
 @Composable
 private fun TemplatePicker(current: String, onPick: (String) -> Unit) {
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        TEMPLATES.forEach { (key, name) ->
+        (TEMPLATES.filter { it.first != "online" || current == "online" } + OnlinePlanCategories).forEach { (key, name) ->
             FilterChip(selected = current == key, onClick = { onPick(key) }, label = { Text(name, fontSize = 12.sp) })
         }
     }
@@ -363,7 +363,7 @@ private fun TimelineCard(fixed: List<PlanStore.Fixed>, itvs: List<PlanStore.Inte
     }
 }
 
-fun templateName(k: String): String = TEMPLATES.firstOrNull { it.first == k }?.second ?: k
+fun templateName(k: String): String = (TEMPLATES + OnlinePlanCategories).firstOrNull { it.first == k }?.second ?: k
 
 fun planNext(fixed: List<PlanStore.Fixed>, itvs: List<PlanStore.Interval>,
              now: Long, hours: Int): List<Long> =
