@@ -15,6 +15,8 @@ Android、Windows、macOS 和纯网页版支持同一套 JSON。Android 从「�
 
 ### 六色场景
 
+可一键预览 10 张精选卡面。将文件链接粘贴到看板版式包的 GitHub 导入框，确认后应用。[六色场景精选](https://github.com/shidaifufen/todoocard-eink/blob/main/layouts/featured.json)
+
 新增的 24 套场景各有独立 JSON。可先看日程、天气、阅读和学习等分类预览，再打开所选文件并复制 GitHub 链接导入。[浏览场景和预览](scenes/README.md)
 
 当前文件：

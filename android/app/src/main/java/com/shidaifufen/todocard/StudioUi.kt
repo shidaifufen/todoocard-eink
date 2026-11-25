@@ -95,6 +95,7 @@ internal fun StudioScreen(
     onScanAll: () -> Unit,
     scanTimedOut: Boolean,
     onGenerate: (String) -> Unit,
+    onOnline: () -> Unit,
     onlineContent: Boolean,
     onSourceMode: (Boolean) -> Unit,
 ) {
@@ -132,6 +133,11 @@ internal fun StudioScreen(
             FilterChip(selected = !onlineContent, onClick = { onSourceMode(false) }, enabled = !busy, label = { Text("手动内容") })
         }
         Spacer(Modifier.height(8.dp))
+        if (kind == "online") {
+            FilledTonalButton(onClick = onOnline, enabled = !busy, modifier = Modifier.padding(horizontal = 20.dp)) {
+                Text("搜索或随机抽一张")
+            }
+        }
         if (kind == "photo") Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Text("轮播图库 · $carouselCount 张", color = StudioMuted, fontSize = 12.sp,
@@ -162,7 +168,7 @@ internal fun StudioScreen(
                     }
                 } else if (preview == null) {
                     if (refreshing) CircularProgressIndicator(Modifier.size(26.dp), strokeWidth = 2.dp)
-                    else Text("暂时无法获取内容，点击刷新重试", color = StudioMuted,
+                    else Text(if (kind == "online") "先搜索或抽取一张卡片" else "暂时无法获取内容，点击刷新重试", color = StudioMuted,
                         modifier = Modifier.padding(20.dp))
                 }
                 else Image(preview.asImageBitmap(), "卡片预览", Modifier.fillMaxSize().padding(3.dp),

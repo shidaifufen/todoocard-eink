@@ -35,7 +35,11 @@ internal fun LayoutSettings() {
     var exportText by remember { mutableStateOf("") }
     val linkPrefs = remember(ctx) { ctx.getSharedPreferences("layout_links_v1", 0) }
     var linkDialog by remember { mutableStateOf(false) }
-    var link by remember { mutableStateOf(linkPrefs.getString("last", LayoutDownload.DEFAULT_URL).orEmpty()) }
+    var link by remember {
+        val saved = linkPrefs.getString("last", null)
+        val oldDefault = "https://github.com/shidaifufen/todoocard-eink/blob/main/layouts/default.json"
+        mutableStateOf(saved?.takeUnless { it == oldDefault } ?: LayoutDownload.DEFAULT_URL)
+    }
     var linkError by remember { mutableStateOf("") }
     val importFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
@@ -112,7 +116,7 @@ internal fun LayoutSettings() {
                     isError = linkError.isNotEmpty())
                 Text("仓库已有版式", fontSize = 12.sp)
                 Row(Modifier.horizontalScroll(rememberScrollState())) {
-                    listOf("晨间简报" to "daily-brief", "出门天气" to "weather-field", "天气色卡" to "weather-tiles",
+                    listOf("六色场景精选" to "featured", "晨间简报" to "daily-brief", "出门天气" to "weather-field", "天气色卡" to "weather-tiles",
                         "专注清单" to "focus-list", "诗词日历" to "verse-almanac", "蓝色天气" to "weather-blue",
                         "一句＋天气" to "quote-weather", "默认版式" to "default").forEach { (name, file) ->
                         TextButton(enabled = !busy, onClick = {

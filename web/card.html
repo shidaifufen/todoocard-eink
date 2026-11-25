@@ -183,6 +183,12 @@
         <div>
           <h3>本模板设置</h3>
           <div id="editor"></div>
+          <div id="onlineEditor" hidden>
+            <div id="onlinePicker"></div>
+            <canvas id="onlineCanvas" width="528" height="792" aria-label="在线卡片预览" style="display:block;width:min(100%,240px);height:auto;margin:12px auto"></canvas>
+            <button id="applyOnline" disabled>应用卡片</button>
+            <div id="onlineSaveStatus" class="hint" role="status"></div>
+          </div>
         </div>
       </div>
     </section>
@@ -569,6 +575,7 @@ if ($('sendScale')) {
 }
 
 function appendTplTuning(){
+  if (currentTpl === 'online') return;
   const box = $('editor');
   const sc = Math.round(((STATE.tpl_scale || {})[currentTpl] || 1) * 100);
   const lg = Math.round(((STATE.tpl_line || {})[currentTpl] || 1) * 100);
@@ -607,6 +614,9 @@ function appendTplTuning(){
 
 function renderEditor(){
   const box = $('editor');
+  $('onlineEditor').hidden = currentTpl !== 'online';
+  box.hidden = currentTpl === 'online';
+  if (currentTpl === 'online') return;
   if (currentTpl === 'todo'){
     box.innerHTML = `<label class="f">今日待办（每行一条，最多 6 条）</label>
       <textarea id="e_todos"></textarea>
@@ -1401,6 +1411,34 @@ boot();
 </script>
 <script type="module">
 import { mountLayouts } from './layout-ui.js';
+import { mountOnline } from './online/ui.js';
+
+const onlineCanvas = document.getElementById('onlineCanvas');
+const applyOnline = document.getElementById('applyOnline');
+const onlineStatus = document.getElementById('onlineSaveStatus');
+const onlinePicker = mountOnline(document.getElementById('onlinePicker'), onlineCanvas, {
+  onCard: () => {
+    applyOnline.disabled = false;
+    onlineStatus.textContent = '应用后可推送这张卡片。';
+  },
+  onEmpty: () => { applyOnline.disabled = true; onlineStatus.textContent = ''; },
+});
+applyOnline.onclick = async () => {
+  if (!onlinePicker.ready) return;
+  applyOnline.disabled = true;
+  try {
+    const body = await new Promise(resolve => onlineCanvas.toBlob(resolve, 'image/png'));
+    if (!body) throw new Error('无法生成卡面');
+    const response = await fetch('/api/card/online', { method: 'POST', body });
+    if (!response.ok) throw new Error('保存失败，请重试');
+    if (currentTpl === 'online') preview('online');
+    onlineStatus.textContent = '已应用，可以推送';
+  } catch (error) {
+    onlineStatus.textContent = error.message;
+  } finally {
+    applyOnline.disabled = !onlinePicker.ready;
+  }
+};
 
 async function layoutRequest(action, body, kind) {
   const query = new URLSearchParams();

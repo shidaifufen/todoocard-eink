@@ -341,6 +341,12 @@ internal fun SettingsScreen(
         Spacer(Modifier.height(12.dp))
         Text("设置", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
+        Text("应用主题", fontSize = 13.sp, color = StudioMuted)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            StudioTheme.entries.forEach { option ->
+                FilterChip(selected = theme == option, onClick = { onTheme(option) }, label = { Text(option.label) })
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("设备", "外观", "关于").forEachIndexed { i, label ->
                 FilterChip(selected = section == i, onClick = { section = i },
@@ -387,15 +393,6 @@ internal fun SettingsScreen(
                     color = StudioMuted)
             }
             1 -> {
-                SectionCard(title = "应用主题") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        StudioTheme.entries.forEach { option ->
-                            FilterChip(selected = theme == option, onClick = { onTheme(option) },
-                                label = { Text(option.label) })
-                        }
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
                 LayoutSettings()
                 Spacer(Modifier.height(18.dp))
                 Text("六色墨水屏", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)

@@ -1532,6 +1532,11 @@ class CardService:
     # ── 统一出图 ──
     def build_card(self, kind: str, consume: bool = True, fresh: bool = False):
         """按模板出图，返回 (路径, 展示名)。"""
+        if kind == "online":
+            saved = self.cards_dir / "online.png"
+            if not saved.is_file():
+                raise ValueError("请先生成在线卡片")
+            return saved, TEMPLATES[kind]
         active = self.layout_state.get("active") or {}
         if template := active.get("templates", {}).get(kind):
             img = self.render_layout(kind, template, fresh)
@@ -2250,6 +2255,7 @@ TEMPLATES = {
     "bing": "Bing 壁纸",
     "ai": "AI 生图",
     "custom": "自定义卡片",
+    "online": "在线场景",
 }
 
 
@@ -2659,6 +2665,31 @@ def make_routes():
         except (ValueError, KeyError, TypeError, OSError, asyncio.IncompleteReadError) as err:
             return web.json_response({"error": str(err)}, status=400)
 
+    async def _save_online(request):
+        from io import BytesIO
+        from PIL import Image
+
+        if request.content_type != "image/png" or request.headers.get("Sec-Fetch-Site") == "cross-site":
+            raise web.HTTPUnsupportedMediaType()
+        data = await request.clone(client_max_size=3 * 1024 * 1024).read()
+        try:
+            with Image.open(BytesIO(data), formats=["PNG"]) as image:
+                if image.size != (CARD_W, CARD_H):
+                    raise ValueError("卡面必须是 528×792 PNG")
+                image.verify()
+        except (OSError, ValueError, SyntaxError, Image.DecompressionBombError):
+            return web.json_response({"ok": False, "error": "卡面必须是 528×792 PNG"}, status=400)
+        target = current().cards_dir / "online.png"
+        with tempfile.NamedTemporaryFile(dir=target.parent, delete=False) as output:
+            temporary = Path(output.name)
+            try:
+                output.write(data)
+                output.close()
+                os.replace(temporary, target)
+            finally:
+                temporary.unlink(missing_ok=True)
+        return web.json_response({"ok": True})
+
     async def _preview(request):
         kind = request.query.get("kind", "summary")
         fresh = request.query.get("fresh") == "1"
@@ -2846,6 +2877,7 @@ def make_routes():
         ("POST", "/api/card/config", _config),
         ("POST", "/api/card/weather/resolve", _resolve_city),
         ("GET", "/api/card/preview", _preview),
+        ("POST", "/api/card/online", _save_online),
         ("GET", "/api/card/layouts", _layouts),
         ("POST", "/api/card/layouts", _layouts),
         ("POST", "/api/card/send", _send),

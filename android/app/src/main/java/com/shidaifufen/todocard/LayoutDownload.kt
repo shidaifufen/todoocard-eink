@@ -9,7 +9,7 @@ import java.net.URLEncoder
 
 /** Public GitHub layout files only; uses no account credentials. */
 internal object LayoutDownload {
-    const val DEFAULT_URL = "https://github.com/shidaifufen/todoocard-eink/blob/main/layouts/default.json"
+    const val DEFAULT_URL = "https://github.com/shidaifufen/todoocard-eink/blob/main/layouts/featured.json"
     private val hosts = setOf("github.com", "raw.githubusercontent.com", "objects.githubusercontent.com",
         "release-assets.githubusercontent.com", "github-releases.githubusercontent.com", "api.github.com")
 

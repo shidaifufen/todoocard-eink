@@ -112,6 +112,9 @@ object CardSources {
     }
 
     suspend fun scheduledBitmap(ctx: Context, kind: String, onNotice: (String) -> Unit = {}): Bitmap {
+        if (kind == "online") return withContext(Dispatchers.IO) {
+            checkNotNull(OnlineCard.read(ctx)) { "请先生成在线卡片" }
+        }
         if (kind == "bing" || kind == "ai") {
             val path = if (kind == "bing") ImageSources.bing(ctx) else ImageSources.cached(ctx, kind)
             check(path.isNotBlank()) { "请先生成一张 AI 图片" }

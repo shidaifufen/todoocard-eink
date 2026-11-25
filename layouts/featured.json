@@ -1,0 +1,1172 @@
+{
+  "schemaVersion": 1,
+  "name": "六色场景精选",
+  "templates": {
+    "summary": {
+      "name": "晨间简报",
+      "sources": [
+        "weather",
+        "quote"
+      ],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 111,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 30,
+          "y": 18,
+          "width": 460,
+          "height": 54,
+          "text": "晨间简报",
+          "textSize": 36,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 32,
+          "y": 72,
+          "width": 460,
+          "height": 30,
+          "text": "{{date}}  ·  {{week}}",
+          "textSize": 19,
+          "color": "white"
+        },
+        {
+          "type": "text",
+          "x": 30,
+          "y": 134,
+          "width": 315,
+          "height": 97,
+          "text": "{{weatherTemp}}°",
+          "textSize": 74,
+          "bold": true
+        },
+        {
+          "type": "weatherIcon",
+          "x": 387,
+          "y": 139,
+          "width": 89,
+          "height": 89
+        },
+        {
+          "type": "text",
+          "x": 32,
+          "y": 235,
+          "width": 455,
+          "height": 38,
+          "text": "{{weatherCity}} · {{weatherText}}   {{weatherLow}}～{{weatherHigh}}°",
+          "textSize": 22
+        },
+        {
+          "type": "rect",
+          "x": 30,
+          "y": 293,
+          "width": 468,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 310,
+          "width": 445,
+          "height": 42,
+          "text": "今日待办 · {{todoCount}} 项",
+          "textSize": 28,
+          "bold": true
+        },
+        {
+          "type": "list",
+          "x": 31,
+          "y": 367,
+          "width": 465,
+          "height": 193,
+          "source": "todos",
+          "numbered": true,
+          "emptyText": "今天还没有安排",
+          "textSize": 24,
+          "lineHeight": 1.48
+        },
+        {
+          "type": "rect",
+          "x": 30,
+          "y": 581,
+          "width": 468,
+          "height": 3,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 595,
+          "width": 460,
+          "height": 34,
+          "text": "全年进度 {{yearPercent}}%",
+          "textSize": 21,
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 646,
+          "width": 528,
+          "height": 146,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 661,
+          "width": 466,
+          "height": 91,
+          "text": "{{quote}}",
+          "textSize": 25,
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 751,
+          "width": 466,
+          "height": 30,
+          "text": "{{quoteBy}}",
+          "textSize": 17,
+          "align": "right",
+          "showIf": "quoteBy"
+        }
+      ]
+    },
+    "weather": {
+      "name": "出门天气",
+      "sources": [
+        "weather"
+      ],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 111,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 30,
+          "y": 18,
+          "width": 460,
+          "height": 54,
+          "text": "{{weatherCity}}",
+          "textSize": 36,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 32,
+          "y": 72,
+          "width": 460,
+          "height": 30,
+          "text": "出门天气  ·  {{date}}",
+          "textSize": 19,
+          "color": "white"
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 123,
+          "width": 331,
+          "height": 116,
+          "text": "{{weatherTemp}}°",
+          "textSize": 88,
+          "color": "blue",
+          "bold": true
+        },
+        {
+          "type": "weatherIcon",
+          "x": 378,
+          "y": 136,
+          "width": 96,
+          "height": 96
+        },
+        {
+          "type": "text",
+          "x": 32,
+          "y": 244,
+          "width": 463,
+          "height": 42,
+          "text": "{{weatherText}}   {{weatherLow}}～{{weatherHigh}}°",
+          "textSize": 28,
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 301,
+          "width": 528,
+          "height": 66,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 315,
+          "width": 468,
+          "height": 36,
+          "text": "体感 {{weatherFeels}}°    湿度 {{weatherHumidity}}%",
+          "textSize": 23
+        },
+        {
+          "type": "weatherHours",
+          "x": 30,
+          "y": 384,
+          "width": 468,
+          "height": 121,
+          "color": "blue"
+        },
+        {
+          "type": "rect",
+          "x": 30,
+          "y": 519,
+          "width": 468,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 532,
+          "width": 460,
+          "height": 38,
+          "text": "未来三天",
+          "textSize": 26,
+          "bold": true
+        },
+        {
+          "type": "forecastBars",
+          "x": 31,
+          "y": 579,
+          "width": 466,
+          "height": 103,
+          "color": "blue"
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 704,
+          "width": 528,
+          "height": 88,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 714,
+          "width": 466,
+          "height": 34,
+          "text": "日出 {{weatherSunrise}}     日落 {{weatherSunset}}",
+          "textSize": 21,
+          "color": "white"
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 751,
+          "width": 466,
+          "height": 29,
+          "text": "空气 AQI {{weatherAqi}}   ·   {{weatherUpdated}}",
+          "textSize": 16,
+          "color": "white"
+        }
+      ]
+    },
+    "weather2": {
+      "name": "天气色卡",
+      "sources": [
+        "weather"
+      ],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 792,
+          "fill": "black"
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 104,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 24,
+          "y": 14,
+          "width": 475,
+          "height": 51,
+          "text": "{{weatherCity}} · {{week}}",
+          "textSize": 34,
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 25,
+          "y": 65,
+          "width": 475,
+          "height": 31,
+          "text": "{{date}}  {{time}}",
+          "textSize": 19
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 106,
+          "width": 316,
+          "height": 238,
+          "fill": "white"
+        },
+        {
+          "type": "text",
+          "x": 23,
+          "y": 127,
+          "width": 240,
+          "height": 108,
+          "text": "{{weatherTemp}}°",
+          "textSize": 84,
+          "bold": true
+        },
+        {
+          "type": "weatherIcon",
+          "x": 235,
+          "y": 118,
+          "width": 67,
+          "height": 67
+        },
+        {
+          "type": "text",
+          "x": 23,
+          "y": 244,
+          "width": 273,
+          "height": 45,
+          "text": "{{weatherText}}",
+          "textSize": 28,
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 23,
+          "y": 294,
+          "width": 273,
+          "height": 34,
+          "text": "{{weatherLow}}～{{weatherHigh}}°",
+          "textSize": 22
+        },
+        {
+          "type": "rect",
+          "x": 318,
+          "y": 106,
+          "width": 210,
+          "height": 120,
+          "fill": "aqiColor"
+        },
+        {
+          "type": "text",
+          "x": 332,
+          "y": 120,
+          "width": 182,
+          "height": 32,
+          "text": "空气 AQI",
+          "textSize": 22,
+          "color": "aqiInk",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 332,
+          "y": 150,
+          "width": 182,
+          "height": 65,
+          "text": "{{weatherAqi}}",
+          "textSize": 45,
+          "color": "aqiInk",
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 318,
+          "y": 228,
+          "width": 210,
+          "height": 116,
+          "fill": "white"
+        },
+        {
+          "type": "text",
+          "x": 332,
+          "y": 244,
+          "width": 181,
+          "height": 34,
+          "text": "湿度 {{weatherHumidity}}%",
+          "textSize": 20
+        },
+        {
+          "type": "text",
+          "x": 332,
+          "y": 288,
+          "width": 181,
+          "height": 33,
+          "text": "体感 {{weatherFeels}}°",
+          "textSize": 20
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 346,
+          "width": 528,
+          "height": 175,
+          "fill": "white"
+        },
+        {
+          "type": "text",
+          "x": 24,
+          "y": 358,
+          "width": 480,
+          "height": 41,
+          "text": "未来三天",
+          "textSize": 29,
+          "bold": true
+        },
+        {
+          "type": "forecastBars",
+          "x": 24,
+          "y": 404,
+          "width": 480,
+          "height": 100,
+          "color": "blue"
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 523,
+          "width": 528,
+          "height": 161,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 24,
+          "y": 537,
+          "width": 480,
+          "height": 40,
+          "text": "出门参考",
+          "textSize": 27,
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 24,
+          "y": 585,
+          "width": 480,
+          "height": 40,
+          "text": "{{wearAdvice}}",
+          "textSize": 23
+        },
+        {
+          "type": "text",
+          "x": 24,
+          "y": 637,
+          "width": 480,
+          "height": 33,
+          "text": "日出 {{weatherSunrise}}  ·  日落 {{weatherSunset}}",
+          "textSize": 20
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 686,
+          "width": 528,
+          "height": 106,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 24,
+          "y": 704,
+          "width": 480,
+          "height": 44,
+          "text": "{{weatherCity}}  ·  {{weatherText}}",
+          "textSize": 27,
+          "bold": true,
+          "color": "white"
+        },
+        {
+          "type": "text",
+          "x": 24,
+          "y": 753,
+          "width": 480,
+          "height": 30,
+          "text": "天气更新 {{weatherUpdated}}",
+          "textSize": 17,
+          "color": "white"
+        }
+      ]
+    },
+    "todo": {
+      "name": "专注清单",
+      "sources": [],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 111,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 30,
+          "y": 18,
+          "width": 460,
+          "height": 54,
+          "text": "专注清单",
+          "textSize": 36,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 32,
+          "y": 72,
+          "width": 460,
+          "height": 30,
+          "text": "{{date}}  ·  {{week}}",
+          "textSize": 19,
+          "color": "black"
+        },
+        {
+          "type": "text",
+          "x": 30,
+          "y": 133,
+          "width": 467,
+          "height": 77,
+          "text": "{{todoCount}} 项待办",
+          "textSize": 53,
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 30,
+          "y": 224,
+          "width": 468,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "list",
+          "x": 31,
+          "y": 251,
+          "width": 466,
+          "height": 398,
+          "source": "todos",
+          "numbered": true,
+          "emptyText": "今天还没有安排",
+          "textSize": 30,
+          "lineHeight": 1.55
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 681,
+          "width": 528,
+          "height": 111,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 32,
+          "y": 697,
+          "width": 464,
+          "height": 34,
+          "text": "年度进度",
+          "textSize": 21,
+          "color": "white"
+        },
+        {
+          "type": "text",
+          "x": 32,
+          "y": 738,
+          "width": 464,
+          "height": 44,
+          "text": "{{year}} 年已过 {{yearPercent}}%",
+          "textSize": 29,
+          "color": "white",
+          "bold": true
+        }
+      ]
+    },
+    "poem": {
+      "name": "诗词日签",
+      "sources": [
+        "poem"
+      ],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 111,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 30,
+          "y": 18,
+          "width": 460,
+          "height": 54,
+          "text": "每日诗词",
+          "textSize": 36,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 32,
+          "y": 72,
+          "width": 460,
+          "height": 30,
+          "text": "{{date}}  ·  {{week}}",
+          "textSize": 19,
+          "color": "white"
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 138,
+          "width": 466,
+          "height": 73,
+          "text": "{{poemTitle}}",
+          "textSize": 41,
+          "bold": true,
+          "color": "blue"
+        },
+        {
+          "type": "text",
+          "x": 32,
+          "y": 216,
+          "width": 465,
+          "height": 50,
+          "text": "{{poemBy}}",
+          "textSize": 22,
+          "showIf": "poemBy"
+        },
+        {
+          "type": "rect",
+          "x": 30,
+          "y": 278,
+          "width": 468,
+          "height": 2,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 32,
+          "y": 306,
+          "width": 464,
+          "height": 276,
+          "text": "{{poemText}}",
+          "textSize": 31,
+          "bold": true,
+          "lineHeight": 1.52
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 612,
+          "width": 528,
+          "height": 180,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 627,
+          "width": 466,
+          "height": 33,
+          "text": "诗词赏析",
+          "textSize": 23,
+          "bold": true,
+          "showIf": "poemNote"
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 671,
+          "width": 466,
+          "height": 92,
+          "text": "{{poemNote}}",
+          "textSize": 20,
+          "lineHeight": 1.45,
+          "showIf": "poemNote"
+        }
+      ]
+    },
+    "progress": {
+      "name": "年度进度",
+      "sources": [],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 111,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 30,
+          "y": 18,
+          "width": 460,
+          "height": 54,
+          "text": "年度进度",
+          "textSize": 36,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 32,
+          "y": 72,
+          "width": 460,
+          "height": 30,
+          "text": "{{date}}  ·  {{week}}",
+          "textSize": 19,
+          "color": "white"
+        },
+        {
+          "type": "text",
+          "x": 32,
+          "y": 149,
+          "width": 464,
+          "height": 157,
+          "text": "{{yearPercent}}%",
+          "textSize": 115,
+          "bold": true,
+          "color": "blue"
+        },
+        {
+          "type": "text",
+          "x": 32,
+          "y": 324,
+          "width": 464,
+          "height": 58,
+          "text": "{{year}} 年已过去",
+          "textSize": 35,
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 30,
+          "y": 399,
+          "width": 468,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "block",
+          "x": 32,
+          "y": 432,
+          "width": 464,
+          "height": 110,
+          "blockType": "dots",
+          "color": "blue"
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 597,
+          "width": 528,
+          "height": 195,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 616,
+          "width": 465,
+          "height": 120,
+          "text": "{{month}} 月 {{day}} 日",
+          "textSize": 63,
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 740,
+          "width": 465,
+          "height": 33,
+          "text": "{{week}}",
+          "textSize": 23
+        }
+      ]
+    },
+    "calendar": {
+      "name": "桌面月历",
+      "sources": [],
+      "nodes": [
+        {
+          "type": "builtin",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 660,
+          "kind": "calendar"
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 660,
+          "width": 528,
+          "height": 132,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 674,
+          "width": 471,
+          "height": 47,
+          "text": "桌面月历",
+          "textSize": 31,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 734,
+          "width": 342,
+          "height": 37,
+          "text": "{{date}}   ·   {{week}}",
+          "textSize": 22,
+          "color": "white",
+          "bold": false
+        },
+        {
+          "type": "text",
+          "x": 373,
+          "y": 734,
+          "width": 127,
+          "height": 37,
+          "text": "待办 {{todoCount}} 项",
+          "textSize": 19,
+          "color": "white",
+          "bold": false,
+          "align": "right"
+        }
+      ]
+    },
+    "countdown": {
+      "name": "期限看板",
+      "sources": [],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 112,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 14,
+          "width": 472,
+          "height": 54,
+          "text": "期限看板",
+          "textSize": 38,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 29,
+          "y": 72,
+          "width": 470,
+          "height": 32,
+          "text": "项目交付 · 考试 · 截止日",
+          "textSize": 20,
+          "color": "white",
+          "bold": false
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 112,
+          "width": 528,
+          "height": 77,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 129,
+          "width": 470,
+          "height": 43,
+          "text": "剩余时间",
+          "textSize": 28,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "list",
+          "x": 28,
+          "y": 216,
+          "width": 472,
+          "height": 421,
+          "source": "countdowns",
+          "numbered": true,
+          "textSize": 28,
+          "emptyText": "添加项目名称和截止日期",
+          "lineHeight": 1.55
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 669,
+          "width": 472,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 690,
+          "width": 470,
+          "height": 38,
+          "text": "今天是 {{date}}",
+          "textSize": 23,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 741,
+          "width": 470,
+          "height": 29,
+          "text": "{{week}}   ·   全年 {{yearPercent}}%",
+          "textSize": 18,
+          "color": "black",
+          "bold": false
+        }
+      ]
+    },
+    "quote": {
+      "name": "摘录剪报",
+      "sources": [
+        "quote"
+      ],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 78,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 10,
+          "width": 472,
+          "height": 53,
+          "text": "摘录剪报",
+          "textSize": 36,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 100,
+          "width": 470,
+          "height": 42,
+          "text": "{{date}}  ·  {{week}}",
+          "textSize": 22,
+          "color": "black",
+          "bold": false
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 151,
+          "width": 472,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 188,
+          "width": 13,
+          "height": 461,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 61,
+          "y": 214,
+          "width": 433,
+          "height": 396,
+          "text": "{{quote}}",
+          "textSize": 44,
+          "color": "black",
+          "bold": true,
+          "lineHeight": 1.55
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 674,
+          "width": 528,
+          "height": 118,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 687,
+          "width": 471,
+          "height": 40,
+          "text": "出处",
+          "textSize": 24,
+          "color": "black",
+          "bold": true,
+          "showIf": "quoteBy"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 738,
+          "width": 471,
+          "height": 37,
+          "text": "{{quoteBy}}",
+          "textSize": 23,
+          "color": "black",
+          "bold": false,
+          "showIf": "quoteBy"
+        }
+      ]
+    },
+    "custom": {
+      "name": "问题卡",
+      "sources": [],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 792,
+          "fill": "white"
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 13,
+          "height": 792,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 35,
+          "y": 31,
+          "width": 464,
+          "height": 56,
+          "text": "问题卡",
+          "textSize": 39,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 35,
+          "y": 103,
+          "width": 464,
+          "height": 38,
+          "text": "复盘 · {{date}}",
+          "textSize": 22,
+          "color": "black",
+          "bold": false
+        },
+        {
+          "type": "rect",
+          "x": 35,
+          "y": 164,
+          "width": 459,
+          "height": 234,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 53,
+          "y": 189,
+          "width": 423,
+          "height": 185,
+          "text": "哪件小事做得更省力，却能带来最大的变化？",
+          "textSize": 43,
+          "color": "white",
+          "bold": true,
+          "lineHeight": 1.38
+        },
+        {
+          "type": "rect",
+          "x": 35,
+          "y": 457,
+          "width": 459,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 35,
+          "y": 485,
+          "width": 459,
+          "height": 48,
+          "text": "想清楚这三点",
+          "textSize": 29,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 35,
+          "y": 550,
+          "width": 463,
+          "height": 194,
+          "text": "1. 它在哪一步反复出现？\n2. 有没有一条更简单的做法？\n3. 明天怎样验证它有效？",
+          "textSize": 27,
+          "color": "black",
+          "bold": false,
+          "lineHeight": 1.75
+        }
+      ]
+    }
+  }
+}

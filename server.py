@@ -42,6 +42,7 @@ def build_app(svc) -> web.Application:
     app.router.add_get("/", index)
     app.router.add_get("/card.html", index)
     app.router.add_get(r"/{name:scenes\.html|layout-ui\.js}", page)
+    app.router.add_get(r"/{name:online/(?:index\.html|ui\.js|render\.js|sources\.js)}", page)
     for method, path, handler in card.make_routes():
         app.router.add_route(method, path, handler)
     app["svc"] = svc

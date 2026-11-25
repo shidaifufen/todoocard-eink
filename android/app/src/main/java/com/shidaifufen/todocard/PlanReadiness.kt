@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
@@ -22,6 +23,7 @@ internal fun PlanReadiness(ctx: Context) {
         ctx.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED
     }) }
     var message by remember { mutableStateOf("") }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
     val lifecycle = (ctx as androidx.activity.ComponentActivity).lifecycle
     DisposableEffect(lifecycle) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
@@ -39,8 +41,16 @@ internal fun PlanReadiness(ctx: Context) {
         message = if (ready) "蓝牙和通知已就绪" else "计划需要蓝牙权限，建议同时允许通知以查看状态"
         SchedulerWorker.schedule(ctx)
     }
-    OutlinedCard(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-        Column(Modifier.padding(12.dp)) {
+    OutlinedCard(onClick = { showSettings = true }, modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("计划权限")
+            Text(if (exact && ready) "已就绪 ›" else "查看设置 ›", color = MaterialTheme.colorScheme.primary)
+        }
+    }
+    if (showSettings) AlertDialog(onDismissRequest = { showSettings = false },
+        title = { Text("计划权限") }, text = {
+        Column {
             Text(if (exact) "精确定时已开启" else "需要开启“闹钟与提醒”以准点执行")
             Text("到点开始查找卡片；连接、传输和显影仍需一些时间。设备休眠时可等待广播最多 120 秒。")
             if (!exact) Text("未授权时只能使用系统宽松定时，可能延迟。短间隔在深度休眠下也受系统频率限制。")
@@ -56,7 +66,7 @@ internal fun PlanReadiness(ctx: Context) {
             }) { Text("管理后台耗电与休眠限制") }
             if (message.isNotBlank()) Text(message)
         }
-    }
+    }, confirmButton = { TextButton(onClick = { showSettings = false }) { Text("完成") } })
 }
 
 private fun planPermissions(): Array<String> {

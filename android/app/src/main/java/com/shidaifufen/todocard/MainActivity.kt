@@ -47,6 +47,7 @@ internal val TEMPLATES = listOf(
     "photo" to "照片轮播",
     "bing" to "Bing 每日壁纸",
     "ai" to "AI 生图",
+    "online" to "在线场景",
 )
 
 internal fun handleSharedIntent(intent: Intent?,
@@ -98,6 +99,8 @@ private fun App(incomingIntent: Intent?) {
     val layoutRevision by LayoutStore.revision.collectAsState()
     var tab by remember { mutableIntStateOf(0) }
     var kind by remember { mutableStateOf("summary") }
+    var showOnline by remember { mutableStateOf(false) }
+    var onlineRevision by remember { mutableIntStateOf(0) }
     var card by remember { mutableStateOf(PlanStore.card(ctx)) }
     var preview by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var photoPath by remember { mutableStateOf(PlanStore.lastPhoto) }
@@ -213,13 +216,14 @@ private fun App(incomingIntent: Intent?) {
         if (onlineContent && kind in LayoutPack.kinds &&
             !refreshing && CardSources.stale(ctx, kind)) refreshCard(false)
     }
-    LaunchedEffect(kind, card, photoPath, fields, edit, tab, refreshing, onlineContent, clockTick, photoLocationRevision, layoutRevision) {
+    LaunchedEffect(kind, card, photoPath, fields, edit, tab, refreshing, onlineContent, clockTick, photoLocationRevision, layoutRevision, onlineRevision) {
         if (tab != 0) return@LaunchedEffect
         preview = withContext(Dispatchers.Default) {
             runCatching {
                 if (kind in listOf("photo", "bing", "ai")) {
                     if (!photoReady) null else PhotoCard.render(photoPath, fields, edit)
-                } else Render.render(card.copy(kind = kind))
+                } else if (kind == "online") OnlineCard.read(ctx)
+                else Render.render(card.copy(kind = kind))
             }.getOrNull()
         }
     }
@@ -442,6 +446,8 @@ private fun App(incomingIntent: Intent?) {
                     val bmp = if (sentKind in listOf("photo", "bing", "ai")) {
                         check(java.io.File(sentPath).isFile) { "请先选择照片" }
                         PhotoCard.render(sentPath, sentFields, sentEdit)
+                    } else if (sentKind == "online") {
+                        checkNotNull(OnlineCard.read(ctx)) { "请先生成在线卡片" }
                     } else Render.render(sentCard)
                     val output = java.io.File.createTempFile("push_", ".png", ctx.cacheDir)
                     try {
@@ -579,6 +585,7 @@ private fun App(incomingIntent: Intent?) {
                         onRefresh = { refreshCard() }, onAnalysis = ::refreshAnalysis, refreshing = refreshing,
                         onScanAll = { requestScan(true) }, scanTimedOut = scanTimedOut,
                         onGenerate = ::generateImage, onlineContent = onlineContent,
+                        onOnline = { showOnline = true },
                         onSourceMode = { online ->
                             ContentOptions.setOnline(ctx, kind, online); sourceRevision++
                             if (online) refreshCard() else status = "已选择手动内容，可编辑后推送"
@@ -629,6 +636,10 @@ private fun App(incomingIntent: Intent?) {
                 }
             }
         }
+        if (showOnline) OnlineSceneDialog(ctx, dark, onDismiss = { showOnline = false }, onUse = {
+            onlineRevision++
+            showOnline = false
+        })
         if (showAlbums) AlbumPicker(albums,
             onChoose = {
                 PlanStore.addAlbum(ctx, it); albums = PlanStore.albums(ctx)
