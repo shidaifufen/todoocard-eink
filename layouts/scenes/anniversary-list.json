@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "name": "纪念日清单",
+  "templates": {
+    "countdown": {
+      "name": "纪念日清单",
+      "sources": [],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 792,
+          "fill": "blue"
+        },
+        {
+          "type": "rect",
+          "x": 24,
+          "y": 24,
+          "width": 480,
+          "height": 744,
+          "fill": "white"
+        },
+        {
+          "type": "rect",
+          "x": 24,
+          "y": 24,
+          "width": 480,
+          "height": 166,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 43,
+          "y": 49,
+          "width": 440,
+          "height": 66,
+          "text": "纪念日清单",
+          "textSize": 44,
+          "color": "black",
+          "bold": true,
+          "align": "center"
+        },
+        {
+          "type": "text",
+          "x": 43,
+          "y": 127,
+          "width": 440,
+          "height": 38,
+          "text": "{{month}} 月 {{day}} 日  ·  {{week}}",
+          "textSize": 23,
+          "color": "black",
+          "bold": false,
+          "align": "center"
+        },
+        {
+          "type": "rect",
+          "x": 44,
+          "y": 216,
+          "width": 440,
+          "height": 2,
+          "fill": "blue"
+        },
+        {
+          "type": "list",
+          "x": 44,
+          "y": 239,
+          "width": 440,
+          "height": 430,
+          "source": "countdowns",
+          "numbered": false,
+          "textSize": 28,
+          "emptyText": "添加生日、假期或纪念日",
+          "lineHeight": 1.55
+        },
+        {
+          "type": "rect",
+          "x": 44,
+          "y": 694,
+          "width": 440,
+          "height": 2,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 44,
+          "y": 714,
+          "width": 440,
+          "height": 33,
+          "text": "{{year}} 年",
+          "textSize": 21,
+          "color": "blue",
+          "bold": false,
+          "align": "center"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "name": "开发者笔记",
+  "templates": {
+    "custom": {
+      "name": "开发者笔记",
+      "sources": [],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 792,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 27,
+          "y": 27,
+          "width": 474,
+          "height": 55,
+          "text": "开发者笔记",
+          "textSize": 37,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 27,
+          "y": 102,
+          "width": 474,
+          "height": 36,
+          "text": "Git  /  {{date}}",
+          "textSize": 20,
+          "color": "white",
+          "bold": false
+        },
+        {
+          "type": "rect",
+          "x": 26,
+          "y": 158,
+          "width": 476,
+          "height": 165,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 42,
+          "y": 185,
+          "width": 445,
+          "height": 116,
+          "text": "git diff --cached",
+          "textSize": 44,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 357,
+          "width": 472,
+          "height": 71,
+          "text": "提交前看一眼暂存区",
+          "textSize": 33,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 457,
+          "width": 472,
+          "height": 162,
+          "text": "这条命令展示下一次提交将包含的修改。直接运行 git diff，则查看工作区里尚未暂存的改动。",
+          "textSize": 26,
+          "color": "white",
+          "bold": false,
+          "lineHeight": 1.48
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 653,
+          "width": 472,
+          "height": 2,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 679,
+          "width": 472,
+          "height": 85,
+          "text": "提交前再用 git status 确认文件列表。",
+          "textSize": 25,
+          "color": "white",
+          "bold": false
+        }
+      ]
+    }
+  }
+}

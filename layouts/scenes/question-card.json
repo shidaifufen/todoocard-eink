@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "name": "问题卡",
+  "templates": {
+    "custom": {
+      "name": "问题卡",
+      "sources": [],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 792,
+          "fill": "white"
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 13,
+          "height": 792,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 35,
+          "y": 31,
+          "width": 464,
+          "height": 56,
+          "text": "问题卡",
+          "textSize": 39,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 35,
+          "y": 103,
+          "width": 464,
+          "height": 38,
+          "text": "复盘 · {{date}}",
+          "textSize": 22,
+          "color": "black",
+          "bold": false
+        },
+        {
+          "type": "rect",
+          "x": 35,
+          "y": 164,
+          "width": 459,
+          "height": 234,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 53,
+          "y": 189,
+          "width": 423,
+          "height": 185,
+          "text": "哪件小事做得更省力，却能带来最大的变化？",
+          "textSize": 43,
+          "color": "white",
+          "bold": true,
+          "lineHeight": 1.38
+        },
+        {
+          "type": "rect",
+          "x": 35,
+          "y": 457,
+          "width": 459,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 35,
+          "y": 485,
+          "width": 459,
+          "height": 48,
+          "text": "想清楚这三点",
+          "textSize": 29,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 35,
+          "y": 550,
+          "width": 463,
+          "height": 194,
+          "text": "1. 它在哪一步反复出现？\n2. 有没有一条更简单的做法？\n3. 明天怎样验证它有效？",
+          "textSize": 27,
+          "color": "black",
+          "bold": false,
+          "lineHeight": 1.75
+        }
+      ]
+    }
+  }
+}

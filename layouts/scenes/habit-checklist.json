@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "name": "习惯清单",
+  "templates": {
+    "todo": {
+      "name": "习惯清单",
+      "sources": [],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 792,
+          "fill": "black"
+        },
+        {
+          "type": "rect",
+          "x": 14,
+          "y": 14,
+          "width": 500,
+          "height": 764,
+          "fill": "white"
+        },
+        {
+          "type": "rect",
+          "x": 14,
+          "y": 14,
+          "width": 500,
+          "height": 142,
+          "fill": "green"
+        },
+        {
+          "type": "text",
+          "x": 34,
+          "y": 35,
+          "width": 460,
+          "height": 56,
+          "text": "习惯清单",
+          "textSize": 40,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 34,
+          "y": 103,
+          "width": 460,
+          "height": 37,
+          "text": "{{date}}  /  {{week}}",
+          "textSize": 21,
+          "color": "black",
+          "bold": false
+        },
+        {
+          "type": "rect",
+          "x": 34,
+          "y": 223,
+          "width": 460,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 34,
+          "y": 174,
+          "width": 460,
+          "height": 45,
+          "text": "今天安排了 {{todoCount}} 项",
+          "textSize": 28,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "list",
+          "x": 34,
+          "y": 246,
+          "width": 460,
+          "height": 462,
+          "source": "todos",
+          "numbered": false,
+          "textSize": 28,
+          "emptyText": "将要坚持的习惯加到今日待办",
+          "lineHeight": 1.55
+        },
+        {
+          "type": "rect",
+          "x": 34,
+          "y": 730,
+          "width": 460,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 34,
+          "y": 739,
+          "width": 460,
+          "height": 30,
+          "text": "今年已过 {{yearPercent}}%",
+          "textSize": 18,
+          "color": "black",
+          "bold": false,
+          "align": "right"
+        }
+      ]
+    }
+  }
+}

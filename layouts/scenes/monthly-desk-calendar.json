@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "name": "桌面月历",
+  "templates": {
+    "calendar": {
+      "name": "桌面月历",
+      "sources": [],
+      "nodes": [
+        {
+          "type": "builtin",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 660,
+          "kind": "calendar"
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 660,
+          "width": 528,
+          "height": 132,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 674,
+          "width": 471,
+          "height": 47,
+          "text": "桌面月历",
+          "textSize": 31,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 734,
+          "width": 342,
+          "height": 37,
+          "text": "{{date}}   ·   {{week}}",
+          "textSize": 22,
+          "color": "white",
+          "bold": false
+        },
+        {
+          "type": "text",
+          "x": 373,
+          "y": 734,
+          "width": 127,
+          "height": 37,
+          "text": "待办 {{todoCount}} 项",
+          "textSize": 19,
+          "color": "white",
+          "bold": false,
+          "align": "right"
+        }
+      ]
+    }
+  }
+}

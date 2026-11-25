@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "name": "家庭备忘",
+  "templates": {
+    "todo": {
+      "name": "家庭备忘",
+      "sources": [],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 792,
+          "fill": "yellow"
+        },
+        {
+          "type": "rect",
+          "x": 18,
+          "y": 18,
+          "width": 492,
+          "height": 756,
+          "fill": "white",
+          "border": "black",
+          "borderWidth": 3
+        },
+        {
+          "type": "text",
+          "x": 42,
+          "y": 39,
+          "width": 440,
+          "height": 65,
+          "text": "家庭备忘",
+          "textSize": 47,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 42,
+          "y": 117,
+          "width": 444,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 42,
+          "y": 138,
+          "width": 444,
+          "height": 41,
+          "text": "{{date}}    共 {{todoCount}} 项",
+          "textSize": 24,
+          "color": "black",
+          "bold": false
+        },
+        {
+          "type": "list",
+          "x": 42,
+          "y": 213,
+          "width": 444,
+          "height": 464,
+          "source": "todos",
+          "numbered": false,
+          "textSize": 29,
+          "emptyText": "在待办里添加采购、家务或提醒",
+          "lineHeight": 1.55
+        },
+        {
+          "type": "rect",
+          "x": 42,
+          "y": 704,
+          "width": 444,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 42,
+          "y": 716,
+          "width": 444,
+          "height": 38,
+          "text": "{{week}}",
+          "textSize": 22,
+          "color": "black",
+          "bold": false,
+          "align": "right"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "name": "歌词海报",
+  "templates": {
+    "quote": {
+      "name": "歌词海报",
+      "sources": [
+        "quote"
+      ],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 302,
+          "fill": "blue"
+        },
+        {
+          "type": "rect",
+          "x": 35,
+          "y": 22,
+          "width": 246,
+          "height": 252,
+          "fill": "black",
+          "radius": 80
+        },
+        {
+          "type": "rect",
+          "x": 80,
+          "y": 65,
+          "width": 156,
+          "height": 156,
+          "fill": "blue",
+          "border": "white",
+          "borderWidth": 2,
+          "radius": 78
+        },
+        {
+          "type": "rect",
+          "x": 119,
+          "y": 105,
+          "width": 78,
+          "height": 78,
+          "fill": "yellow",
+          "radius": 39
+        },
+        {
+          "type": "rect",
+          "x": 151,
+          "y": 137,
+          "width": 14,
+          "height": 14,
+          "fill": "black",
+          "radius": 7
+        },
+        {
+          "type": "text",
+          "x": 303,
+          "y": 55,
+          "width": 201,
+          "height": 109,
+          "text": "歌词海报",
+          "textSize": 40,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 304,
+          "y": 215,
+          "width": 193,
+          "height": 39,
+          "text": "{{date}}",
+          "textSize": 20,
+          "color": "white",
+          "bold": false
+        },
+        {
+          "type": "text",
+          "x": 29,
+          "y": 342,
+          "width": 470,
+          "height": 313,
+          "text": "{{quote}}",
+          "textSize": 42,
+          "color": "black",
+          "bold": true,
+          "lineHeight": 1.53
+        },
+        {
+          "type": "rect",
+          "x": 29,
+          "y": 670,
+          "width": 470,
+          "height": 2,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 29,
+          "y": 695,
+          "width": 470,
+          "height": 78,
+          "text": "{{quoteBy}}",
+          "textSize": 24,
+          "color": "blue",
+          "bold": false,
+          "showIf": "quoteBy"
+        }
+      ]
+    }
+  }
+}

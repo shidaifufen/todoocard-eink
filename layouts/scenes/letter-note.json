@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "name": "一封短信",
+  "templates": {
+    "quote": {
+      "name": "一封短信",
+      "sources": [
+        "quote"
+      ],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 792,
+          "fill": "yellow"
+        },
+        {
+          "type": "rect",
+          "x": 22,
+          "y": 24,
+          "width": 484,
+          "height": 743,
+          "fill": "white",
+          "border": "black",
+          "borderWidth": 2
+        },
+        {
+          "type": "text",
+          "x": 49,
+          "y": 50,
+          "width": 280,
+          "height": 60,
+          "text": "一封短信",
+          "textSize": 39,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 401,
+          "y": 45,
+          "width": 78,
+          "height": 99,
+          "fill": "yellow",
+          "border": "black",
+          "borderWidth": 2
+        },
+        {
+          "type": "text",
+          "x": 408,
+          "y": 55,
+          "width": 65,
+          "height": 74,
+          "text": "{{day}}\n{{month}}月",
+          "textSize": 23,
+          "color": "black",
+          "bold": true,
+          "align": "center",
+          "lineHeight": 1.4
+        },
+        {
+          "type": "text",
+          "x": 49,
+          "y": 123,
+          "width": 298,
+          "height": 35,
+          "text": "{{date}} · {{week}}",
+          "textSize": 20,
+          "color": "black",
+          "bold": false
+        },
+        {
+          "type": "rect",
+          "x": 49,
+          "y": 181,
+          "width": 428,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 49,
+          "y": 219,
+          "width": 429,
+          "height": 405,
+          "text": "{{quote}}",
+          "textSize": 38,
+          "color": "black",
+          "bold": false,
+          "lineHeight": 1.6
+        },
+        {
+          "type": "rect",
+          "x": 49,
+          "y": 652,
+          "width": 428,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 49,
+          "y": 675,
+          "width": 429,
+          "height": 48,
+          "text": "{{quoteBy}}",
+          "textSize": 24,
+          "color": "black",
+          "bold": false,
+          "align": "right",
+          "showIf": "quoteBy"
+        }
+      ]
+    }
+  }
+}

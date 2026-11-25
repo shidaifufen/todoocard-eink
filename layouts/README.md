@@ -13,6 +13,10 @@ Android、Windows、macOS 和纯网页版支持同一套 JSON。Android 从「�
 
 包内只列出需要更改的卡片，未列出的保留现状。应用前会校验文件格式、元素边界、数据字段，并尝试渲染包内全部卡片；失败不覆盖现有版式。应用版本升级保留导入内容。
 
+### 六色场景
+
+新增的 24 套场景各有独立 JSON。可先看日程、天气、阅读和学习等分类预览，再打开所选文件并复制 GitHub 链接导入。[浏览场景和预览](scenes/README.md)
+
 当前文件：
 
 - `default.json`：完整默认版式。与 APK 内 `assets/layouts/default.json` 保持相同。

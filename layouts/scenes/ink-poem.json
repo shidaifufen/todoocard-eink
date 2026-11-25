@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "name": "墨色诗帖",
+  "templates": {
+    "poem": {
+      "name": "墨色诗帖",
+      "sources": [
+        "poem"
+      ],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 175,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 29,
+          "y": 17,
+          "width": 471,
+          "height": 46,
+          "text": "墨色诗帖",
+          "textSize": 30,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 29,
+          "y": 83,
+          "width": 471,
+          "height": 72,
+          "text": "{{poemTitle}}",
+          "textSize": 44,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 175,
+          "width": 528,
+          "height": 534,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 36,
+          "y": 207,
+          "width": 456,
+          "height": 48,
+          "text": "{{poemBy}}",
+          "textSize": 23,
+          "color": "white",
+          "bold": true,
+          "showIf": "poemBy"
+        },
+        {
+          "type": "rect",
+          "x": 36,
+          "y": 280,
+          "width": 456,
+          "height": 2,
+          "fill": "white"
+        },
+        {
+          "type": "text",
+          "x": 36,
+          "y": 310,
+          "width": 456,
+          "height": 367,
+          "text": "{{poemText}}",
+          "textSize": 42,
+          "color": "white",
+          "bold": true,
+          "lineHeight": 1.58
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 709,
+          "width": 528,
+          "height": 83,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 36,
+          "y": 730,
+          "width": 456,
+          "height": 41,
+          "text": "{{date}}  ·  {{week}}",
+          "textSize": 22,
+          "color": "white",
+          "bold": false
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "name": "桌面名片",
+  "templates": {
+    "custom": {
+      "name": "桌面名片",
+      "sources": [],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 792,
+          "fill": "blue"
+        },
+        {
+          "type": "rect",
+          "x": 24,
+          "y": 24,
+          "width": 480,
+          "height": 744,
+          "fill": "white"
+        },
+        {
+          "type": "rect",
+          "x": 24,
+          "y": 24,
+          "width": 480,
+          "height": 98,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 42,
+          "y": 39,
+          "width": 443,
+          "height": 62,
+          "text": "桌面名片",
+          "textSize": 43,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 42,
+          "y": 166,
+          "width": 442,
+          "height": 112,
+          "text": "林清",
+          "textSize": 78,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 43,
+          "y": 306,
+          "width": 440,
+          "height": 49,
+          "text": "产品设计  /  独立创作",
+          "textSize": 29,
+          "color": "blue",
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 43,
+          "y": 395,
+          "width": 440,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 43,
+          "y": 423,
+          "width": 440,
+          "height": 40,
+          "text": "联系",
+          "textSize": 22,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 43,
+          "y": 482,
+          "width": 440,
+          "height": 71,
+          "text": "hello@example.com",
+          "textSize": 31,
+          "color": "black",
+          "bold": false
+        },
+        {
+          "type": "rect",
+          "x": 43,
+          "y": 592,
+          "width": 440,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 43,
+          "y": 621,
+          "width": 440,
+          "height": 88,
+          "text": "欢迎交流电子墨水屏、界面和排版。",
+          "textSize": 26,
+          "color": "black",
+          "bold": false,
+          "lineHeight": 1.5
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "name": "年度点阵",
+  "templates": {
+    "progress": {
+      "name": "年度点阵",
+      "sources": [],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 400,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 30,
+          "y": 23,
+          "width": 466,
+          "height": 53,
+          "text": "年度点阵",
+          "textSize": 36,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 30,
+          "y": 98,
+          "width": 466,
+          "height": 168,
+          "text": "{{yearPercent}}%",
+          "textSize": 132,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 30,
+          "y": 299,
+          "width": 466,
+          "height": 53,
+          "text": "{{year}} 年已过去",
+          "textSize": 35,
+          "color": "white",
+          "bold": false
+        },
+        {
+          "type": "block",
+          "x": 30,
+          "y": 429,
+          "width": 468,
+          "height": 179,
+          "blockType": "dots",
+          "color": "blue"
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 635,
+          "width": 528,
+          "height": 157,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 29,
+          "y": 650,
+          "width": 470,
+          "height": 72,
+          "text": "{{month}} 月 {{day}} 日",
+          "textSize": 54,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 741,
+          "width": 467,
+          "height": 37,
+          "text": "{{week}}  ·  {{date}}",
+          "textSize": 22,
+          "color": "black",
+          "bold": false
+        }
+      ]
+    }
+  }
+}

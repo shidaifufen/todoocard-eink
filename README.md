@@ -23,7 +23,7 @@
 - [每日一句＋天气](https://github.com/shidaifufen/todoocard-eink/blob/main/layouts/quote-weather.json)
 - [完整格式、组件和更新规则](layouts/README.md)
 
-Windows、macOS 和纯网页版也可以导入同一份 JSON。新版式会出现在「看板版式包」菜单，选择后可以按场景调整选项并预览。[新版式目录](layouts/README.md#使用)
+Windows、macOS 和纯网页版也可以导入同一份 JSON。在「看板版式包」粘贴所选文件的 GitHub 链接，预览后应用。[六色场景预览与文件](layouts/scenes/README.md)
 
 支持 `github.com/用户/仓库/blob/分支/路径.json`、`raw.githubusercontent.com/用户/仓库/分支/路径.json`，以及 `github.com/用户/仓库/releases/download/标签/文件.json`、`releases/latest/download/文件.json`。后续在 GitHub 更新同一分支和路径的 JSON，应用会保留上次链接，再次获取并应用即可更新；固定标签或提交的链接用于锁定版本。仅支持公开文件，不需要 GitHub 令牌。失败不会替换当前版式，可撤销或恢复内置。
 

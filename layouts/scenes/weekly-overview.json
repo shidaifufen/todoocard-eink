@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "name": "一周安排",
+  "templates": {
+    "todo": {
+      "name": "一周安排",
+      "sources": [],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 141,
+          "height": 792,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 16,
+          "y": 27,
+          "width": 111,
+          "height": 41,
+          "text": "{{year}} 年",
+          "textSize": 23,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 16,
+          "y": 102,
+          "width": 110,
+          "height": 91,
+          "text": "{{day}}",
+          "textSize": 64,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 16,
+          "y": 201,
+          "width": 110,
+          "height": 38,
+          "text": "{{month}} 月",
+          "textSize": 23,
+          "color": "white",
+          "bold": false
+        },
+        {
+          "type": "text",
+          "x": 16,
+          "y": 244,
+          "width": 110,
+          "height": 40,
+          "text": "{{week}}",
+          "textSize": 22,
+          "color": "white",
+          "bold": false
+        },
+        {
+          "type": "text",
+          "x": 16,
+          "y": 683,
+          "width": 110,
+          "height": 75,
+          "text": "年度进度\n{{yearPercent}}%",
+          "textSize": 19,
+          "color": "white",
+          "bold": false
+        },
+        {
+          "type": "text",
+          "x": 164,
+          "y": 32,
+          "width": 336,
+          "height": 66,
+          "text": "一周安排",
+          "textSize": 44,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 164,
+          "y": 116,
+          "width": 336,
+          "height": 40,
+          "text": "待办 {{todoCount}} 项",
+          "textSize": 22,
+          "color": "black",
+          "bold": false
+        },
+        {
+          "type": "rect",
+          "x": 164,
+          "y": 183,
+          "width": 336,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "list",
+          "x": 164,
+          "y": 209,
+          "width": 336,
+          "height": 520,
+          "source": "todos",
+          "numbered": true,
+          "textSize": 25,
+          "emptyText": "在待办中写下本周要做的事",
+          "lineHeight": 1.55
+        }
+      ]
+    }
+  }
+}

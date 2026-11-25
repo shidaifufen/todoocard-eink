@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "name": "期限看板",
+  "templates": {
+    "countdown": {
+      "name": "期限看板",
+      "sources": [],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 112,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 14,
+          "width": 472,
+          "height": 54,
+          "text": "期限看板",
+          "textSize": 38,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 29,
+          "y": 72,
+          "width": 470,
+          "height": 32,
+          "text": "项目交付 · 考试 · 截止日",
+          "textSize": 20,
+          "color": "white",
+          "bold": false
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 112,
+          "width": 528,
+          "height": 77,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 129,
+          "width": 470,
+          "height": 43,
+          "text": "剩余时间",
+          "textSize": 28,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "list",
+          "x": 28,
+          "y": 216,
+          "width": 472,
+          "height": 421,
+          "source": "countdowns",
+          "numbered": true,
+          "textSize": 28,
+          "emptyText": "添加项目名称和截止日期",
+          "lineHeight": 1.55
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 669,
+          "width": 472,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 690,
+          "width": 470,
+          "height": 38,
+          "text": "今天是 {{date}}",
+          "textSize": 23,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 741,
+          "width": 470,
+          "height": 29,
+          "text": "{{week}}   ·   全年 {{yearPercent}}%",
+          "textSize": 18,
+          "color": "black",
+          "bold": false
+        }
+      ]
+    }
+  }
+}

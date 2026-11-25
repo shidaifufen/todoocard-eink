@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "name": "诗笺",
+  "templates": {
+    "poem": {
+      "name": "诗笺",
+      "sources": [
+        "poem"
+      ],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 792,
+          "fill": "black"
+        },
+        {
+          "type": "rect",
+          "x": 14,
+          "y": 14,
+          "width": 500,
+          "height": 764,
+          "fill": "white"
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 28,
+          "width": 8,
+          "height": 736,
+          "fill": "red"
+        },
+        {
+          "type": "text",
+          "x": 53,
+          "y": 37,
+          "width": 435,
+          "height": 51,
+          "text": "诗笺",
+          "textSize": 35,
+          "color": "red",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 53,
+          "y": 96,
+          "width": 435,
+          "height": 33,
+          "text": "{{date}} · {{week}}",
+          "textSize": 20,
+          "color": "black",
+          "bold": false
+        },
+        {
+          "type": "rect",
+          "x": 53,
+          "y": 143,
+          "width": 425,
+          "height": 2,
+          "fill": "red"
+        },
+        {
+          "type": "text",
+          "x": 53,
+          "y": 168,
+          "width": 430,
+          "height": 73,
+          "text": "{{poemTitle}}",
+          "textSize": 42,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 53,
+          "y": 245,
+          "width": 430,
+          "height": 49,
+          "text": "{{poemBy}}",
+          "textSize": 23,
+          "color": "black",
+          "bold": false,
+          "showIf": "poemBy"
+        },
+        {
+          "type": "text",
+          "x": 53,
+          "y": 315,
+          "width": 424,
+          "height": 251,
+          "text": "{{poemText}}",
+          "textSize": 29,
+          "color": "black",
+          "bold": true,
+          "lineHeight": 1.55
+        },
+        {
+          "type": "rect",
+          "x": 53,
+          "y": 589,
+          "width": 425,
+          "height": 2,
+          "fill": "red"
+        },
+        {
+          "type": "text",
+          "x": 53,
+          "y": 603,
+          "width": 425,
+          "height": 34,
+          "text": "赏析",
+          "textSize": 22,
+          "color": "red",
+          "bold": true,
+          "showIf": "poemNote"
+        },
+        {
+          "type": "text",
+          "x": 53,
+          "y": 648,
+          "width": 423,
+          "height": 103,
+          "text": "{{poemNote}}",
+          "textSize": 20,
+          "color": "black",
+          "bold": false,
+          "lineHeight": 1.48,
+          "showIf": "poemNote"
+        }
+      ]
+    }
+  }
+}

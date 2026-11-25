@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "name": "成语笔记",
+  "templates": {
+    "custom": {
+      "name": "成语笔记",
+      "sources": [],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 792,
+          "fill": "yellow"
+        },
+        {
+          "type": "rect",
+          "x": 12,
+          "y": 12,
+          "width": 504,
+          "height": 768,
+          "fill": "white"
+        },
+        {
+          "type": "text",
+          "x": 35,
+          "y": 31,
+          "width": 459,
+          "height": 55,
+          "text": "成语笔记",
+          "textSize": 37,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 35,
+          "y": 105,
+          "width": 459,
+          "height": 37,
+          "text": "成语与表达   ·   {{date}}",
+          "textSize": 19,
+          "color": "black",
+          "bold": false
+        },
+        {
+          "type": "rect",
+          "x": 35,
+          "y": 152,
+          "width": 460,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 34,
+          "y": 174,
+          "width": 459,
+          "height": 131,
+          "text": "持之以恒",
+          "textSize": 73,
+          "color": "blue",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 36,
+          "y": 315,
+          "width": 459,
+          "height": 41,
+          "text": "chí zhī yǐ héng",
+          "textSize": 25,
+          "color": "black",
+          "bold": false
+        },
+        {
+          "type": "rect",
+          "x": 36,
+          "y": 388,
+          "width": 87,
+          "height": 41,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 46,
+          "y": 392,
+          "width": 67,
+          "height": 32,
+          "text": "释义",
+          "textSize": 20,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 36,
+          "y": 449,
+          "width": 459,
+          "height": 77,
+          "text": "长久地坚持下去。",
+          "textSize": 31,
+          "color": "black",
+          "bold": false
+        },
+        {
+          "type": "rect",
+          "x": 36,
+          "y": 544,
+          "width": 87,
+          "height": 41,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 46,
+          "y": 548,
+          "width": 67,
+          "height": 32,
+          "text": "例句",
+          "textSize": 20,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 36,
+          "y": 606,
+          "width": 459,
+          "height": 124,
+          "text": "每天写一页，持之以恒，就能攒成一本。",
+          "textSize": 31,
+          "color": "black",
+          "bold": false,
+          "lineHeight": 1.5
+        }
+      ]
+    }
+  }
+}

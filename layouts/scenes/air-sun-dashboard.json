@@ -1,0 +1,175 @@
+{
+  "schemaVersion": 1,
+  "name": "空气与光照",
+  "templates": {
+    "weather2": {
+      "name": "空气与光照",
+      "sources": [
+        "weather"
+      ],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 112,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 14,
+          "width": 472,
+          "height": 54,
+          "text": "空气与光照",
+          "textSize": 38,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 29,
+          "y": 72,
+          "width": 470,
+          "height": 32,
+          "text": "{{weatherCity}}　{{date}}",
+          "textSize": 20,
+          "color": "black",
+          "bold": false
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 112,
+          "width": 528,
+          "height": 206,
+          "fill": "aqiColor"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 132,
+          "width": 466,
+          "height": 46,
+          "text": "空气质量 · US AQI",
+          "textSize": 27,
+          "color": "aqiInk",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 26,
+          "y": 185,
+          "width": 476,
+          "height": 123,
+          "text": "{{weatherAqi}}",
+          "textSize": 92,
+          "color": "aqiInk",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 27,
+          "y": 349,
+          "width": 232,
+          "height": 34,
+          "text": "日出",
+          "textSize": 22,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 274,
+          "y": 349,
+          "width": 228,
+          "height": 34,
+          "text": "日落",
+          "textSize": 22,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 27,
+          "y": 391,
+          "width": 232,
+          "height": 65,
+          "text": "{{weatherSunrise}}",
+          "textSize": 48,
+          "color": "blue",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 274,
+          "y": 391,
+          "width": 228,
+          "height": 65,
+          "text": "{{weatherSunset}}",
+          "textSize": 48,
+          "color": "blue",
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 476,
+          "width": 472,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 494,
+          "width": 472,
+          "height": 37,
+          "text": "湿度 {{weatherHumidity}}%   ·   体感 {{weatherFeels}}°",
+          "textSize": 23,
+          "color": "black",
+          "bold": false
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 553,
+          "width": 472,
+          "height": 38,
+          "text": "未来三天",
+          "textSize": 25,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "forecastBars",
+          "x": 28,
+          "y": 599,
+          "width": 472,
+          "height": 108,
+          "color": "blue"
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 729,
+          "width": 528,
+          "height": 63,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 742,
+          "width": 472,
+          "height": 34,
+          "text": "天气更新   {{weatherUpdated}}",
+          "textSize": 20,
+          "color": "white",
+          "bold": false
+        }
+      ]
+    }
+  }
+}

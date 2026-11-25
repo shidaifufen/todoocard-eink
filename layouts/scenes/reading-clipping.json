@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "name": "摘录剪报",
+  "templates": {
+    "quote": {
+      "name": "摘录剪报",
+      "sources": [
+        "quote"
+      ],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 78,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 10,
+          "width": 472,
+          "height": 53,
+          "text": "摘录剪报",
+          "textSize": 36,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 100,
+          "width": 470,
+          "height": 42,
+          "text": "{{date}}  ·  {{week}}",
+          "textSize": 22,
+          "color": "black",
+          "bold": false
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 151,
+          "width": 472,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 188,
+          "width": 13,
+          "height": 461,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 61,
+          "y": 214,
+          "width": 433,
+          "height": 396,
+          "text": "{{quote}}",
+          "textSize": 44,
+          "color": "black",
+          "bold": true,
+          "lineHeight": 1.55
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 674,
+          "width": 528,
+          "height": 118,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 687,
+          "width": 471,
+          "height": 40,
+          "text": "出处",
+          "textSize": 24,
+          "color": "black",
+          "bold": true,
+          "showIf": "quoteBy"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 738,
+          "width": 471,
+          "height": 37,
+          "text": "{{quoteBy}}",
+          "textSize": 23,
+          "color": "black",
+          "bold": false,
+          "showIf": "quoteBy"
+        }
+      ]
+    }
+  }
+}
