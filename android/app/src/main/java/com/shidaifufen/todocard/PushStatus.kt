@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.drawable.Icon
 import android.os.Build
 import androidx.core.app.NotificationCompat
 
@@ -48,6 +49,10 @@ object PushStatus {
                 .invoke(style, progress == null)
             if (progress != null) styleClass.getMethod("setProgress", Int::class.javaPrimitiveType)
                 .invoke(style, progress.coerceIn(0, 100))
+            runCatching {
+                styleClass.getMethod("setProgressTrackerIcon", Icon::class.java)
+                    .invoke(style, Icon.createWithResource(ctx, R.drawable.ic_push_status))
+            }
             builder.setStyle(style as android.app.Notification.Style)
             builder.setOngoing(true)
             builder.setColorized(true)
@@ -71,6 +76,7 @@ object PushStatus {
         text.contains("已找到") -> "已找到卡片"
         text.contains("未找到") || text.contains("扫描失败") -> "未找到卡片"
         text.contains("连接中") -> "连接中"
+        text.contains("未收到") -> "待确认"
         text.contains("显影") -> "显影中"
         progress != null -> "$progress%"
         text.contains("准备") -> "准备中"

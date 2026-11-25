@@ -7,14 +7,17 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BluetoothSearching
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Menu
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material3.*
@@ -107,28 +110,42 @@ internal fun StudioScreen(
     var generating by remember { mutableStateOf(false) }
     var prompt by remember { mutableStateOf("") }
     val isImage = kind in listOf("photo", "bing", "ai")
+    val drawer = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    val cards = rememberLazyListState()
+    LaunchedEffect(drawer.targetValue) {
+        if (drawer.targetValue == DrawerValue.Open) {
+            val selected = TEMPLATES.indexOfFirst { it.first == kind }.coerceAtLeast(0)
+            if (cards.layoutInfo.visibleItemsInfo.none { it.index == selected }) cards.scrollToItem(selected)
+        }
+    }
+    ModalNavigationDrawer(drawerState = drawer, gesturesEnabled = drawer.isOpen,
+        drawerContent = {
+            ModalDrawerSheet(Modifier.width(224.dp)) {
+                Row(Modifier.fillMaxWidth().padding(start = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("切换卡片", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                    IconButton(onClick = { scope.launch { drawer.close() } }) { Icon(Icons.Outlined.Close, "收起侧栏") }
+                }
+                LazyColumn(state = cards, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    items(TEMPLATES, key = { it.first }) { (key, title) ->
+                        NavigationDrawerItem(label = { Text(title) }, selected = kind == key, onClick = {
+                            if (!busy) {
+                                onKind(key)
+                                scope.launch { drawer.close() }
+                            }
+                        })
+                    }
+                }
+            }
+        }) {
     BoxWithConstraints(Modifier.fillMaxSize().background(StudioBackground)) {
     val previewHeight = (maxHeight - 320.dp).coerceIn(200.dp, 560.dp)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-            Text("卡片工坊", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = StudioInk)
-            Spacer(Modifier.height(3.dp))
-            Text("${templateName(kind)}  ·  528 × 792", fontSize = 12.sp, color = StudioMuted)
-        }
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            items(TEMPLATES) { (key, title) ->
-                FilterChip(
-                    selected = kind == key,
-                    onClick = { onKind(key) },
-                    enabled = !busy,
-                    label = { Text(title, maxLines = 1) },
-                    shape = RoundedCornerShape(8.dp),
-                )
-            }
+        Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { scope.launch { drawer.open() } }) { Icon(Icons.Outlined.Menu, "展开卡片侧栏") }
+            Text(templateName(kind), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = StudioInk)
         }
         if (kind in listOf("summary", "quote", "poem", "weather", "weather2", "custom") || LayoutStore.sources(kind)?.isNotEmpty() == true) Row(
             Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -172,7 +189,7 @@ internal fun StudioScreen(
                     else Text(if (kind == "online") "先搜索或抽取一张卡片" else "暂时无法获取内容，点击刷新重试", color = StudioMuted,
                         modifier = Modifier.padding(20.dp))
                 }
-                else Image(preview.asImageBitmap(), "卡片预览", Modifier.fillMaxSize().padding(3.dp),
+                else Image(preview.asImageBitmap(), "卡片预览", Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit)
             }
         }
@@ -249,6 +266,7 @@ internal fun StudioScreen(
             }
             Spacer(Modifier.height(10.dp))
         }
+    }
     }
     }
     if (editing && kind == "custom") CustomEditorDialog(card, onDismiss = { editing = false }, onSave = { onCard(it); editing = false })

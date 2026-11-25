@@ -1,18 +1,20 @@
 import { findItems, kinds, loadArt, randomItems, songLyrics } from './sources.js';
-import { coverColor, mountTone, panelColors, vivid } from './tone.js';
+import { analyzeCover, mountTone, panelColors, vivid } from './tone.js';
 import { paint, paintPrompt } from './render.js';
 
 export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {}, showPrompt = true, openLyrics } = {}) {
   root.innerHTML = [
     '<div class="online-picker">',
     '<label>类型<select aria-label="类型" data-online="kind"></select></label>',
-    '<form data-online="form"><label>搜索<input aria-label="搜索关键词" data-online="query" type="search" maxlength="100"></label>',
+    '<form data-online="form"><label for="online-query">搜索</label><input id="online-query" aria-label="搜索关键词" data-online="query" type="search" maxlength="100">',
     '<div class="online-actions"><button type="submit">搜索</button><button data-online="random" type="button">随机抽一张</button></div></form>',
     '<p data-online="status" role="status"></p>',
     '<label data-online="result-row" hidden>匹配结果<select aria-label="匹配结果" data-online="results"></select></label>',
     '<section data-online="music" hidden><label>版面<select aria-label="版面" data-online="style">',
     '<option value="cover">大封面</option><option value="single">大封面＋一句</option><option value="lyrics">封面＋歌词</option></select></label>',
     '<div class="theme-control"><label>主题色<select aria-label="主题色" data-online="theme"></select></label><span class="theme-swatch" data-online="theme-swatch" aria-hidden="true"></span></div>',
+    '<div class="music-type"><label>文字颜色<select aria-label="文字颜色" data-online="ink"><option value="auto">自动搭配</option><option value="#fff">白字</option><option value="#000">黑字</option></select></label>',
+    '<label>文字大小 <output data-online="font-value">100%</output><input aria-label="文字大小" data-online="font" type="range" min="85" max="135" step="5" value="100"></label></div>',
     '<div data-online="lyrics-row" hidden><div class="lyric-summary"><output data-online="selection" aria-live="polite"></output><button type="button" data-online="clear-lyrics">清除</button></div><button type="button" data-online="open-lyrics" hidden>选择歌词</button><div data-online="lyrics" class="lyric-lines" role="group" aria-label="歌词片段"></div></div></section>',
     '<details data-online="tone" hidden></details></div>',
   ].join('');
@@ -24,7 +26,7 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
   for (const [name, color] of panelColors) theme.add(new Option(name, color));
   const status = $('status');
   let kind = 'music', item, artwork, verses = [], result = [];
-  let detectedColor = panelColors[0][1];
+  let cover, typographyTimer;
   let operation = 0, lyricOperation = 0;
   const seen = new Set();
   const current = () => root.isConnected;
@@ -70,9 +72,11 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
     if (!current()) return;
     if (item) {
       const style = $('style').value;
-      const color = theme.value === 'auto' ? detectedColor : theme.value;
+      const color = theme.value === 'auto' ? cover?.color : theme.value;
       $('theme-swatch').style.backgroundColor = color;
-      const fits = paint(canvas, kind, item, artwork, selectedLyrics(), tone, style, color);
+      const fits = paint(canvas, kind, item, artwork, selectedLyrics(), tone, style, {
+        theme: color, ink: $('ink').value, fontScale: Number($('font').value) / 100, crop: cover?.crop,
+      });
       if (kind === 'music' && style !== 'cover') showSelection(fits);
       ready = true;
       onCard(canvas, item);
@@ -120,9 +124,10 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
     if (!current() || ticket !== operation) return;
     item = hit;
     artwork = art;
+    cover = null;
     if (kind === 'music') {
-      detectedColor = coverColor(art);
-      autoTheme.textContent = `自动取封面主色（${panelColors.find(([, color]) => color === detectedColor)[0]}）`;
+      cover = analyzeCover(art);
+      autoTheme.textContent = `自动取封面主色（${panelColors.find(([, color]) => color === cover.color)[0]}）`;
     }
     verses = [];
     anchor = end = -1;
@@ -190,6 +195,8 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
     $('lyrics-row').hidden = true;
     status.textContent = '';
     item = null;
+    cover = null;
+    autoTheme.textContent = '自动取封面主色';
     $('tone').hidden = true;
     draw();
   };
@@ -213,6 +220,13 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
     void refreshLyrics();
   };
   theme.onchange = draw;
+  $('ink').onchange = draw;
+  $('font').oninput = () => {
+    $('font-value').value = $('font').value + '%';
+    clearTimeout(typographyTimer);
+    typographyTimer = setTimeout(draw, 90);
+  };
+  $('font').onchange = () => { clearTimeout(typographyTimer); draw(); };
   $('clear-lyrics').onclick = () => {
     anchor = end = -1;
     selectingEnd = false;
@@ -237,6 +251,9 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
   }, random: category => {
     $('style').value = 'cover';
     theme.value = 'auto';
+    $('ink').value = 'auto';
+    $('font').value = '100';
+    $('font-value').value = '100%';
     if ($('kind').value !== category) {
       $('kind').value = category;
       $('kind').onchange();

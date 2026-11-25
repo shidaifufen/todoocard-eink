@@ -31,10 +31,11 @@ object PhotoEdit {
         val fit: Boolean = false,
         val gamma: Float = 1f,
         val sharpness: Float = 0f,
+        val shadows: Float = 0f,
     ) {
         val isDefault get() = zoom == 1f && dx == 0f && dy == 0f && hue == 0f &&
                 saturation == 1f && exposure == 0f && contrast == 1f && snapThreshold == 0 &&
-                !fit && gamma == 1f && sharpness == 0f
+                !fit && gamma == 1f && sharpness == 0f && shadows == 0f
     }
 
     /** 色相旋转矩阵 */
@@ -92,14 +93,21 @@ object PhotoEdit {
     }
 
     private fun finishArtwork(bitmap: Bitmap, height: Int, p: Params) {
-        if (p.gamma == 1f && p.sharpness == 0f) return
+        if (p.gamma == 1f && p.sharpness == 0f && p.shadows == 0f) return
         val width = bitmap.width
         val pixels = IntArray(width * height)
         bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
         val gamma = IntArray(256) { (255 * (it / 255f).pow(1f / p.gamma)).roundToInt() }
         for (i in pixels.indices) {
             val color = pixels[i]
-            pixels[i] = android.graphics.Color.rgb(gamma[color shr 16 and 255], gamma[color shr 8 and 255], gamma[color and 255])
+            val r = gamma[color shr 16 and 255]
+            val g = gamma[color shr 8 and 255]
+            val b = gamma[color and 255]
+            val luminance = (.299f * r + .587f * g + .114f * b) / 255f
+            val remaining = 1f - luminance
+            val lift = (255f * p.shadows * luminance * remaining * remaining * remaining).roundToInt()
+            pixels[i] = android.graphics.Color.rgb((r + lift).coerceAtMost(255),
+                (g + lift).coerceAtMost(255), (b + lift).coerceAtMost(255))
         }
         if (p.sharpness == 0f) {
             bitmap.setPixels(pixels, 0, width, 0, 0, width, height)

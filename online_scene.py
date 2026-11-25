@@ -102,14 +102,46 @@ def text(draw, value, x, y, size, width, color="black", bold=False):
     draw.text((x, y), value, font=font, fill=color, anchor="lt")
 
 
-def cover_color(image):
-    bins = {}
-    for rgb in image.resize((64, 64), Image.Resampling.BILINEAR).getdata():
-        key = tuple(channel >> 5 for channel in rgb)
-        count, red, green, blue = bins.get(key, (0, 0, 0, 0))
-        bins[key] = count + 1, red + rgb[0], green + rgb[1], blue + rgb[2]
-    count, *total = max(bins.values(), key=lambda entry: entry[0])
-    return min(INKS, key=lambda ink: sum((channel / count - target) ** 2 for channel, target in zip(total, ink)))
+def analyze_cover(image):
+    size = 128
+    sample = image.resize((size, size), Image.Resampling.BILINEAR).load()
+
+    def matte_depth(pixel_at):
+        for depth in range(int(size * .16)):
+            pixels = [pixel_at(depth, position) for position in range(size)]
+            dark = sum(max(pixel) <= 22 for pixel in pixels)
+            light = sum(min(pixel) >= 241 for pixel in pixels)
+            if max(dark, light) < size * .98:
+                return depth
+        return int(size * .16)
+
+    left = matte_depth(lambda d, y: sample[d, y])
+    right = matte_depth(lambda d, y: sample[size - 1 - d, y])
+    top = matte_depth(lambda d, x: sample[x, d])
+    bottom = matte_depth(lambda d, x: sample[x, size - 1 - d])
+    if min(left, right) < 2 or abs(left - right) > 3:
+        left = right = 0
+    if min(top, bottom) < 2 or abs(top - bottom) > 3:
+        top = bottom = 0
+    counts = [0] * len(INKS)
+    for y in range(top, size - bottom):
+        for x in range(left, size - right):
+            rgb = sample[x, y]
+            high, low = max(rgb), min(rgb)
+            if high < 52 or high - low < 24:
+                counts[int(sum(rgb) >= 384)] += 1
+                continue
+            vivid = tuple((channel - low) * 255 / (high - low) for channel in rgb)
+            winner = min(range(len(INKS)),
+                         key=lambda index: sum((channel - target) ** 2 for channel, target in zip(vivid, INKS[index])))
+            counts[winner] += 1
+    winner = max(range(2, len(INKS)), key=counts.__getitem__)
+    area = (size - left - right) * (size - top - bottom)
+    if counts[winner] < area * .035:
+        winner = int(counts[1] > counts[0])
+    crop = (round(image.width * left / size), round(image.height * top / size),
+            round(image.width * (size - right) / size), round(image.height * (size - bottom) / size))
+    return INKS[winner], image.crop(crop)
 
 
 def art_card(mode, title, entry):
@@ -122,7 +154,7 @@ def art_card(mode, title, entry):
     with Image.open(BytesIO(read(address, 6 * 1024 * 1024))) as source:
         size = (W, H if movie else W)
         cover = source.convert("RGB")
-        theme = INKS[0] if movie else cover_color(cover)
+        theme, cover = (INKS[0], cover) if movie else analyze_cover(cover)
         artwork = ImageOps.fit(cover, size, Image.Resampling.LANCZOS)
     image = Image.new("RGB", (W, H), theme)
     image.paste(tune(artwork, VIVID), (0, 0))
@@ -138,7 +170,7 @@ def art_card(mode, title, entry):
         text(painter, title, 26, 700, 38, 476, "white", True)
         text(painter, year, 26, 754, 22, 476, "yellow", True)
     else:
-        ink = "black" if theme in (INKS[1], INKS[2], INKS[5]) else "white"
+        ink = "black" if theme in (INKS[1], INKS[2]) else "white"
         accent = "blue" if theme in (INKS[1], INKS[2]) else "yellow"
         painter.rectangle((28, 551, 92, 559), fill=accent)
         text(painter, title, 28, 575, 41, 472, ink, True)

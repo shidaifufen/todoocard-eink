@@ -266,7 +266,7 @@ internal fun LibraryScreen(
                 listOf("自然", "插画净色", "黑白").forEachIndexed { index, label ->
                     OutlinedButton(onClick = {
                         val neutral = edit.copy(hue = 0f, contrast = 1f, saturation = 1f,
-                            exposure = 0f, gamma = 1f, sharpness = 0f, snapThreshold = 0)
+                            exposure = 0f, gamma = 1f, sharpness = 0f, snapThreshold = 0, shadows = 0f)
                         onEdit(when (index) {
                             1 -> neutral.copy(exposure = .10f, contrast = 1.18f, gamma = 1.05f,
                                 saturation = 1.05f, sharpness = .12f, snapThreshold = 45)
@@ -315,6 +315,7 @@ internal fun PhotoToneAdjustments(edit: PhotoEdit.Params, onEdit: (PhotoEdit.Par
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
         .padding(horizontal = 14.dp, vertical = 8.dp)) {
         Adjustment("亮度", edit.exposure, -2f..2f, { onEdit(edit.copy(exposure = it)) }, "%+.2f EV")
+        Adjustment("暗部提亮", edit.shadows * 100f, 0f..100f, { onEdit(edit.copy(shadows = it / 100f)) }, "%.0f%%")
         Adjustment("对比度", edit.contrast * 100f, 60f..160f, { onEdit(edit.copy(contrast = it / 100f)) }, "%.0f%%")
         Adjustment("Gamma", edit.gamma, .5f..2f, { onEdit(edit.copy(gamma = it)) }, "%.2f")
         Adjustment("锐化", edit.sharpness * 100f, 0f..100f, { onEdit(edit.copy(sharpness = it / 100f)) }, "%.0f%%")
