@@ -20,3 +20,6 @@
 .online-controls button[aria-pressed=true]{border-color:var(--scene-accent);box-shadow:inset 3px 0 var(--scene-accent);background:color-mix(in srgb,var(--scene-accent) 19%,var(--scene-panel))}
 .online-controls .tone-sliders{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
 .online-controls .tone-sliders output{font-variant-numeric:tabular-nums}
+.online-controls .theme-control{display:flex;align-items:end;gap:8px}
+.online-controls .theme-control label{flex:1;min-width:0}
+.online-controls .theme-swatch{width:28px;height:28px;margin-bottom:12px;border:1px solid var(--scene-ink);border-radius:7px}

@@ -12,7 +12,7 @@ from urllib.request import Request, urlopen
 from PIL import Image, ImageDraw, ImageOps
 
 import card_render as render
-from image_tone import VIVID, tune
+from image_tone import INKS, VIVID, tune
 
 CATEGORIES = {
     "online_music": "随机音乐封面", "online_movie": "随机电影海报",
@@ -102,6 +102,16 @@ def text(draw, value, x, y, size, width, color="black", bold=False):
     draw.text((x, y), value, font=font, fill=color, anchor="lt")
 
 
+def cover_color(image):
+    bins = {}
+    for rgb in image.resize((64, 64), Image.Resampling.BILINEAR).getdata():
+        key = tuple(channel >> 5 for channel in rgb)
+        count, red, green, blue = bins.get(key, (0, 0, 0, 0))
+        bins[key] = count + 1, red + rgb[0], green + rgb[1], blue + rgb[2]
+    count, *total = max(bins.values(), key=lambda entry: entry[0])
+    return min(INKS, key=lambda ink: sum((channel / count - target) ** 2 for channel, target in zip(total, ink)))
+
+
 def art_card(mode, title, entry):
     movie = mode == "movie"
     address = entry["im:image"][-1]["label"]
@@ -111,8 +121,10 @@ def art_card(mode, title, entry):
     address = re.sub(r"/\d+x\d+bb\.(?:jpg|png)$", f"/600x{900 if movie else 600}bb.jpg", address)
     with Image.open(BytesIO(read(address, 6 * 1024 * 1024))) as source:
         size = (W, H if movie else W)
-        artwork = ImageOps.fit(source.convert("RGB"), size, Image.Resampling.LANCZOS)
-    image = Image.new("RGB", (W, H), "black")
+        cover = source.convert("RGB")
+        theme = INKS[0] if movie else cover_color(cover)
+        artwork = ImageOps.fit(cover, size, Image.Resampling.LANCZOS)
+    image = Image.new("RGB", (W, H), theme)
     image.paste(tune(artwork, VIVID), (0, 0))
     painter = ImageDraw.Draw(image)
     if movie:
@@ -126,10 +138,12 @@ def art_card(mode, title, entry):
         text(painter, title, 26, 700, 38, 476, "white", True)
         text(painter, year, 26, 754, 22, 476, "yellow", True)
     else:
-        painter.rectangle((28, 551, 92, 559), fill="yellow")
-        text(painter, title, 28, 575, 41, 472, "white", True)
-        text(painter, entry.get("im:artist", {}).get("label"), 28, 662, 24, 472, "white")
-        text(painter, "Apple Music", 28, 758, 17, 472, "white")
+        ink = "black" if theme in (INKS[1], INKS[2], INKS[5]) else "white"
+        accent = "blue" if theme in (INKS[1], INKS[2]) else "yellow"
+        painter.rectangle((28, 551, 92, 559), fill=accent)
+        text(painter, title, 28, 575, 41, 472, ink, True)
+        text(painter, entry.get("im:artist", {}).get("label"), 28, 662, 24, 472, ink)
+        text(painter, "Apple Music", 28, 758, 17, 472, ink)
     return image
 
 

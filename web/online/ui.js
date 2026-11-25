@@ -1,5 +1,5 @@
 import { findItems, kinds, loadArt, randomItems, songLyrics } from './sources.js';
-import { mountTone, vivid } from './tone.js';
+import { coverColor, mountTone, panelColors, vivid } from './tone.js';
 import { paint, paintPrompt } from './render.js';
 
 export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {}, showPrompt = true, openLyrics } = {}) {
@@ -12,13 +12,19 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
     '<label data-online="result-row" hidden>匹配结果<select aria-label="匹配结果" data-online="results"></select></label>',
     '<section data-online="music" hidden><label>版面<select aria-label="版面" data-online="style">',
     '<option value="cover">大封面</option><option value="single">大封面＋一句</option><option value="lyrics">封面＋歌词</option></select></label>',
+    '<div class="theme-control"><label>主题色<select aria-label="主题色" data-online="theme"></select></label><span class="theme-swatch" data-online="theme-swatch" aria-hidden="true"></span></div>',
     '<div data-online="lyrics-row" hidden><div class="lyric-summary"><output data-online="selection" aria-live="polite"></output><button type="button" data-online="clear-lyrics">清除</button></div><button type="button" data-online="open-lyrics" hidden>选择歌词</button><div data-online="lyrics" class="lyric-lines" role="group" aria-label="歌词片段"></div></div></section>',
     '<details data-online="tone" hidden></details></div>',
   ].join('');
   const $ = name => root.querySelector('[data-online="' + name + '"]');
   for (const [value, { name }] of Object.entries(kinds)) $('kind').add(new Option(name, value));
+  const theme = $('theme');
+  const autoTheme = new Option('自动取封面主色', 'auto');
+  theme.add(autoTheme);
+  for (const [name, color] of panelColors) theme.add(new Option(name, color));
   const status = $('status');
   let kind = 'music', item, artwork, verses = [], result = [];
+  let detectedColor = panelColors[0][1];
   let operation = 0, lyricOperation = 0;
   const seen = new Set();
   const current = () => root.isConnected;
@@ -64,7 +70,9 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
     if (!current()) return;
     if (item) {
       const style = $('style').value;
-      const fits = paint(canvas, kind, item, artwork, selectedLyrics(), tone, style);
+      const color = theme.value === 'auto' ? detectedColor : theme.value;
+      $('theme-swatch').style.backgroundColor = color;
+      const fits = paint(canvas, kind, item, artwork, selectedLyrics(), tone, style, color);
       if (kind === 'music' && style !== 'cover') showSelection(fits);
       ready = true;
       onCard(canvas, item);
@@ -112,6 +120,10 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
     if (!current() || ticket !== operation) return;
     item = hit;
     artwork = art;
+    if (kind === 'music') {
+      detectedColor = coverColor(art);
+      autoTheme.textContent = `自动取封面主色（${panelColors.find(([, color]) => color === detectedColor)[0]}）`;
+    }
     verses = [];
     anchor = end = -1;
     selectingEnd = false;
@@ -200,6 +212,7 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
     selectingEnd = false;
     void refreshLyrics();
   };
+  theme.onchange = draw;
   $('clear-lyrics').onclick = () => {
     anchor = end = -1;
     selectingEnd = false;
@@ -223,6 +236,7 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
     draw();
   }, random: category => {
     $('style').value = 'cover';
+    theme.value = 'auto';
     if ($('kind').value !== category) {
       $('kind').value = category;
       $('kind').onchange();

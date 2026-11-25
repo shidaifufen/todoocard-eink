@@ -1,6 +1,10 @@
 const palette = [[0,0,0],[255,255,255],[255,255,0],[255,0,0],[0,0,255],[0,255,0]];
 export const neutral = { brightness: 100, contrast: 100, saturation: 100, snap: 0 };
 export const vivid = { brightness: 107, contrast: 120, saturation: 130, snap: 40 };
+export const panelColors = [
+  ['黑色', '#000'], ['白色', '#fff'], ['黄色', '#ff0'],
+  ['红色', '#f00'], ['蓝色', '#00f'], ['绿色', '#0f0'],
+];
 
 function nearest(r, g, b, limit = Infinity) {
   let best;
@@ -9,6 +13,33 @@ function nearest(r, g, b, limit = Infinity) {
     if (distance < limit) { limit = distance; best = ink; }
   }
   return best;
+}
+
+export function coverColor(artwork) {
+  // Sample the cover without padding or tuning, then average the largest RGB bin.
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 64;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  context.drawImage(artwork, 0, 0, 64, 64);
+  const pixels = context.getImageData(0, 0, 64, 64).data;
+  const bins = new Map();
+  for (let i = 0; i < pixels.length; i += 4) {
+    if (pixels[i + 3] < 128) continue;
+    const [r, g, b] = [pixels[i], pixels[i + 1], pixels[i + 2]];
+    const key = (r >> 5) * 64 + (g >> 5) * 8 + (b >> 5);
+    const bin = bins.get(key) || [0, 0, 0, 0];
+    bin[0]++;
+    bin[1] += r;
+    bin[2] += g;
+    bin[3] += b;
+    bins.set(key, bin);
+  }
+  let dominant = [0, 0, 0, 0];
+  for (const bin of bins.values()) if (bin[0] > dominant[0]) dominant = bin;
+  const [count, r, g, b] = dominant;
+  if (!count) return panelColors[0][1];
+  const color = nearest(r / count, g / count, b / count);
+  return panelColors[palette.indexOf(color)][1];
 }
 
 export function tuneImage(context, x, y, width, height, settings) {

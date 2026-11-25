@@ -129,7 +129,9 @@ object PhotoEdit {
             val byte = packed[i / 2].toInt() and 0xff
             ink[if (i % 2 == 0) byte ushr 4 else byte and 15]
         }
-        return Bitmap.createBitmap(pixels, bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+        return Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888).apply {
+            setPixels(pixels, 0, width, 0, 0, width, height)
+        }
     }
 
     /** 手势预览复用已解码图片；只重绘画布，不重新解码或分配卡片位图。 */

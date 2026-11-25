@@ -72,22 +72,24 @@ function artwork(g, img, x, y, width, height, tone, fill = false) {
   return bounds;
 }
 
-function music(g, item, img, verses, tone, style) {
+function music(g, item, img, verses, tone, style, theme) {
+  const ink = [WHITE, YELLOW, '#0f0'].includes(theme) ? BLACK : WHITE;
+  const accent = theme === YELLOW || theme === WHITE ? BLUE : YELLOW;
   if (style !== 'lyrics' || !verses.length) {
     const bounds = artwork(g, img, 0, 0, W, W, tone);
-    rect(g, 0, W, W, H-W, BLACK);
-    rect(g, 28, 551, 64, 8, YELLOW);
-    block(g, item.title, 28, 575, 472, 79, 41, WHITE, true);
-    line(g, item.by, 28, 662, 472, 24, WHITE);
-    if (style === 'single' && verses[0]) line(g, verses[0], 28, 707, 472, 26, WHITE, true, 18);
-    line(g, item.source + (style === 'single' && verses[0] ? ' · 歌词 LRCLIB' : ''), 28, 758, 472, 17, WHITE);
+    rect(g, 0, W, W, H-W, theme);
+    rect(g, 28, 551, 64, 8, accent);
+    block(g, item.title, 28, 575, 472, 79, 41, ink, true);
+    line(g, item.by, 28, 662, 472, 24, ink);
+    if (style === 'single' && verses[0]) line(g, verses[0], 28, 707, 472, 26, ink, true, 18);
+    line(g, item.source + (style === 'single' && verses[0] ? ' · 歌词 LRCLIB' : ''), 28, 758, 472, 17, ink);
     return { bounds, fits: true };
   }
-  rect(g, 0, 0, W, 276, BLACK);
+  rect(g, 0, 0, W, 276, theme);
   const bounds = artwork(g, img, 22, 22, 232, 232, tone);
-  rect(g, 282, 43, 60, 7, YELLOW);
-  block(g, item.title, 282, 78, 220, 113, 38, WHITE, true);
-  line(g, item.by, 282, 205, 220, 22, WHITE);
+  rect(g, 282, 43, 60, 7, accent);
+  block(g, item.title, 282, 78, 220, 113, 38, ink, true);
+  line(g, item.by, 282, 205, 220, 22, ink);
   const fits = block(g, verses.join('\n'), 32, 310, 464, 399, 40, BLACK, true);
   rect(g, 32, 736, 464, 3, BLUE);
   line(g, item.source + ' · 歌词 LRCLIB', 32, 754, 464, 16);
@@ -124,14 +126,14 @@ function dictionary(g, kind, item) {
   line(g, item.source, 30, 756, 468, 18, WHITE);
 }
 
-export function paint(canvas, kind, item, artwork, verses = [], tone = vivid, style = "cover") {
+export function paint(canvas, kind, item, artwork, verses = [], tone = vivid, style = 'cover', theme = BLACK) {
   const g = canvas.getContext('2d');
   g.save();
   g.textBaseline = 'top';
   g.textAlign = 'left';
   rect(g, 0, 0, W, H, WHITE);
   let imageBounds, fits = true;
-  if (kind === 'music') ({ bounds: imageBounds, fits } = music(g, item, artwork, verses, tone, style));
+  if (kind === 'music') ({ bounds: imageBounds, fits } = music(g, item, artwork, verses, tone, style, theme));
   else if (kind === 'movie') imageBounds = movie(g, item, artwork, tone);
   else dictionary(g, kind, item);
   g.restore();
