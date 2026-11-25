@@ -1,0 +1,63 @@
+name: build-macos-portable
+
+on:
+  push:
+    tags: ["v*-macos"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build Apple Silicon portable package
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          test "$(uname -m)" = arm64
+          python -m pip install -r requirements.txt 'pyinstaller>=6,<7'
+          version="${TAG#v}"
+          bash packaging/build_release.sh "${version%-macos}"
+      - name: Verify package and local control panel
+        run: |
+          python - <<'PY'
+          import pathlib
+          import zipfile
+          for path in pathlib.Path("release").glob("*.zip"):
+              with zipfile.ZipFile(path) as archive:
+                  assert archive.testzip() is None
+          PY
+          exe="$(find release -type f -name TodooCardEink -print -quit)"
+          test -n "$exe"
+          app="$(dirname "$exe")"
+          test -x "$app/_internal/mac-tools/mac-image-transfer"
+          test -x "$app/_internal/mac-tools/image-to-payload"
+          PORT=18219 TODOOCARD_DATA_DIR="$RUNNER_TEMP/todoocard-smoke" "$exe" > "$RUNNER_TEMP/desktop.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true; cat "$RUNNER_TEMP/desktop.log"' EXIT
+          curl --fail --silent --show-error --retry 20 --retry-delay 1 --retry-connrefused \
+            http://127.0.0.1:18219/api/card/templates > "$RUNNER_TEMP/todoocard-templates.json"
+          python - "$RUNNER_TEMP/todoocard-templates.json" <<'PY'
+          import json
+          import sys
+          with open(sys.argv[1]) as file:
+              assert json.load(file)["templates"]["summary"]
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: todoocard-macos-arm64
+          path: release/todoocard-eink-*-darwin-arm64.zip
+          if-no-files-found: error
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/todoocard-eink-*-darwin-arm64.zip
+          fail_on_unmatched_files: true
+          name: macOS Apple Silicon ${{ github.ref_name }}
+          body: |
+            Apple Silicon 便携包。解压后打开 start-mac.command。
+            内置 TodooCard Swift 蓝牙和图像转换工具，并验证了打包后的工坊控制台启动。

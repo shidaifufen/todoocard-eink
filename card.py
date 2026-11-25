@@ -350,6 +350,7 @@ class CardService:
                         await self._drain_outbox()
                     return
                 sender, _ = await asyncio.get_running_loop().run_in_executor(None, self._ensure_bins)
+                paired = False
                 async with BLE_GUARD:
                     proc = await asyncio.create_subprocess_exec(
                         str(sender), "--pair", "--id", dev,
@@ -365,15 +366,15 @@ class CardService:
                         if "pairing window detected" in low or "encrypted system pairing" in low:
                             self._pair_state = "pairing"
                         if "pairing completed" in low:
-                            self._pair_state = "success"
-                            self.cfg["paired_ts"] = int(time.time())
-                            self._save_cfg()
-                        await proc.wait()
-                    if self._pair_state == "success":
-                        # 配对窗口里卡片是醒着的，这时候顺手把排队的卡推掉
-                        await self._drain_outbox()
-                    else:
-                        self._pair_state = "fail"
+                            paired = True
+                    exit_code = await proc.wait()
+                if paired and exit_code == 0:
+                    self.cfg["paired_ts"] = int(time.time())
+                    self._save_cfg()
+                    self._pair_state = "success"
+                    await self._drain_outbox()
+                else:
+                    self._pair_state = "fail"
             except Exception as e:
                 self._pair_lines.append(f"[error] {e}")
                 self._pair_state = "fail"
@@ -1580,7 +1581,14 @@ class CardService:
 
     # ── 工具链 ──
     def _ensure_bins(self):
-        """按源码 mtime 编译一次 Swift 工具，之后直接复用（每次重编译要 1~2 分钟）。"""
+        """便携包使用内置 Swift 工具，源码运行时按需编译。"""
+        if getattr(sys, "frozen", False):
+            tools = Path(sys._MEIPASS) / "mac-tools"
+            sender = tools / "mac-image-transfer"
+            converter = tools / "image-to-payload"
+            if not sender.is_file() or not converter.is_file():
+                raise RuntimeError("macOS 安装包缺少蓝牙工具，请重新下载并完整解压")
+            return sender, converter
         sender = self.bin_dir / "mac-image-transfer"
         conv = self.bin_dir / "image-to-payload"
         src_sender = self.skill_dir / "mac_image_transfer.swift"
@@ -1610,18 +1618,18 @@ class CardService:
                            capture_output=True, text=True, timeout=180)
         if r.returncode != 0:
             raise RuntimeError(f"图片转换失败: {r.stderr[-400:] or r.stdout[-400:]}")
-        qlz = f"{prefix}.protocol.qlz"
-        r = subprocess.run([sys.executable, str(self.skill_dir / "quicklz_payload.py"),
-                            "--input", f"{prefix}.controller.bin", "--output", qlz],
-                           capture_output=True, text=True, timeout=120)
-        if r.returncode != 0:
-            raise RuntimeError(f"QuickLZ 打包失败: {r.stderr[-400:]}")
-        subprocess.run([sys.executable, str(self.skill_dir / "validate_payload.py"),
-                        "--expected-raw", f"{prefix}.controller.bin",
-                        f"{prefix}.controller.bin", qlz, f"{prefix}.protocol.legacy.qlz"],
-                       check=True, capture_output=True, timeout=120)
-        return {"payload": qlz, "legacy": f"{prefix}.protocol.legacy.qlz",
-                "raw": f"{prefix}.controller.bin", "sender": str(sender)}
+        import quicklz_payload
+
+        raw_path = Path(f"{prefix}.controller.bin")
+        legacy_path = Path(f"{prefix}.protocol.legacy.qlz")
+        qlz_path = Path(f"{prefix}.protocol.qlz")
+        raw = raw_path.read_bytes()
+        qlz = quicklz_payload.build_level3_payload(raw)
+        if any(quicklz_payload.unwrap_payload(frame) != raw for frame in (qlz, legacy_path.read_bytes())):
+            raise RuntimeError("QuickLZ 校验失败，解压结果与原始图像数据不一致")
+        qlz_path.write_bytes(qlz)
+        return {"payload": str(qlz_path), "legacy": str(legacy_path),
+                "raw": str(raw_path), "sender": str(sender)}
 
     def _build_payload_python(self, image_path: Path) -> dict:
         """Windows / Linux：payload.py 生成的产物与 Swift 工具逐字节一致（已 md5 对齐）。"""

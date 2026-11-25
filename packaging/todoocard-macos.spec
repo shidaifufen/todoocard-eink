@@ -1,21 +1,23 @@
 # -*- mode: python ; coding: utf-8 -*-
 # macOS 目录版打包（解压即用；启动 1~2s）
+from pathlib import Path
+
 from PyInstaller.utils.hooks import collect_submodules
 
-block_cipher = None
+root = Path(SPECPATH).resolve().parent
+tools = root / "build-mac-tools"
 
 a = Analysis(
-    ['../server.py'],
-    pathex=[],
-    binaries=[],
-    datas=[('../web', 'web'), ('../data/cities.json', 'data')],
+    [str(root / "server.py")],
+    pathex=[str(root)],
+    binaries=[(str(tools / name), "mac-tools") for name in ("mac-image-transfer", "image-to-payload")],
+    datas=[(str(root / "web"), "web"), (str(root / "data" / "cities.json"), "data")],
     hiddenimports=collect_submodules('bleak') + ['aiosignal', 'attr'],
     hookspath=[],
     runtime_hooks=[],
     excludes=['tkinter', 'matplotlib', 'numpy', 'pandas'],
-    cipher=block_cipher,
 )
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure)
 
 exe = EXE(
     pyz, a.scripts, [],
@@ -28,4 +30,4 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
 )
-coll = COLLECT(exe, a.binaries, a.zipfiles, a.datas, strip=False, upx=False, name='TodooCardEink')
+coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name='TodooCardEink')

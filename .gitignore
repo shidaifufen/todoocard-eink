@@ -9,6 +9,7 @@ data/cards/
 .DS_Store
 dist-mac/
 build-mac/
+build-mac-tools/
 release/
 *.jks
 *.keystore
