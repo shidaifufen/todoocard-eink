@@ -2,6 +2,21 @@
 import asyncio
 import sys
 
+BATTERY_SERVICE = "0000180f-0000-1000-8000-00805f9b34fb"
+BATTERY_LEVEL = "00002a19-0000-1000-8000-00805f9b34fb"
+
+
+def requires_encrypted_gatt(raw: bytes) -> bool:
+    return (len(raw) >= 5 and (raw[0] | raw[4] << 8) == 0x134C
+            and raw[2] >= 0x8C and bool(raw[1] & 0x01))
+
+
+async def read_battery_level(client, *, timeout=15) -> int:
+    value = await asyncio.wait_for(client.read_gatt_char(BATTERY_LEVEL), timeout)
+    if len(value) != 1 or value[0] > 100:
+        raise RuntimeError("卡片电量回执无效")
+    return value[0]
+
 
 async def windows_is_paired(address):
     from winrt.windows.devices.bluetooth import BluetoothLEDevice
@@ -33,11 +48,8 @@ async def pair_device(device, log, *, client_factory=None, paired_check=None,
             if not client.is_connected:
                 raise RuntimeError("配对后设备未连接")
             log("[ble] 读取加密电量，验证认证…")
-            battery = await asyncio.wait_for(client.read_gatt_char(
-                "00002a19-0000-1000-8000-00805f9b34fb"), timeout=15)
-            if len(battery) != 1 or battery[0] > 100:
-                raise RuntimeError("加密电量返回值无效，无法确认认证成功")
-            log(f"[ble] 加密读取通过，电量 {battery[0]}%")
+            battery = await read_battery_level(client)
+            log(f"[ble] 加密读取通过，电量 {battery}%")
         finally:
             try:
                 await asyncio.wait_for(client.disconnect(), timeout=5)
@@ -73,7 +85,7 @@ async def find_pairing_device(address, log, *, timeout=75):
         raw = adv.manufacturer_data.get(0x5053, b"")
         if len(raw) < 5:
             return False
-        secure = raw[0] | raw[4] << 8 == 0x134C and raw[2] >= 0x8c and bool(raw[1] & 1)
+        secure = requires_encrypted_gatt(raw)
         if not secure or already_paired or raw[1] & 2:
             log(f"[ble] 固件 0x{raw[2]:02X}，广播标志 0x{raw[1]:02X}，配对窗口{'已打开' if raw[1] & 2 else '已关闭'}")
             return True

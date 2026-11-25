@@ -29,8 +29,11 @@ from __future__ import annotations
 
 import asyncio
 import struct
+import sys
 import time
 from pathlib import Path
+
+from ble_pair import BATTERY_SERVICE, read_battery_level, requires_encrypted_gatt
 
 SERVICE_UUIDS = ["0000fef0-0000-1000-8000-00805f9b34fb",
                  "0000fdf0-0000-1000-8000-00805f9b34fb"]
@@ -66,6 +69,16 @@ class TransferError(RuntimeError):
     pass
 
 
+class AuthenticationError(TransferError):
+    pass
+
+
+def _authentication_failed(error: Exception) -> bool:
+    return any(marker in str(error).lower() for marker in (
+        "insufficient authentication", "insufficient encryption", "insufficient authorization",
+    ))
+
+
 async def _scan_once(bleak, device_id: str | None):
     """扫一轮，找目标卡片。
 
@@ -80,6 +93,7 @@ async def _scan_once(bleak, device_id: str | None):
         # 把广播里的 rssi 挂到设备对象上，连接日志里能看到信号强度
         try:
             dev._adv_rssi = getattr(adv, "rssi", None)
+            dev._secure_gatt = requires_encrypted_gatt((adv.manufacturer_data or {}).get(0x5053, b""))
         except Exception:
             pass
         return dev
@@ -121,7 +135,7 @@ async def _wait_for_device(bleak, device_id: str | None, timeout: float, log):
         f"等了 {int(timeout)} 秒没看到卡片广播：确认蓝牙开着、卡片有电、没被 TodooCam 等 App 占着")
 
 
-async def _verify_and_diag(client, log):
+async def _verify_and_diag(client, log, *, secure: bool):
     """连接后立刻确认链路真的可用，并读一下卡片电量。
 
     真机日志里出现过"已连接"之后马上 disconnected / "Could not start notify: Unreachable"：
@@ -133,6 +147,17 @@ async def _verify_and_diag(client, log):
     except Exception as e:
         log(f"[sender] 连上但链路不可用（{type(e).__name__}），重连…")
         return None
+    if secure:
+        log("[sender] 读取加密电量 180F/2A19")
+        try:
+            batt = await read_battery_level(client, timeout=8)
+        except Exception as error:
+            if _authentication_failed(error):
+                raise AuthenticationError("卡片加密认证失败，请在「设备与配对」重新验证配对") from error
+            raise TransferError(f"读取加密电量失败：{type(error).__name__} {error}") from error
+        log(f"[sender] 加密电量读取成功：{batt}%；等待服务缓存稳定")
+        await asyncio.sleep(1.8)
+        return batt if client.is_connected else None
     batt = None
     try:
         for s in client.services:
@@ -172,6 +197,9 @@ async def _connect(bleak, device_id: str | None, timeout: float, log):
         device = await _wait_for_device(bleak, device_id, left, log)
         name = device.name or getattr(device, "address", "?")
         rssi = getattr(device, "rssi", None)
+        secure = getattr(device, "_secure_gatt", False)
+        services = [BATTERY_SERVICE, *SERVICE_UUIDS] if secure else SERVICE_UUIDS
+        client_options = {"winrt": {"use_cached_services": False}} if secure and sys.platform == "win32" else {}
         log(f"[sender] 尝试连接 {name}" + (f"（rssi {rssi}）" if rssi is not None else ""))
         # 同一台设备连续试。实测：按"扫描到的对象"连经常卡超时，按地址重建 client
         # 有时能连上但连上就断；所以两种都试，而且**连上后必须验证链路可用**
@@ -189,11 +217,11 @@ async def _connect(bleak, device_id: str | None, timeout: float, log):
                 kind = "对象" if not isinstance(target, str) else "地址"
                 try:
                     try:
-                        client = BleakClient(target, timeout=remain, services=SERVICE_UUIDS)
+                        client = BleakClient(target, timeout=remain, services=services, **client_options)
                     except TypeError:      # 老版本 bleak 不认 services
                         client = BleakClient(target, timeout=remain)
                     await client.connect()
-                    ok = await _verify_and_diag(client, log)
+                    ok = await _verify_and_diag(client, log, secure=secure)
                     if ok is not None:
                         log(f"[sender] 已连接并验证通过（{kind}）")
                         return client, device
@@ -205,13 +233,15 @@ async def _connect(bleak, device_id: str | None, timeout: float, log):
                     continue
                 except Exception as e:
                     last = f"{type(e).__name__}: {e!r}"
-                    log(f"[sender] 第 {attempt + 1}/{CONNECT_ATTEMPTS} 次（{kind}）失败："
-                        f"{type(e).__name__}，马上重试…")
                     try:
                         if client is not None:
                             await client.disconnect()
                     except Exception:
                         pass
+                    if isinstance(e, AuthenticationError) or _authentication_failed(e):
+                        raise AuthenticationError("卡片加密认证失败，请在「设备与配对」重新验证配对") from e
+                    log(f"[sender] 第 {attempt + 1}/{CONNECT_ATTEMPTS} 次（{kind}）失败："
+                        f"{last}，马上重试…")
                     await asyncio.sleep(CONNECT_RETRY_PAUSE / 2)
         log("[sender] 这台暂时连不上，继续等下一轮广播…")
     raise TransferError(
@@ -275,6 +305,7 @@ async def send(payload_path: Path, device_id: str | None = None,
         if not control or not data_ch:
             raise TransferError("没找到控制点/数据点特征值（固件或服务 UUID 不匹配）")
 
+        log("[sender] 订阅卡片控制通知")
         await client.start_notify(control, on_control)
         await asyncio.sleep(0.3)
 

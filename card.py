@@ -2196,6 +2196,11 @@ def _friendly_error(out: str) -> str:
     """把发送器的报错翻译成能直接照做的中文提示。"""
     text = out or ""
     low = text.lower()
+    if ("卡片加密认证失败" in text or "insufficient authentication" in low
+            or "insufficient encryption" in low or "insufficient authorization" in low):
+        return "卡片加密认证失败：在「设备与配对」验证配对，通过后再发送"
+    if "winerror -2147023673" in low and "订阅卡片控制通知" in text:
+        return "Windows 取消了卡片控制操作。请等卡片退出快闪配对窗口后再发一次"
     # ── Windows / Linux（sender.py 用 bleak，抛的是中文）──
     if "没看到卡片广播" in text:
         return "没等到卡片广播：确认蓝牙开着、卡片有电、没被手机 App 连着；再点一次会继续等"
