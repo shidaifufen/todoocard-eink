@@ -24,6 +24,7 @@ android {
             storeType = "PKCS12"
         }
     }
+    // Share the online scene assets with the desktop browser.
     sourceSets["main"].assets.srcDir("../../web")
     buildTypes {
         getByName("release") {

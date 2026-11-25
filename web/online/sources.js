@@ -13,6 +13,7 @@ export const kinds = {
 };
 
 const requests = new Map();
+const dictionaryCacheKey = Math.random().toString(36).slice(2);
 function url(base, parameters) {
   const result = new URL(base);
   result.search = new URLSearchParams(parameters);
@@ -127,7 +128,10 @@ const verbs = ['bring','call','carry','come','cut','drop','fall','figure','find'
   'keep','leave','look','make','move','pick','point','pull','put','run','set','show','stand','take','turn','work'];
 
 async function phrases(query) {
-  const words = await json(url(endpoints.english, { sp: query, md: 'd', max: '45' }));
+  // Datamuse reflects the request origin. Keep shared caches separated by origin.
+  const words = await json(url(endpoints.english, {
+    sp: query, md: 'd', max: '45', todocard_cache: dictionaryCacheKey,
+  }));
   return words.flatMap(item => {
     if (!item.word?.includes(' ') || item.word.length > 42) return [];
     const meanings = (item.defs || []).map(def => clean(def.split('\t').at(-1))).filter(Boolean);
