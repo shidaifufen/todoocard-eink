@@ -38,7 +38,7 @@ Windows、macOS 和纯网页版也可以导入同一份 JSON。在「看板版�
 
 | 平台 | 下载 |
 |---|---|
-| macOS (Apple Silicon) | [macOS 1.0.19](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.0.19-macos) |
+| macOS (Apple Silicon) | [macOS 1.0.21](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.0.21-macos) |
 | Windows (x64) | [Windows 1.0.20](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.0.20-windows) |
 
 1. 解压到任意文件夹（路径别带特殊符号）
