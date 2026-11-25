@@ -263,10 +263,18 @@ internal fun LibraryScreen(
             }
             if (tool == 1) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("自然", "明亮", "黑白").forEachIndexed { index, label ->
-                    OutlinedButton(onClick = { onEdit(edit.copy(hue = 0f, contrast = 1f,
-                        saturation = if (index == 2) 0f else 1f,
-                        exposure = if (index == 1) .35f else 0f, gamma = 1f, sharpness = 0f, snapThreshold = 0)) },
+                listOf("自然", "插画净色", "黑白").forEachIndexed { index, label ->
+                    OutlinedButton(onClick = {
+                        val neutral = edit.copy(hue = 0f, contrast = 1f, saturation = 1f,
+                            exposure = 0f, gamma = 1f, sharpness = 0f, snapThreshold = 0)
+                        onEdit(when (index) {
+                            1 -> neutral.copy(exposure = .10f, contrast = 1.18f, gamma = 1.05f,
+                                saturation = 1.05f, sharpness = .12f, snapThreshold = 45)
+                            2 -> neutral.copy(saturation = 0f)
+                            else -> neutral
+                        })
+                        sixColors = true
+                    },
                         modifier = Modifier.weight(1f), contentPadding = PaddingValues(6.dp),
                         shape = RoundedCornerShape(8.dp)) { Text(label) }
                 }

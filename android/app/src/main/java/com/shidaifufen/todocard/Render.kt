@@ -80,9 +80,11 @@ object Render {
             isAntiAlias = false
             this.color = color
             textSize = size * (layout.get()?.fontScale ?: 1f).coerceIn(.8f, 1.5f)
+            val weather = layout.get()?.kind in listOf("weather", "weather2")
+            if (weather) textSize = textSize.coerceAtLeast(18f)
             typeface = when {
                 mono -> Typeface.MONOSPACE
-                bold -> Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+                bold || (weather && size <= 21f) -> Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
                 else -> Typeface.SANS_SERIF
             }
         }
@@ -111,7 +113,7 @@ object Render {
     private fun Canvas.rule(y: Float) = fill(M, y, W - M, y + 2f, BLACK)
 
     fun render(card: Card): Bitmap {
-        LayoutStore.template(card.kind)?.let { return LayoutRender.render(card, it) }
+        LayoutStore.renderTemplate(card.kind)?.let { return LayoutRender.render(card, it) }
         val bitmap = renderNative(card)
         return if (card.kind == "custom" && hasCustomPhotos(card)) bitmap else PaletteSnap.finishCard(bitmap)
     }
@@ -417,32 +419,58 @@ object Render {
 
     private fun Canvas.drawWeather(card: Card) {
         head("天气看板", card.weatherCity.ifBlank { "今日" })
+        val gap = elementStep(27f)
+        val scale = card.fontScale.coerceIn(.8f, 1.3f)
+        val forecastTitle = paint(23f, BLACK, true)
+        val rows = lineStep(28f).coerceIn(23f + 8f * (scale - .8f), 37f)
+        val forecastTop = 742f - 3 * rows - forecastTitle.textSize
+        val hourHeight = (136f + 68f * (scale - 1f) + 14f * (card.lineSpacing - 1f)).coerceAtLeast(120f)
+        val hourTop = forecastTop - gap - hourHeight
+        val metricsHeight = 91f + 38f * (scale - 1f)
+        val metricsTop = hourTop - gap - metricsHeight
+        val heroBottom = metricsTop - gap
         val temp = card.weatherTemp.ifBlank { "--" }
-        val tempPaint = paint(116f, RED, true).apply { textSize = minOf(textSize, 310f / measureText("$temp°").coerceAtLeast(1f) * textSize) }
-        drawText("$temp°", M, 250f, tempPaint)
-        drawText(card.weatherText.ifBlank { "在编辑中填写天气" }, M, 305f,
-            paint(30f, BLACK, true))
-        fill(M, 335f, W - M, 343f, YELLOW)
+        val conditions = paint(28f, BLACK, true)
+        val conditionsBaseline = heroBottom - 12f - conditions.descent()
+        val tempBaseline = conditionsBaseline + conditions.ascent() - 8f
+        val tempPaint = paint(112f, RED, true).apply {
+            textSize = minOf(textSize, (tempBaseline - 95f).coerceAtLeast(35f), 306f / measureText("$temp°").coerceAtLeast(1f) * textSize)
+        }
+        drawText("$temp°", M, tempBaseline, tempPaint)
+        drawText(fitLine(card.weatherText.ifBlank { "在编辑中填写天气" }, conditions, W - 2 * M),
+            M, conditionsBaseline, conditions)
+        fill(M, heroBottom, W - M, heroBottom + 5f, YELLOW)
         val cells = listOf("最高" to card.weatherHigh, "最低" to card.weatherLow,
             "AQI·美标" to card.weatherAqi)
         val cellWidth = (W - 2 * M) / 3f
         cells.forEachIndexed { index, (label, value) ->
             val x = M + index * cellWidth
-            drawText(label, x, 398f, paint(20f))
+            val labelPaint = paint(20f)
+            drawText(label, x, metricsTop - labelPaint.ascent(), labelPaint)
             val valuePaint = paint(37f, if (index == 2) GREEN else BLACK, true)
             val label = value.ifBlank { "--" } + if (index < 2 && value.isNotBlank()) "°" else ""
-            drawText(fitLine(label, valuePaint, cellWidth - 10f), x, 445f, valuePaint)
-            fill(x, 465f, x + 32f, 472f, listOf(RED, BLUE, GREEN)[index])
+            drawText(fitLine(label, valuePaint, cellWidth - 10f), x, metricsTop + metricsHeight - 18f, valuePaint)
+            fill(x, metricsTop + metricsHeight - 6f, x + 32f, metricsTop + metricsHeight, listOf(RED, BLUE, GREEN)[index])
         }
-        WeatherVisuals.icon(this, card.weatherCode, 371f, 165f, 116f)
-        rule(495f)
-        WeatherVisuals.chart(this, card.weatherHours, 505f, 122f)
-        drawText("未来三天 · 气温范围", M, 657f, paint(21f, BLACK, true))
-        WeatherVisuals.forecastBars(this, card.weatherForecast)
+        val iconSize = ((heroBottom - 102f) * .65f).coerceIn(58f, 115f)
+        WeatherVisuals.icon(this, card.weatherCode, W - M - iconSize, (heroBottom + 100f - iconSize) / 2, iconSize)
+        rule(hourTop - gap / 2)
+        WeatherVisuals.chart(this, card.weatherHours, hourTop, hourHeight,
+            spacing = card.lineSpacing.coerceIn(.8f, 1.5f), fontScale = scale)
+        val titleBaseline = forecastTop - forecastTitle.ascent()
+        drawText("未来三天 · 气温范围", M, titleBaseline, forecastTitle)
+        WeatherVisuals.forecastBars(this, card.weatherForecast, titleBaseline + rows, rows, fontScale = scale)
         drawText("Open-Meteo · ${card.weatherUpdated.ifBlank { "手动资料" }}", M, 765f, paint(16f))
     }
 
     private fun Canvas.drawWeatherBlocks(card: Card) {
+        save()
+        // Expand the native tiles around the center of the panel.
+        scale((W - 28f) / (W - 2 * M), (H - 28f) / (H - 2 * M), W / 2f, H / 2f)
+        val spread = elementStep(1f) - 1f
+        val forecastY = 366f - 54f * spread
+        val lowerY = 533f + 52f * spread
+        val splitAQI = 116f + (forecastY - 116f) * .53f
         fun cell(x: Float, y: Float, right: Float, bottom: Float, color: Int = WHITE) {
             fill(x, y, right, bottom, BLACK)
             fill(x + 2, y + 2, right - 2, bottom - 2, color)
@@ -458,36 +486,38 @@ object Render {
         drawText(WEEK[(now.get(Calendar.DAY_OF_WEEK) + 5) % 7], mid + 20f, 68f, paint(25f, BLACK, true))
         drawText("%02d:%02d".format(now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE)),
             mid + 20f, 99f, paint(26f))
-        cell(M, 116f, mid, 366f)
-        val tp = paint(88f, BLACK, true)
+        cell(M, 116f, mid, forecastY)
+        val tp = paint(88f, BLACK, true).apply { textSize = minOf(textSize, forecastY - 263f) }
         drawText(fitLine(card.weatherTemp.ifBlank { "--" } + "°", tp, 248f), M + 16f, 231f, tp)
         drawText(fitLine(card.weatherText.ifBlank { "等待天气资料" }, paint(30f, BLACK, true), 248f),
-            M + 16f, 292f, paint(30f, BLACK, true))
+            M + 16f, forecastY - 74f, paint(30f, BLACK, true))
         drawText("今日 ${card.weatherLow.ifBlank { "--" }}～${card.weatherHigh.ifBlank { "--" }}°",
-            M + 16f, 340f, paint(21f))
+            M + 16f, forecastY - 24f, paint(21f))
         WeatherVisuals.icon(this, card.weatherCode, M + 210f, 124f, 54f)
         val aqi = card.weatherAqi.toIntOrNull()
         val color = when { aqi == null -> WHITE; aqi <= 50 -> GREEN; aqi <= 100 -> YELLOW; else -> RED }
         val ink = if (color == RED) WHITE else BLACK
-        cell(mid, 116f, right, 248f, color)
+        cell(mid, 116f, right, splitAQI, color)
         drawText("空气 AQI·美标", mid + 12f, 147f, paint(17f, ink, true))
-        drawText(card.weatherAqi.ifBlank { "--" }, mid + 12f, 209f, paint(48f, ink))
-        cell(mid, 248f, right, 366f)
-        drawText("湿度 ${card.weatherHumidity.ifBlank { "--" }}%", mid + 12f, 294f, paint(20f))
-        drawText("体感 ${card.weatherFeels.ifBlank { "--" }}°", mid + 12f, 337f, paint(20f))
-        cell(M, 366f, right, 533f)
-        drawText("未来三天", M + 14f, 400f, paint(23f, BLUE, true))
-        WeatherVisuals.forecastBars(this, card.weatherForecast, firstBaseline = 438f,
-            rowGap = 35f, leftInset = M + 14f)
+        drawText(card.weatherAqi.ifBlank { "--" }, mid + 12f, splitAQI - 25f, paint(46f, ink, true))
+        cell(mid, splitAQI, right, forecastY)
+        drawText("湿度 ${card.weatherHumidity.ifBlank { "--" }}%", mid + 12f, splitAQI + (forecastY - splitAQI) * .39f, paint(20f))
+        drawText("体感 ${card.weatherFeels.ifBlank { "--" }}°", mid + 12f, forecastY - 24f, paint(20f))
+        cell(M, forecastY, right, lowerY)
+        drawText("未来三天", M + 14f, forecastY + 34f, paint(23f, BLUE, true))
+        val firstDay = forecastY + 68f
+        WeatherVisuals.forecastBars(this, card.weatherForecast, firstBaseline = firstDay,
+            rowGap = lineStep(35f).coerceIn(25f, ((lowerY - firstDay - 12f) / 2).coerceAtLeast(25f)),
+            leftInset = M + 14f, width = W - 2 * M - 28f, fontScale = card.fontScale)
         val half = M + (W - 2 * M) / 2
-        cell(M, 533f, half, 720f, BLUE)
-        drawText("日出 / 日落", M + 14f, 568f, paint(22f, WHITE, true))
-        drawText("日出", M + 14f, 608f, paint(17f, WHITE))
-        drawText(card.weatherSunrise.ifBlank { "--:--" }, M + 68f, 608f, paint(27f, WHITE))
-        drawText("日落", M + 14f, 673f, paint(17f, WHITE))
-        drawText(card.weatherSunset.ifBlank { "--:--" }, M + 68f, 673f, paint(27f, WHITE))
-        cell(half, 533f, right, 720f)
-        drawText("穿衣参考", half + 14f, 568f, paint(22f, BLACK, true))
+        cell(M, lowerY, half, 720f, BLUE)
+        drawText("日出 / 日落", M + 14f, lowerY + 35f, paint(22f, WHITE, true))
+        drawText("日出", M + 14f, lowerY + 78f, paint(17f, WHITE))
+        drawText(card.weatherSunrise.ifBlank { "--:--" }, M + 80f, lowerY + 78f, paint(27f, WHITE))
+        drawText("日落", M + 14f, 683f, paint(17f, WHITE))
+        drawText(card.weatherSunset.ifBlank { "--:--" }, M + 80f, 683f, paint(27f, WHITE))
+        cell(half, lowerY, right, 720f)
+        drawText("穿衣参考", half + 14f, lowerY + 35f, paint(22f, BLACK, true))
         val t = card.weatherTemp.toIntOrNull()
         val advice = when {
             t == null -> "选择城市后显示"
@@ -497,12 +527,14 @@ object Render {
             else -> "轻薄短袖，注意补水"
         }
         wrap(this, advice, paint(20f), right - half - 28f).take(2).forEachIndexed { i, line ->
-            drawText(line, half + 14f, 610f + i * 29f, paint(20f))
+            drawText(line, half + 14f, lowerY + 73f + i * lineStep(24f).coerceIn(24f, 34f), paint(20f))
         }
-        drawText("更新 ${card.weatherUpdated.ifBlank { "手动资料" }}", half + 14f, 690f,
-            paint(14f))
+        val updatedPaint = paint(16f)
+        drawText(fitLine("更新 ${card.weatherUpdated.ifBlank { "手动资料" }}", updatedPaint, right - half - 28f),
+            half + 14f, 704f, updatedPaint)
         cell(M, 720f, right, H - M)
         drawText("Open-Meteo · 城市天气与空气质量", M + 14f, 746f, paint(16f))
+        restore()
     }
 
     private fun fitLine(text: String, p: Paint, width: Float): String {

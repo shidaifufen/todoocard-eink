@@ -593,7 +593,28 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
         )
     }
     MaterialTheme(colorScheme = scheme) {
-        Scaffold(bottomBar = {
+        var showPushResult by remember { mutableStateOf(false) }
+        LaunchedEffect(pushState) {
+            showPushResult = !pushState.running && pushState.message.isNotBlank()
+            if (showPushResult) {
+                kotlinx.coroutines.delay(5000)
+                showPushResult = false
+            }
+        }
+        Scaffold(topBar = {
+            if (preparing || pushState.running || showPushResult) {
+                Surface(Modifier.statusBarsPadding().fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant) {
+                    Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_push_status), null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (preparing) "正在准备卡片…" else pushState.message,
+                            style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            }
+        }, bottomBar = {
             NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                 listOf(
                     Triple("卡片", Icons.Outlined.Dashboard, 0),

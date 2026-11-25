@@ -130,6 +130,29 @@ class CardRenderTest {
         assertNull(WeatherVisuals.parseDayRange("手动填写的天气"))
     }
 
+    @Test fun weatherChartsScaleTheirLabelsAndKeepSolidPanelColors() {
+        val hours = (0..5).map { Render.WeatherHour("${19 + it}:00", 11f - it, 3) }
+        fun chart(scale: Float): Bitmap {
+            val bitmap = Bitmap.createBitmap(Render.W, 160, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            canvas.drawColor(Color.WHITE)
+            WeatherVisuals.chart(canvas, hours, 0f, 160f, fontScale = scale)
+            return bitmap
+        }
+        val small = chart(.8f)
+        val large = chart(1.3f)
+        for (area in listOf(0..34, 130..159)) {
+            fun ink(image: Bitmap) = area.sumOf { y -> (0 until Render.W).count { image.getPixel(it, y) == Color.BLACK } }
+            assertTrue(ink(large) > ink(small))
+        }
+        val blocks = Render.render(Render.Card(kind = "weather2", weatherAqi = "207"))
+        assertEquals(Color.WHITE, blocks.getPixel(10, 400))
+        assertEquals(Color.BLACK, blocks.getPixel(14, 400))
+        val pixels = IntArray(Render.W * Render.H)
+        blocks.getPixels(pixels, 0, Render.W, 0, 0, Render.W, Render.H)
+        assertTrue(pixels.all { it in setOf(Color.WHITE, Color.BLACK, Color.RED, Color.YELLOW, Color.BLUE, Color.GREEN) })
+    }
+
     @Test fun editedContentSurvivesRestart() {
         val context = RuntimeEnvironment.getApplication()
         PlanStore.init(context)

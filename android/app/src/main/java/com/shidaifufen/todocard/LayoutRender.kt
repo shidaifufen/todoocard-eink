@@ -92,14 +92,15 @@ internal object LayoutRender {
             }
             "weatherIcon" -> WeatherVisuals.icon(c, card.weatherCode, 0f, 0f, minOf(w, h))
             "weatherHours" -> {
-                c.scale(w / 464f, h / 122f); c.translate(-32f, 0f)
-                WeatherVisuals.chart(c, card.weatherHours, 0f, 122f,
-                    color(n.optString("color", "blue"), card), gap)
+                WeatherVisuals.chart(c, card.weatherHours, 0f, h,
+                    color(n.optString("color", "blue"), card), lines, card.fontScale, 0f, w)
             }
             "forecastBars" -> {
-                c.scale(w / 464f, h / 82f); c.translate(-32f, 0f)
-                WeatherVisuals.forecastBars(c, card.weatherForecast, firstBaseline = 21f, rowGap = (27f * lines * gap).coerceIn(18f, 29f),
-                    barColor = color(n.optString("color", "blue"), card))
+                val desired = (27f * lines * gap).coerceAtLeast(22f)
+                val first = (20f * card.fontScale).coerceAtLeast(18f)
+                WeatherVisuals.forecastBars(c, card.weatherForecast, firstBaseline = first,
+                    rowGap = minOf(desired, (h - first - 5f) / 2).coerceAtLeast(1f), leftInset = 0f,
+                    barColor = color(n.optString("color", "blue"), card), width = w, fontScale = card.fontScale)
             }
             "builtin" -> {
                 val image = Render.renderNative(card.copy(kind = n.getString("kind")))

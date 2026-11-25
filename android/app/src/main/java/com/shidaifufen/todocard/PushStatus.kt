@@ -22,11 +22,7 @@ object PushStatus {
     }
 
     fun notification(ctx: Context, text: String): android.app.Notification {
-        val builder = builder(ctx, text, null, false)
-        builder.setContentIntent(PendingIntent.getActivity(ctx, 0,
-            Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
-        return promote(ctx, builder.build(), null, text)
+        return promote(ctx, builder(ctx, text, null, false).build(), null, text)
     }
 
     fun update(ctx: Context, text: String, progress: Int? = null, finished: Boolean = false) {
@@ -54,10 +50,11 @@ object PushStatus {
                 .invoke(style, progress.coerceIn(0, 100))
             builder.setStyle(style as android.app.Notification.Style)
             builder.setOngoing(true)
-            builder.javaClass.getMethod("setShortCriticalText", String::class.java)
-                .invoke(builder, criticalText(text, progress))
-            // This promotion request was added after the initial Android 16 APIs on some builds.
-            // Its absence must not discard the supported progress style and notification text.
+            builder.setColorized(true)
+            runCatching {
+                builder.javaClass.getMethod("setShortCriticalText", String::class.java)
+                    .invoke(builder, criticalText(text, progress))
+            }
             runCatching {
                 builder.javaClass.getMethod("setRequestPromotedOngoing", Boolean::class.javaPrimitiveType)
                     .invoke(builder, true)
@@ -82,7 +79,9 @@ object PushStatus {
 
     private fun builder(ctx: Context, text: String, progress: Int?, finished: Boolean) =
         NotificationCompat.Builder(ctx, CHANNEL)
-            .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+            .setSmallIcon(R.drawable.ic_push_status)
+            .setColor(0xff246d65.toInt())
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setContentTitle("土豆片 · ${criticalText(text, progress)}")
             .setContentText(text.take(120))
             .setContentIntent(PendingIntent.getActivity(ctx, 0,
