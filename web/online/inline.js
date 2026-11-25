@@ -4,10 +4,12 @@ const root = document.querySelector('#picker');
 let automatic = false;
 const picker = mountOnline(root, canvas, {
   showPrompt: false,
+  openLyrics: selection => window.TodooScene.lyrics(JSON.stringify(selection)),
   onCard: () => {
     if (!automatic) window.TodooScene.card(canvas.toDataURL('image/png').split(',')[1]);
   },
 });
+window.applyLyrics = (token, start, end) => picker.applyLyrics(token, start, end);
 window.drawRandom = async category => {
   automatic = true;
   const success = await picker.random(category);

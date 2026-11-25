@@ -236,9 +236,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
         preview = withContext(Dispatchers.Default) {
             runCatching {
                 if (kind in listOf("photo", "bing", "ai")) {
-                    if (!photoReady) null else PhotoCard.render(photoPath, fields, edit).let { image ->
-                        try { PhotoEdit.panelPreview(image) } finally { image.recycle() }
-                    }
+                    if (!photoReady) null else PhotoCard.render(photoPath, fields, edit, sixColors = true)
                 } else if (kind == "online") OnlineCard.read(ctx)
                 else Render.render(card.copy(kind = kind))
             }.getOrNull()
@@ -247,6 +245,12 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
     LaunchedEffect(edit) {
         kotlinx.coroutines.delay(300)
         PlanStore.photoEdit = edit
+    }
+
+    LaunchedEffect(photoPath, fields.location, imageKind) {
+        if (fields.location && imageKind == "photo" && photoPath.isNotBlank() && PhotoCard.resolvePlace(ctx, photoPath)) {
+            photoLocationRevision++
+        }
     }
 
     fun loadPhoto(uri: Uri, autoSend: Boolean = false, openEditor: Boolean = true) {
@@ -377,6 +381,18 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri?.let { loadPhoto(it) }
+    }
+    val originalPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { loadPhoto(it) }
+    }
+    val originalLocationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        originalPicker.launch(arrayOf("image/*"))
+    }
+    fun pickOriginalPhoto() {
+        if (Build.VERSION.SDK_INT >= 29 && ctx.checkSelfPermission(Manifest.permission.ACCESS_MEDIA_LOCATION) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            originalLocationPermission.launch(Manifest.permission.ACCESS_MEDIA_LOCATION)
+        } else originalPicker.launch(arrayOf("image/*"))
     }
     val multiplePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(30)) { uris ->
@@ -665,9 +681,11 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                             selectedCarousel = carouselPhotos.firstOrNull()
                         })
                     2 -> LibraryScreen(carouselPhotos, photoPath, fields, edit,
+                        photoLocationRevision = photoLocationRevision,
                         onPick = { picker.launch(PickVisualMediaRequest(
                             ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                         onCamera = ::takePhoto, onAddAlbum = ::requestAlbums,
+                        onPickOriginal = ::pickOriginalPhoto,
                         onAddPhotos = ::addCarouselPhotos,
                         onAlbumPhoto = { loadPhoto(it) },
                         onFields = { fields = it; PlanStore.photoFields = it },

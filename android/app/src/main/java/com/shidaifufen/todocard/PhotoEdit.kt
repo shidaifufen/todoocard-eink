@@ -9,11 +9,13 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Matrix
 import androidx.exifinterface.media.ExifInterface
+import kotlin.math.pow
+import kotlin.math.roundToInt
 
 /**
  * 照片推送前的可视化编辑：
  *  - 手指拖动平移 / 双指缩放（对着卡片框裁切）
- *  - 色彩偏好：色相(hue) + 饱和度 + 曝光，和官方 App 的调色面板一致
+ *  - 对照片区域做调色，信息带在之后叠加
  */
 object PhotoEdit {
 
@@ -26,9 +28,13 @@ object PhotoEdit {
         val exposure: Float = 0f,    // -2..2 (EV)
         val contrast: Float = 1f,    // 0.6..1.6
         val snapThreshold: Int = 0, // 0 关闭；1..100 六色杂色吸附
+        val fit: Boolean = false,
+        val gamma: Float = 1f,
+        val sharpness: Float = 0f,
     ) {
         val isDefault get() = zoom == 1f && dx == 0f && dy == 0f && hue == 0f &&
-                saturation == 1f && exposure == 0f && contrast == 1f && snapThreshold == 0
+                saturation == 1f && exposure == 0f && contrast == 1f && snapThreshold == 0 &&
+                !fit && gamma == 1f && sharpness == 0f
     }
 
     /** 色相旋转矩阵 */
@@ -80,8 +86,38 @@ object PhotoEdit {
         val out = Bitmap.createBitmap(Render.W, Render.H, Bitmap.Config.ARGB_8888)
         val c = Canvas(out)
         drawInto(c, src, p, band)
+        finishArtwork(out, Render.H - band, p)
         PaletteSnap.apply(out, p.snapThreshold)
         return out
+    }
+
+    private fun finishArtwork(bitmap: Bitmap, height: Int, p: Params) {
+        if (p.gamma == 1f && p.sharpness == 0f) return
+        val width = bitmap.width
+        val pixels = IntArray(width * height)
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+        val gamma = IntArray(256) { (255 * (it / 255f).pow(1f / p.gamma)).roundToInt() }
+        for (i in pixels.indices) {
+            val color = pixels[i]
+            pixels[i] = android.graphics.Color.rgb(gamma[color shr 16 and 255], gamma[color shr 8 and 255], gamma[color and 255])
+        }
+        if (p.sharpness == 0f) {
+            bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
+            return
+        }
+        val sharpened = pixels.copyOf()
+        for (y in 1 until height - 1) for (x in 1 until width - 1) {
+            val i = y * width + x
+            val center = pixels[i]
+            fun channel(shift: Int): Int {
+                val c = center shr shift and 255
+                val sum = (pixels[i - 1] shr shift and 255) + (pixels[i + 1] shr shift and 255) +
+                    (pixels[i - width] shr shift and 255) + (pixels[i + width] shr shift and 255)
+                return (c + p.sharpness * (c - sum / 4f)).roundToInt().coerceIn(0, 255)
+            }
+            sharpened[i] = android.graphics.Color.rgb(channel(16), channel(8), channel(0))
+        }
+        bitmap.setPixels(sharpened, 0, width, 0, 0, width, height)
     }
 
     internal fun panelPreview(bitmap: Bitmap): Bitmap {
@@ -102,11 +138,11 @@ object PhotoEdit {
         val height = (Render.H - band).toFloat()
         c.drawRect(0f, 0f, width, Render.H.toFloat(),
             Paint().apply { color = android.graphics.Color.WHITE })
-        val cover = maxOf(width / src.width, height / src.height) * p.zoom
-        val dw = src.width * cover
-        val dh = src.height * cover
-        val left = (width - dw) / 2 + p.dx.coerceIn(-1f, 1f) * (dw - width) / 2
-        val top = (height - dh) / 2 + p.dy.coerceIn(-1f, 1f) * (dh - height) / 2
+        val scale = baseScale(width, height, src, p.fit) * p.zoom
+        val dw = src.width * scale
+        val dh = src.height * scale
+        val left = (width - dw) / 2 + p.dx.coerceIn(-1f, 1f) * (dw - width).coerceAtLeast(0f) / 2
+        val top = (height - dh) / 2 + p.dy.coerceIn(-1f, 1f) * (dh - height).coerceAtLeast(0f) / 2
         val colorAdjusted = p.hue != 0f || p.saturation != 1f ||
             p.exposure != 0f || p.contrast != 1f
         val paint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
@@ -117,6 +153,9 @@ object PhotoEdit {
         c.drawBitmap(src, null, RectF(left, top, left + dw, top + dh), paint)
         c.restore()
     }
+
+    internal fun baseScale(width: Float, height: Float, src: Bitmap, fit: Boolean): Float =
+        if (fit) minOf(width / src.width, height / src.height) else maxOf(width / src.width, height / src.height)
 
     fun decodePreview(path: String, maxEdge: Int = 1200): Bitmap? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }

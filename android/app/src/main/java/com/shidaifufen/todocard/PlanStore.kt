@@ -191,6 +191,9 @@ object PlanStore {
                 exposure = data.optDouble("exposure", 0.0).toFloat().coerceIn(-2f, 2f),
                 contrast = data.optDouble("contrast", 1.0).toFloat().coerceIn(.6f, 1.6f),
                 snapThreshold = data.optInt("snapThreshold", 0).coerceIn(0, 100),
+                fit = data.optBoolean("fit"),
+                gamma = data.optDouble("gamma", 1.0).toFloat().coerceIn(.5f, 2f),
+                sharpness = data.optDouble("sharpness", 0.0).toFloat().coerceIn(0f, 1f),
             )
         }.getOrDefault(PhotoEdit.Params())
         set(value) {
@@ -198,6 +201,7 @@ object PlanStore {
                 .put("hue", value.hue).put("saturation", value.saturation)
                 .put("exposure", value.exposure).put("contrast", value.contrast)
                 .put("snapThreshold", value.snapThreshold)
+                .put("fit", value.fit).put("gamma", value.gamma).put("sharpness", value.sharpness)
             sp_global.edit().putString("photoEdit", data.toString()).apply()
         }
 

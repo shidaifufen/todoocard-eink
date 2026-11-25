@@ -2,7 +2,7 @@ import { findItems, kinds, loadArt, randomItems, songLyrics } from './sources.js
 import { mountTone, vivid } from './tone.js';
 import { paint, paintPrompt } from './render.js';
 
-export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {}, showPrompt = true } = {}) {
+export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {}, showPrompt = true, openLyrics } = {}) {
   root.innerHTML = [
     '<div class="online-picker">',
     '<label>类型<select aria-label="类型" data-online="kind"></select></label>',
@@ -12,7 +12,7 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
     '<label data-online="result-row" hidden>匹配结果<select aria-label="匹配结果" data-online="results"></select></label>',
     '<section data-online="music" hidden><label>版面<select aria-label="版面" data-online="style">',
     '<option value="cover">大封面</option><option value="single">大封面＋一句</option><option value="lyrics">封面＋歌词</option></select></label>',
-    '<div data-online="lyrics-row" hidden><div class="lyric-summary"><output data-online="selection" aria-live="polite"></output><button type="button" data-online="clear-lyrics">清除</button></div><div data-online="lyrics" class="lyric-lines" role="group" aria-label="歌词片段"></div></div></section>',
+    '<div data-online="lyrics-row" hidden><div class="lyric-summary"><output data-online="selection" aria-live="polite"></output><button type="button" data-online="clear-lyrics">清除</button></div><button type="button" data-online="open-lyrics" hidden>选择歌词</button><div data-online="lyrics" class="lyric-lines" role="group" aria-label="歌词片段"></div></div></section>',
     '<details data-online="tone" hidden></details></div>',
   ].join('');
   const $ = name => root.querySelector('[data-online="' + name + '"]');
@@ -40,7 +40,9 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
     const selected = selectedLyrics();
     const hint = $('style').value === 'single' ? '点选一句' : selectingEnd ? '点选结束行' : '点选起始行';
     const characters = [...selected.join('')].length;
-    $('selection').textContent = selected.length ? `已选 ${selected.length} 行 · ${characters} 字 · ${hint}` : hint;
+    const count = `已选 ${selected.length} 行 · ${characters} 字`;
+    $('selection').textContent = openLyrics ? (selected.length ? count : `共 ${verses.length} 行`) :
+      (selected.length ? `${count} · ${hint}` : hint);
     if (!fits) $('selection').textContent += ' · 卡面仅显示前几行';
     $('clear-lyrics').disabled = !selected.length;
     [...$('lyrics').children].forEach((button,i) =>
@@ -88,7 +90,7 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
       if (!current() || token !== lyricOperation || item !== track) return;
       verses = lines;
       $('lyrics').replaceChildren();
-      lines.forEach((line, i) => {
+      if (!openLyrics) lines.forEach((line, i) => {
         const button = document.createElement('button');
         button.type = 'button';
         button.textContent = line;
@@ -203,8 +205,23 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
     selectingEnd = false;
     draw();
   };
+  if (openLyrics) {
+    $('open-lyrics').hidden = false;
+    $('lyrics').hidden = true;
+    $('open-lyrics').onclick = () => openLyrics({ token: lyricOperation, lines: verses,
+      anchor, end, single: $('style').value === 'single' });
+  }
   $('kind').onchange();
-  return { get ready() { return ready; }, random: category => {
+  return { get ready() { return ready; }, applyLyrics(token, start, finish) {
+    if (token !== lyricOperation || !item || kind !== 'music' || $('style').value === 'cover') return;
+    if (start < 0) anchor = end = -1;
+    else if (start < verses.length && finish >= 0 && finish < verses.length) {
+      anchor = start;
+      end = $('style').value === 'single' ? start : finish;
+    }
+    selectingEnd = false;
+    draw();
+  }, random: category => {
     $('style').value = 'cover';
     if ($('kind').value !== category) {
       $('kind').value = category;

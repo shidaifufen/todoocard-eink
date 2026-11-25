@@ -46,7 +46,9 @@ internal fun LibraryScreen(
     photoPath: String,
     fields: PhotoCard.Fields,
     edit: PhotoEdit.Params,
+    photoLocationRevision: Int,
     onPick: () -> Unit,
+    onPickOriginal: () -> Unit,
     onCamera: () -> Unit,
     onAddAlbum: () -> Unit,
     onAddPhotos: () -> Unit,
@@ -63,14 +65,14 @@ internal fun LibraryScreen(
     }
     var locationRevision by remember { mutableIntStateOf(0) }
     var locationNote by remember(photoPath) { mutableStateOf(if (photoPath.isBlank()) "" else PhotoCard.locationNote(photoPath)) }
-    val band = remember(photoPath, fields, locationRevision) {
+    val band = remember(photoPath, fields, locationRevision, photoLocationRevision) {
         if (photoPath.isBlank()) 0 else PhotoCard.bandHeight(photoPath, fields)
     }
     val currentEdit by rememberUpdatedState(edit)
     val currentOnEdit by rememberUpdatedState(onEdit)
     val currentSource by rememberUpdatedState(source)
     val currentBand by rememberUpdatedState(band)
-    val infoBand by produceState<Bitmap?>(null, photoPath, fields, band, locationRevision) {
+    val infoBand by produceState<Bitmap?>(null, photoPath, fields, band, locationRevision, photoLocationRevision) {
         value = if (band == 0) null else withContext(Dispatchers.Default) {
             Bitmap.createBitmap(Render.W, Render.H, Bitmap.Config.ARGB_8888).also {
                 PhotoCard.drawBand(android.graphics.Canvas(it), photoPath, fields, band)
@@ -78,15 +80,18 @@ internal fun LibraryScreen(
         }
     }
     var tool by remember { mutableIntStateOf(0) }
-    var compare by remember { mutableStateOf(false) }
+    var sixColors by remember { mutableStateOf(true) }
     var showGrid by remember { mutableStateOf(true) }
     var showAdvanced by remember { mutableStateOf(false) }
-    val snapPreview by produceState<Bitmap?>(null, source, edit, band, compare) {
+    val panelPreview by produceState<Bitmap?>(null, source, edit, band, sixColors) {
         value = null
         val bitmap = source
-        if (bitmap != null && edit.snapThreshold > 0 && !compare) {
+        if (bitmap != null && sixColors) {
             delay(160)
-            value = withContext(Dispatchers.Default) { PhotoEdit.renderBitmap(bitmap, edit, band) }
+            value = withContext(Dispatchers.Default) {
+                val adjusted = PhotoEdit.renderBitmap(bitmap, edit, band)
+                try { PhotoEdit.panelPreview(adjusted) } finally { adjusted.recycle() }
+            }
         }
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
@@ -140,7 +145,7 @@ internal fun LibraryScreen(
             }
         } else {
             Text("照片编辑", fontWeight = FontWeight.SemiBold)
-            Text("在画面上拖动调整位置，双指缩放；也可用下方按钮微调",
+            Text("拖动调整位置，双指缩放",
                 fontSize = 12.sp, color = StudioMuted)
             Spacer(Modifier.height(10.dp))
             BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -155,14 +160,14 @@ internal fun LibraryScreen(
                             val nextZoom = (params.zoom * zoom).coerceIn(1f, 4f)
                             val w = size.width.toFloat()
                             val h = size.height * (Render.H - currentBand).toFloat() / Render.H
-                            val cover = maxOf(w / src.width, h / src.height)
+                            val cover = PhotoEdit.baseScale(w, h, src, params.fit)
                             val oldW = src.width * cover * params.zoom
                             val oldH = src.height * cover * params.zoom
                             val newW = src.width * cover * nextZoom
                             val newH = src.height * cover * nextZoom
                             val ratio = nextZoom / params.zoom
-                            val oldX = params.dx * (oldW - w) / 2
-                            val oldY = params.dy * (oldH - h) / 2
+                            val oldX = params.dx * (oldW - w).coerceAtLeast(0f) / 2
+                            val oldY = params.dy * (oldH - h).coerceAtLeast(0f) / 2
                             val nextX = (oldX * ratio + (centroid.x - w / 2) * (1 - ratio) + pan.x)
                             val nextY = (oldY * ratio + (centroid.y - h / 2) * (1 - ratio) + pan.y)
                             currentOnEdit(params.copy(
@@ -178,10 +183,10 @@ internal fun LibraryScreen(
                                 val native = canvas.nativeCanvas
                                 native.save()
                                 native.scale(size.width / Render.W, size.height / Render.H)
-                                val shown = if (compare) edit.copy(hue = 0f, exposure = 0f,
-                                    saturation = 1f, contrast = 1f) else edit
-                                val snapped = snapPreview
-                                if (snapped != null && !compare) native.drawBitmap(snapped, 0f, 0f, null)
+                                val panel = panelPreview
+                                val shown = if (sixColors) edit else PhotoEdit.Params(zoom = edit.zoom,
+                                    dx = edit.dx, dy = edit.dy, fit = edit.fit)
+                                if (panel != null && sixColors) native.drawBitmap(panel, 0f, 0f, null)
                                 else PhotoEdit.drawInto(native, bitmap, shown, band)
                                 infoBand?.let { native.drawBitmap(it, 0f, 0f, null) }
                                 native.restore()
@@ -200,35 +205,31 @@ internal fun LibraryScreen(
                     }
                 }
             }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                FilterChip(!sixColors, { sixColors = false }, label = { Text("原图色彩") })
+                Spacer(Modifier.width(8.dp))
+                FilterChip(sixColors, { sixColors = true }, label = { Text("六色预览") })
+            }
             Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("裁切", "调色", "信息带").forEachIndexed { index, title ->
                     FilterChip(tool == index, onClick = { tool = index }, label = { Text(title) },
                         shape = RoundedCornerShape(8.dp))
                 }
             }
-            if (edit.snapThreshold > 0 && !compare) Text(
-                if (snapPreview == null) "调整中，停下后更新杂色吸附预览" else "杂色吸附预览已更新",
+            if (sixColors && panelPreview == null && source != null) Text(
+                "正在更新六色预览…",
                 color = StudioMuted, fontSize = 12.sp)
             if (tool == 0) {
-            Row(Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = { onEdit(edit.copy(zoom = (edit.zoom - .15f).coerceAtLeast(1f))) }) {
-                    Text("－")
-                }
-                Text("${"%.1f".format(edit.zoom)}×", fontSize = 13.sp)
-                OutlinedButton(onClick = { onEdit(edit.copy(zoom = (edit.zoom + .15f).coerceAtMost(4f))) }) {
-                    Text("＋")
-                }
-                TextButton(onClick = { onEdit(edit.copy(zoom = 1f, dx = 0f, dy = 0f)) }) {
-                    Text("居中")
-                }
+            Adjustment("缩放", edit.zoom * 100f, 100f..400f, { onEdit(edit.copy(zoom = it / 100f)) }, "%.0f%%")
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FilterChip(edit.fit, { onEdit(edit.copy(fit = true, zoom = 1f, dx = 0f, dy = 0f)) }, label = { Text("适应") })
+                FilterChip(!edit.fit, { onEdit(edit.copy(fit = false, zoom = 1f, dx = 0f, dy = 0f)) }, label = { Text("铺满") })
+                TextButton(onClick = { onEdit(edit.copy(zoom = 1f, dx = 0f, dy = 0f)) }) { Text("居中") }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("显示构图网格", Modifier.weight(1f), fontSize = 13.sp)
                 Switch(showGrid, onCheckedChange = { showGrid = it })
             }
-            Adjustment("缩放", edit.zoom, 1f..4f, { onEdit(edit.copy(zoom = it)) }, "%.1f×")
             Adjustment("左右", edit.dx, -1f..1f, { onEdit(edit.copy(dx = it)) }, "%+.1f")
             Adjustment("上下", edit.dy, -1f..1f, { onEdit(edit.copy(dy = it)) }, "%+.1f")
             }
@@ -253,25 +254,24 @@ internal fun LibraryScreen(
             OutlinedTextField(value = locationNote, onValueChange = { locationNote = it.take(120) },
                 label = { Text("这张照片的地点备注（可选）") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             TextButton(onClick = { PhotoCard.saveLocationNote(photoPath, locationNote); locationRevision++; onLocationSaved() }) { Text("保存地点") }
-            Text("备注优先显示；留空时显示照片中的 GPS 坐标。系统选择器可能移除 GPS。",
-                fontSize = 12.sp, color = StudioMuted)
+            if (fields.location) {
+                val detected = remember(photoPath, photoLocationRevision) { PhotoCard.embeddedLocation(photoPath) }
+                Text(if (detected.isBlank()) "当前副本里读不到拍摄位置" else "照片位置 · $detected",
+                    fontSize = 12.sp, color = StudioMuted)
+                if (detected.isBlank()) TextButton(onClick = onPickOriginal) { Text("重新选择原图并读取位置") }
+            }
             }
             if (tool == 1) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf("自然", "明亮", "黑白").forEachIndexed { index, label ->
                     OutlinedButton(onClick = { onEdit(edit.copy(hue = 0f, contrast = 1f,
                         saturation = if (index == 2) 0f else 1f,
-                        exposure = if (index == 1) .35f else 0f)) },
+                        exposure = if (index == 1) .35f else 0f, gamma = 1f, sharpness = 0f, snapThreshold = 0)) },
                         modifier = Modifier.weight(1f), contentPadding = PaddingValues(6.dp),
                         shape = RoundedCornerShape(8.dp)) { Text(label) }
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("对比原图色彩", Modifier.weight(1f), fontSize = 13.sp)
-                Switch(compare, onCheckedChange = { compare = it })
-            }
-            Adjustment("曝光", edit.exposure, -2f..2f, { onEdit(edit.copy(exposure = it)) }, "%+.1f")
-            Adjustment("饱和", edit.saturation, 0f..2f, { onEdit(edit.copy(saturation = it)) }, "%.1f")
+            PhotoToneAdjustments(edit, onEdit)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("杂色吸附", Modifier.weight(1f), fontSize = 13.sp)
                 Switch(edit.snapThreshold > 0, onCheckedChange = {
@@ -286,7 +286,6 @@ internal fun LibraryScreen(
                 Text(if (showAdvanced) "收起更多调整" else "更多调整")
             }
             if (showAdvanced) {
-            Adjustment("对比", edit.contrast, 0.6f..1.6f, { onEdit(edit.copy(contrast = it)) }, "%.1f")
             Adjustment("色相", edit.hue, -180f..180f, { onEdit(edit.copy(hue = it)) }, "%+.0f°")
             }
             }
@@ -304,14 +303,26 @@ internal fun LibraryScreen(
 }
 
 @Composable
+internal fun PhotoToneAdjustments(edit: PhotoEdit.Params, onEdit: (PhotoEdit.Params) -> Unit) {
+    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+        .padding(horizontal = 14.dp, vertical = 8.dp)) {
+        Adjustment("亮度", edit.exposure, -2f..2f, { onEdit(edit.copy(exposure = it)) }, "%+.2f EV")
+        Adjustment("对比度", edit.contrast * 100f, 60f..160f, { onEdit(edit.copy(contrast = it / 100f)) }, "%.0f%%")
+        Adjustment("Gamma", edit.gamma, .5f..2f, { onEdit(edit.copy(gamma = it)) }, "%.2f")
+        Adjustment("锐化", edit.sharpness * 100f, 0f..100f, { onEdit(edit.copy(sharpness = it / 100f)) }, "%.0f%%")
+        Adjustment("饱和度", edit.saturation * 100f, 0f..200f, { onEdit(edit.copy(saturation = it / 100f)) }, "%.0f%%")
+    }
+}
+
+@Composable
 private fun Adjustment(label: String, value: Float, range: ClosedFloatingPointRange<Float>,
                        onChange: (Float) -> Unit, format: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(label, fontSize = 13.sp, modifier = Modifier.width(44.dp))
-        Slider(value = value, onValueChange = onChange, valueRange = range,
-            modifier = Modifier.weight(1f))
-        Text(String.format(java.util.Locale.CHINA, format, value), fontSize = 12.sp,
-            color = StudioMuted, modifier = Modifier.width(52.dp))
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, fontSize = 13.sp)
+            Text(String.format(java.util.Locale.CHINA, format, value), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        }
+        Slider(value = value, onValueChange = onChange, valueRange = range)
     }
 }
 

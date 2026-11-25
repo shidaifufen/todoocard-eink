@@ -201,11 +201,10 @@ internal fun StudioScreen(
                     Text(if (layoutOpen) "收起调色" else "图片调色")
                 }
                 if (layoutOpen) {
-                    LayoutSlider("亮度", photoEdit.exposure + 1f, .65f..1.45f) { onPhotoEdit(photoEdit.copy(exposure = it - 1f)) }
-                    LayoutSlider("对比度", photoEdit.contrast, .6f..1.6f) { onPhotoEdit(photoEdit.copy(contrast = it)) }
-                    LayoutSlider("饱和度", photoEdit.saturation, 0f..2f) { onPhotoEdit(photoEdit.copy(saturation = it)) }
+                    PhotoToneAdjustments(photoEdit, onPhotoEdit)
                     LayoutSlider("杂色吸附", photoEdit.snapThreshold / 100f, 0f..1f) { onPhotoEdit(photoEdit.copy(snapThreshold = (it * 100).toInt())) }
-                    TextButton(onClick = { onPhotoEdit(photoEdit.copy(exposure = 0f, contrast = 1f, saturation = 1f, snapThreshold = 0)) }) { Text("恢复原色") }
+                    TextButton(onClick = { onPhotoEdit(PhotoEdit.Params(zoom = photoEdit.zoom, dx = photoEdit.dx,
+                        dy = photoEdit.dy, fit = photoEdit.fit)) }) { Text("恢复原色") }
                 }
             }
             if (!isImage && kind != "online") {
