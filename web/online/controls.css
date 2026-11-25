@@ -1,4 +1,4 @@
-.online-controls{--scene-ink:var(--fg,#26312d);--scene-panel:var(--line,#e8ede8);--scene-accent:var(--accent,#3a7768)}
+.online-controls{--scene-ink:var(--fg,#26312d);--scene-panel:var(--line,#e8ede8);--scene-accent:var(--accent,#3a7768);color:var(--scene-ink)}
 .online-controls [hidden]{display:none!important}
 .online-controls label{display:block;margin:6px 0;color:inherit}
 .online-controls form{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:6px}

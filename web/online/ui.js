@@ -35,12 +35,13 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
     return verses.slice(Math.min(anchor, end), Math.max(anchor, end) + 1);
   }
 
-  function showSelection() {
+  function showSelection(fits = true) {
     const first = Math.min(anchor, end), last = Math.max(anchor, end);
     const selected = selectedLyrics();
     const hint = $('style').value === 'single' ? '点选一句' : selectingEnd ? '点选结束行' : '点选起始行';
     const characters = [...selected.join('')].length;
     $('selection').textContent = selected.length ? `已选 ${selected.length} 行 · ${characters} 字 · ${hint}` : hint;
+    if (!fits) $('selection').textContent += ' · 卡面仅显示前几行';
     $('clear-lyrics').disabled = !selected.length;
     [...$('lyrics').children].forEach((button,i) =>
       button.setAttribute('aria-pressed', String(i>=first && i<=last)));
@@ -54,7 +55,6 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
       end = index;
       selectingEnd = false;
     }
-    showSelection();
     draw();
   }
 
@@ -62,7 +62,8 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
     if (!current()) return;
     if (item) {
       const style = $('style').value;
-      paint(canvas, kind, item, artwork, selectedLyrics(), tone, style);
+      const fits = paint(canvas, kind, item, artwork, selectedLyrics(), tone, style);
+      if (kind === 'music' && style !== 'cover') showSelection(fits);
       ready = true;
       onCard(canvas, item);
     } else {
@@ -94,7 +95,6 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
         button.onclick = () => selectLine(i);
         $('lyrics').append(button);
       });
-      if (lines.length) showSelection();
       $('lyrics-row').hidden = !lines.length;
       status.textContent = lines.length ? ($('style').value === 'single' ? '卡片底部显示一行歌词' : '起止行之间的歌词会一起选中') : '这首歌暂无匹配歌词，已显示大封面。';
     } catch {
@@ -196,17 +196,16 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
   $('style').onchange = () => {
     if ($('style').value === 'single') end = anchor;
     selectingEnd = false;
-    draw();
     void refreshLyrics();
   };
   $('clear-lyrics').onclick = () => {
     anchor = end = -1;
     selectingEnd = false;
-    showSelection();
     draw();
   };
   $('kind').onchange();
   return { get ready() { return ready; }, random: category => {
+    $('style').value = 'cover';
     if ($('kind').value !== category) {
       $('kind').value = category;
       $('kind').onchange();

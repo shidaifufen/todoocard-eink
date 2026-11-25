@@ -56,6 +56,7 @@ function block(g, value, x, y, width, height, size, color = BLACK, bold = false)
     const row = i === cap - 1 && rows.length > cap ? rows[i] + '…' : rows[i];
     line(g, row, x, y + i * step, width, size, color, bold);
   }
+  return rows.length <= cap;
 }
 
 function artwork(g, img, x, y, width, height, tone, fill = false) {
@@ -80,17 +81,17 @@ function music(g, item, img, verses, tone, style) {
     line(g, item.by, 28, 662, 472, 24, WHITE);
     if (style === 'single' && verses[0]) line(g, verses[0], 28, 707, 472, 26, WHITE, true, 18);
     line(g, item.source + (style === 'single' && verses[0] ? ' · 歌词 LRCLIB' : ''), 28, 758, 472, 17, WHITE);
-    return bounds;
+    return { bounds, fits: true };
   }
   rect(g, 0, 0, W, 276, BLACK);
   const bounds = artwork(g, img, 22, 22, 232, 232, tone);
   rect(g, 282, 43, 60, 7, YELLOW);
   block(g, item.title, 282, 78, 220, 113, 38, WHITE, true);
   line(g, item.by, 282, 205, 220, 22, WHITE);
-  block(g, verses.join('\n'), 32, 310, 464, 399, 40, BLACK, true);
+  const fits = block(g, verses.join('\n'), 32, 310, 464, 399, 40, BLACK, true);
   rect(g, 32, 736, 464, 3, BLUE);
   line(g, item.source + ' · 歌词 LRCLIB', 32, 754, 464, 16);
-  return bounds;
+  return { bounds, fits };
 }
 
 function movie(g, item, img, tone) {
@@ -129,12 +130,13 @@ export function paint(canvas, kind, item, artwork, verses = [], tone = vivid, st
   g.textBaseline = 'top';
   g.textAlign = 'left';
   rect(g, 0, 0, W, H, WHITE);
-  let imageBounds;
-  if (kind === 'music') imageBounds = music(g, item, artwork, verses, tone, style);
+  let imageBounds, fits = true;
+  if (kind === 'music') ({ bounds: imageBounds, fits } = music(g, item, artwork, verses, tone, style));
   else if (kind === 'movie') imageBounds = movie(g, item, artwork, tone);
   else dictionary(g, kind, item);
   g.restore();
   finishGraphics(g,imageBounds);
+  return fits;
 }
 
 export function paintPrompt(canvas) {

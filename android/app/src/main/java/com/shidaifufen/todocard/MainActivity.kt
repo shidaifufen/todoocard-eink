@@ -620,7 +620,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                         onRefresh = { refreshCard() }, onAnalysis = ::refreshAnalysis, refreshing = refreshing,
                         onScanAll = { requestScan(true) }, scanTimedOut = scanTimedOut,
                         onGenerate = ::generateImage, onlineContent = onlineContent,
-                        onlineControls = if (kind == "online") {
+                        onlineControls = if (kind == "online") @Composable {
                             OnlineSceneInline(!busy, dark) { raw ->
                                 val sequence = ++onlineSequence
                                 onlineSaving = true
