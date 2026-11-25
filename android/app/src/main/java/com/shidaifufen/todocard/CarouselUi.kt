@@ -15,7 +15,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -61,7 +60,7 @@ internal fun CarouselScreen(
             TextButton(onClick = { previewFraction = if (previewFraction > 0f) 0f else lastExpanded }) { Text(if (previewFraction > 0f) "隐藏大图" else "展开大图") }
         }
         Slider(previewFraction, { previewFraction = it; if (it > .05f) lastExpanded = it }, valueRange = 0f..1f)
-        if (previewFraction > .01f) Box(Modifier.fillMaxWidth().height(availablePreview * previewFraction).background(Color.White, RoundedCornerShape(10.dp)),
+        if (previewFraction > .01f) Box(Modifier.fillMaxWidth().height(availablePreview * previewFraction).background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center) {
             if (selected == null) Text("还没有照片\n从系统相册添加一些吧", color = StudioMuted)
             else AsyncImage(model = selected, contentDescription = "当前抽中的照片",
@@ -88,7 +87,7 @@ internal fun CarouselScreen(
                         AsyncImage(model = uri, contentDescription = "选择轮播照片",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.weight(1f).aspectRatio(1f)
-                                .background(Color.White, RoundedCornerShape(5.dp))
+                                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(5.dp))
                                 .clickable { previewFraction = lastExpanded.coerceAtLeast(.65f); onSelect(uri) })
                     }
                     repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }

@@ -199,7 +199,7 @@ internal fun SectionCard(title: String, action: @Composable (() -> Unit)? = null
             Spacer(Modifier.height(8.dp))
             content()
             Spacer(Modifier.height(12.dp))
-            HorizontalDivider(color = Color(0xFFDCE3DC))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
 }
 

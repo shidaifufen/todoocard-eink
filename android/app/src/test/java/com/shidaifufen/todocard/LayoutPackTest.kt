@@ -106,11 +106,26 @@ class LayoutPackTest {
         assertEquals(defaults, roundTrip)
     }
 
+    @Test fun summaryAndWeatherSpacingSlidersChangeTheRenderedCard() {
+        for (kind in listOf("summary", "weather", "weather2")) {
+            val card = Render.Card(kind = kind, weatherCity = "深圳", weatherTemp = "26",
+                weatherForecast = listOf("今天 晴 18~26°", "明天 多云 20~28°", "后天 阴 21~29°"),
+                todos = listOf("整理计划", "收拾书桌", "看一章书"))
+            val standard = Render.render(card)
+            val tightLines = Render.render(card.copy(lineSpacing = .8f))
+            val wideElements = Render.render(card.copy(elementSpacing = 1.4f))
+            assertFalse("$kind 行间距", standard.sameAs(tightLines))
+            assertFalse("$kind 元素间距", standard.sameAs(wideElements))
+            listOf(standard, tightLines, wideElements).forEach { it.recycle() }
+        }
+    }
+
     @Test fun publishedExamplesAndBundledDefaultsStayCompatible() {
         val dir = java.io.File("../../layouts")
         val defaults = dir.resolve("default.json").readText()
         assertEquals(LayoutPack.parse(ctx.assets.open("layouts/default.json").bufferedReader().use { it.readText() }), LayoutPack.parse(defaults))
-        for (name in listOf("weather-blue.json", "quote-weather.json")) {
+        for (name in listOf("weather-blue.json", "quote-weather.json", "daily-brief.json", "focus-list.json",
+            "verse-almanac.json", "weather-field.json", "weather-tiles.json")) {
             val pack = LayoutPack.parse(dir.resolve(name).readText())
             pack.templates.forEach { (kind, template) ->
                 val image = LayoutRender.render(Render.Card(kind = kind, weatherCity = "深圳", weatherTemp = "26"), template)

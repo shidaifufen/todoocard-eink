@@ -57,7 +57,12 @@ internal object LayoutRender {
         else -> Color.BLACK
     }
     private fun draw(c: Canvas, node: LayoutPack.Node, n: JSONObject, card: Render.Card, values: Map<String, String>) {
-        val w = node.width; val h = node.height
+        val w = node.width
+        val h = node.height
+        val gap = card.elementSpacing.coerceIn(.7f, 1.4f)
+        val lines = card.lineSpacing.coerceIn(.8f, 1.6f)
+        // Keep adjustments within the configured boxes, including boxes on colored tiles.
+        val verticalInset = ((1f - gap) * h * .15f).coerceIn(-8f, 8f)
         when (node.type) {
             "rect" -> {
                 val radius = n.optDouble("radius", 0.0).toFloat()
@@ -80,16 +85,17 @@ internal object LayoutRender {
                     list.take(80).mapIndexed { i, v -> if (n.optBoolean("numbered")) "${i + 1}. $v" else v }.joinToString("\n")
                         .ifBlank { bind(n.optString("emptyText"), values) }
                 }
-                text(c, value.take(12000), n, w, h, card)
+                text(c, value.take(12000), n, w, h, card, verticalInset)
             }
             "weatherIcon" -> WeatherVisuals.icon(c, card.weatherCode, 0f, 0f, minOf(w, h))
             "weatherHours" -> {
                 c.scale(w / 464f, h / 122f); c.translate(-32f, 0f)
-                WeatherVisuals.chart(c, card.weatherHours, 0f, 122f, color(n.optString("color", "blue"), card))
+                WeatherVisuals.chart(c, card.weatherHours, 0f, 122f,
+                    color(n.optString("color", "blue"), card), gap)
             }
             "forecastBars" -> {
                 c.scale(w / 464f, h / 82f); c.translate(-32f, 0f)
-                WeatherVisuals.forecastBars(c, card.weatherForecast, firstBaseline = 21f, rowGap = 27f,
+                WeatherVisuals.forecastBars(c, card.weatherForecast, firstBaseline = 21f, rowGap = (27f * lines * gap).coerceIn(18f, 29f),
                     barColor = color(n.optString("color", "blue"), card))
             }
             "builtin" -> {
@@ -119,7 +125,7 @@ internal object LayoutRender {
             out + line
         }
     }
-    private fun text(c: Canvas, value: String, n: JSONObject, width: Float, height: Float, card: Render.Card) {
+    private fun text(c: Canvas, value: String, n: JSONObject, width: Float, height: Float, card: Render.Card, inset: Float) {
         val p = Paint().apply {
             color = color(n.optString("color", "black"), card)
             textSize = n.optDouble("textSize", 24.0).toFloat() * card.fontScale.coerceIn(.8f, 1.5f)
@@ -129,14 +135,15 @@ internal object LayoutRender {
         val wrap = n.optBoolean("wrap", true)
         val spacing = n.optDouble("lineHeight", 1.4).toFloat() * card.lineSpacing.coerceIn(.8f, 1.6f)
         fun fits(rows: List<String>) = rows.maxOfOrNull { p.measureText(it) }.let { (it ?: 0f) <= width } &&
-            (-p.fontMetrics.top + p.fontMetrics.bottom + (rows.size - 1).coerceAtLeast(0) * p.textSize * spacing) <= height
+            (-p.fontMetrics.top + p.fontMetrics.bottom + (rows.size - 1).coerceAtLeast(0) * maxOf(p.textSize * spacing, p.fontMetrics.bottom - p.fontMetrics.top)) <= height
         var rows = lines(value, p, width, wrap)
         while (n.optBoolean("shrink", true) && p.textSize > 10f && !fits(rows)) {
             p.textSize = (p.textSize - 1).coerceAtLeast(10f); rows = lines(value, p, width, wrap)
         }
-        val baseline = -p.fontMetrics.top
         val step = maxOf(p.textSize * spacing, p.fontMetrics.bottom - p.fontMetrics.top)
-        val count = ((height - baseline - p.fontMetrics.bottom) / step).toInt().plus(1).coerceAtLeast(0)
+        val count = (kotlin.math.floor((height + p.fontMetrics.top - p.fontMetrics.bottom) / step).toInt() + 1).coerceAtLeast(0)
+        val spare = height + p.fontMetrics.top - p.fontMetrics.bottom - (minOf(count, rows.size) - 1).coerceAtLeast(0) * step
+        val baseline = -p.fontMetrics.top + (spare.coerceAtLeast(0f) * .25f + inset).coerceIn(0f, spare.coerceAtLeast(0f))
         rows.take(count).forEachIndexed { i, original ->
             var line = original
             if (p.measureText(line) > width || (i == count - 1 && rows.size > count)) {

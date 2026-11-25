@@ -14,7 +14,7 @@
 - 功能：8 模板、照片裁切/调色、相册（SAF）、每日计划 + 间隔推送 + 时间轴、配对后自动等广播推送、系统分享/荣耀传送门
 - 交接与真机调试：见 [HANDOFF-ANDROID.md](HANDOFF-ANDROID.md)
 
-### 看板版式独立更新（Android 1.5.0 起）
+### 看板版式独立更新
 
 先升级一次应用，之后修改引擎支持的布局无需重新打包。进入 **设置 → 外观 → 看板版式包 → 从 GitHub 导入 / 更新**，粘贴公开的 JSON 文件链接，获取并预览后应用。也可以下载 JSON 后选择“导入版式”。相册、内容、设备、计划及密钥与版式单独保存；手动和定时推送共用导入版式。
 
@@ -22,6 +22,8 @@
 - [蓝色天气](https://github.com/shidaifufen/todoocard-eink/blob/main/layouts/weather-blue.json)
 - [每日一句＋天气](https://github.com/shidaifufen/todoocard-eink/blob/main/layouts/quote-weather.json)
 - [完整格式、组件和更新规则](layouts/README.md)
+
+Windows、macOS 和纯网页版也可以导入同一份 JSON。新版式会出现在「看板版式包」菜单，选择后可以按场景调整选项并预览。[新版式目录](layouts/README.md#使用)
 
 支持 `github.com/用户/仓库/blob/分支/路径.json`、`raw.githubusercontent.com/用户/仓库/分支/路径.json`，以及 `github.com/用户/仓库/releases/download/标签/文件.json`、`releases/latest/download/文件.json`。后续在 GitHub 更新同一分支和路径的 JSON，应用会保留上次链接，再次获取并应用即可更新；固定标签或提交的链接用于锁定版本。仅支持公开文件，不需要 GitHub 令牌。失败不会替换当前版式，可撤销或恢复内置。
 

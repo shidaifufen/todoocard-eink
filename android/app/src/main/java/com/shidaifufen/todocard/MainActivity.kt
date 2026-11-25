@@ -12,7 +12,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalView
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.Casino
@@ -510,7 +515,27 @@ private fun App(incomingIntent: Intent?) {
         }
     }
 
-    MaterialTheme(colorScheme = StudioColors) {
+    val themePrefs = remember(ctx) { ctx.getSharedPreferences("studio_appearance", Context.MODE_PRIVATE) }
+    var theme by remember { mutableStateOf(StudioTheme.entries.find {
+        it.name == themePrefs.getString("theme", null)
+    } ?: StudioTheme.SYSTEM) }
+    val dark = when (theme) {
+        StudioTheme.SYSTEM -> isSystemInDarkTheme()
+        StudioTheme.LIGHT -> false
+        StudioTheme.DARK -> true
+    }
+    val scheme = if (dark) StudioDarkColors else StudioColors
+    val view = LocalView.current
+    SideEffect {
+        val activity = view.context as? ComponentActivity ?: ctx as? ComponentActivity
+        activity?.enableEdgeToEdge(
+            statusBarStyle = if (dark) SystemBarStyle.dark(scheme.background.toArgb())
+                else SystemBarStyle.light(scheme.background.toArgb(), scheme.background.toArgb()),
+            navigationBarStyle = if (dark) SystemBarStyle.dark(scheme.surface.toArgb())
+                else SystemBarStyle.light(scheme.surface.toArgb(), scheme.surface.toArgb()),
+        )
+    }
+    MaterialTheme(colorScheme = scheme) {
         Scaffold(bottomBar = {
             NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                 listOf(
@@ -584,7 +609,11 @@ private fun App(incomingIntent: Intent?) {
                         })
                     3 -> PlanScreen(ctx, onReplay = ::replayHistory)
                     else -> SettingsScreen(pairedName, pairedAddress, fields, found,
-                        device?.device?.address, status,
+                        device?.device?.address, status, theme,
+                        onTheme = {
+                            theme = it
+                            themePrefs.edit().putString("theme", it.name).apply()
+                        },
                         onScan = { requestScan() }, onSelect = ::selectDevice,
                         onPair = ::pairDevice,
                         onUnpair = {

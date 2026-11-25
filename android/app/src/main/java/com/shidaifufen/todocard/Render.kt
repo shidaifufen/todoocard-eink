@@ -152,11 +152,16 @@ object Render {
             drawText("今天也值得记录", W - M - paint(20f).measureText("今天也值得记录"),
                 218f, paint(20f))
         }
+        val sectionShift = elementStep(46f) - 46f
+        val todoTitle = 345f + sectionShift
         fill(M, 294f, W - M, 302f, YELLOW)
-        drawText("今日待办", M, 345f, paint(28f, BLACK, true))
+        drawText("今日待办", M, todoTitle, paint(28f, BLACK, true))
         val todos = card.todos.take(4)
-        drawText("${todos.size} 项", W - M - paint(18f).measureText("${todos.size} 项"), 345f, paint(18f))
-        var y = 388f
+        drawText("${todos.size} 项", W - M - paint(18f).measureText("${todos.size} 项"), todoTitle, paint(18f))
+        val progressY = (615f + sectionShift).coerceIn(597f, 637f)
+        val firstTodo = todoTitle + elementStep(43f)
+        val todoStep = lineStep(49f).coerceIn(39f, (progressY - 35f - firstTodo) / 3f)
+        var y = firstTodo
         if (todos.isEmpty()) {
             drawText("今天还没有安排", M, y, paint(23f))
             y += 54f
@@ -165,11 +170,10 @@ object Render {
             drawText("${index + 1}", M + 5f, y, paint(18f, WHITE, true))
             val line = fitLine(item, paint(23f), W - M * 2 - 46f)
             drawText(line, M + 40f, y, paint(23f))
-            y += elementStep(lineStep(52f)).coerceIn(40f, 55f)
+            y += todoStep
         }
         val monthDays = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
         val monthPct = cal.get(Calendar.DAY_OF_MONTH) * 100 / monthDays
-        val progressY = maxOf(y + 20f, 615f).coerceAtMost(637f)
         drawText("本月", M, progressY, paint(20f, BLACK, true))
         val pctText = "$monthPct%"
         drawText(pctText, W - M - paint(20f).measureText(pctText), progressY, paint(20f))
@@ -187,7 +191,7 @@ object Render {
         }
         rule(691f)
         val q = wrap(this, "“${card.quote}”", paint(20f), W - M * 2).take(2)
-        q.forEachIndexed { index, line -> drawText(line, M, 717f + index * 25f, paint(20f)) }
+        q.forEachIndexed { index, line -> drawText(line, M, 715f + index * lineStep(25f).coerceIn(20f, 29f), paint(20f)) }
         val by = fitLine(card.quoteBy, paint(16f), W - M * 2)
         drawText(by, W - M - paint(16f).measureText(by), 766f, paint(16f))
     }

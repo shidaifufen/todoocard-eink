@@ -134,6 +134,7 @@
     </div>
     <div class="group">
       <h2>显示</h2>
+      <div id="layoutSettings" style="padding:8px 10px;margin-bottom:10px"></div>
       <div style="padding:2px 10px 8px">
         <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--sub)">
           <span>字号</span><span id="scaleVal">110%</span>
@@ -1392,7 +1393,45 @@ async function boot(){
   switchPanel(wantPanel || 'tpl');
   setInterval(load, 30000);
 }
+window.refreshLayoutCard = kind => {
+  if (kind) { currentTpl = kind; switchPanel('tpl'); }
+  else preview(currentTpl);
+};
 boot();
+</script>
+<script type="module">
+import { mountLayouts } from './layout-ui.js';
+
+async function layoutRequest(action, body, kind) {
+  const query = new URLSearchParams();
+  if (action) query.set('action', action);
+  if (kind) query.set('kind', kind);
+  const response = await fetch('/api/card/layouts?' + query, action ? {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body || ''
+  } : {});
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || '版式操作失败');
+  }
+  return action === 'preview' ? response.blob() : response.json();
+}
+
+mountLayouts(document.getElementById('layoutSettings'), {
+  read: () => layoutRequest(),
+  fetch: link => layoutRequest('fetch', link),
+  parse: raw => JSON.parse(raw.replace(/^\uFEFF/, '')),
+  preview: async (pack, kind) => {
+    const blob = await layoutRequest('preview', JSON.stringify(pack), kind);
+    const image = new Image();
+    const url = URL.createObjectURL(blob);
+    image.src = url;
+    try { await image.decode(); } finally { URL.revokeObjectURL(url); }
+    image.alt = '版式预览';
+    return () => image;
+  },
+  update: (action, pending) => layoutRequest(action, pending ? JSON.stringify(pending) : ''),
+  changed: kind => window.refreshLayoutCard(kind),
+});
 </script>
 </body>
 </html>

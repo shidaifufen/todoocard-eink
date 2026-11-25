@@ -31,26 +31,41 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 
-internal val StudioInk = Color(0xFF252A2D)
-internal val StudioMuted = Color(0xFF68737B)
-internal val StudioGreen = Color(0xFF096B61)
-internal val StudioRed = Color(0xFFC84B3B)
-internal val StudioBackground = Color(0xFFF5F6F7)
-
 internal val StudioColors = lightColorScheme(
-    primary = StudioGreen,
+    primary = Color(0xFF096B61),
     onPrimary = Color.White,
-    secondary = StudioRed,
     secondaryContainer = Color(0xFFDDEDE7),
-    onSecondaryContainer = StudioGreen,
+    onSecondaryContainer = Color(0xFF096B61),
     tertiaryContainer = Color(0xFFF8E8D8),
-    background = StudioBackground,
-    onBackground = StudioInk,
+    background = Color(0xFFF5F6F7),
+    onBackground = Color(0xFF252A2D),
     surface = Color.White,
-    onSurface = StudioInk,
+    onSurface = Color(0xFF252A2D),
     surfaceVariant = Color(0xFFE8ECEE),
-    onSurfaceVariant = StudioMuted,
+    onSurfaceVariant = Color(0xFF56636B),
 )
+
+internal val StudioDarkColors = darkColorScheme(
+    primary = Color(0xFF83D8C7), onPrimary = Color(0xFF00382F),
+    primaryContainer = Color(0xFF125047), onPrimaryContainer = Color(0xFFA6F2E2),
+    secondary = Color(0xFFB1CCC4), onSecondary = Color(0xFF1D352F),
+    secondaryContainer = Color(0xFF29453F), onSecondaryContainer = Color(0xFFD2F1E8),
+    tertiary = Color(0xFFF1BA89), tertiaryContainer = Color(0xFF55371F),
+    onTertiaryContainer = Color(0xFFFFDEC1),
+    background = Color(0xFF101615), onBackground = Color(0xFFE2EAE6),
+    surface = Color(0xFF171F1D), onSurface = Color(0xFFE2EAE6),
+    surfaceVariant = Color(0xFF273330), onSurfaceVariant = Color(0xFFBBCBC5),
+    outline = Color(0xFF889A94), outlineVariant = Color(0xFF3E4F49),
+    error = Color(0xFFFFB4A9),
+)
+
+internal enum class StudioTheme(val label: String) { SYSTEM("跟随系统"), LIGHT("浅色"), DARK("深色") }
+
+internal val StudioInk: Color @Composable get() = MaterialTheme.colorScheme.onSurface
+internal val StudioMuted: Color @Composable get() = MaterialTheme.colorScheme.onSurfaceVariant
+internal val StudioGreen: Color @Composable get() = MaterialTheme.colorScheme.primary
+internal val StudioRed: Color @Composable get() = MaterialTheme.colorScheme.error
+internal val StudioBackground: Color @Composable get() = MaterialTheme.colorScheme.background
 
 @Composable
 internal fun StudioScreen(
@@ -132,8 +147,8 @@ internal fun StudioScreen(
             val imageWidth = minOf(maxWidth - 20.dp, (maxHeight - 12.dp).coerceAtLeast(80.dp) * 2f / 3f)
             Box(
                 Modifier.width(imageWidth).aspectRatio(2f / 3f)
-                    .background(Color.White, RoundedCornerShape(4.dp))
-                    .border(1.dp, Color(0xFFD9DED8), RoundedCornerShape(4.dp))
+                    .background(if (preview != null) Color.White else MaterialTheme.colorScheme.surface, RoundedCornerShape(4.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(4.dp))
                     .clickable(enabled = onlineContent && kind in listOf("quote", "poem") && !busy && !refreshing,
                         onClickLabel = "换一条内容", onClick = onRefresh),
                 contentAlignment = Alignment.Center,

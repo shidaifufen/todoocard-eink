@@ -126,7 +126,7 @@ internal fun LibraryScreen(
                 items(photos) { uri ->
                     AsyncImage(model = uri, contentDescription = "选择相册照片",
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.size(82.dp).background(Color.White, RoundedCornerShape(4.dp))
+                        modifier = Modifier.size(82.dp).background(MaterialTheme.colorScheme.surface, RoundedCornerShape(4.dp))
                             .clickable { onAlbumPhoto(uri) })
                 }
             }
@@ -134,7 +134,7 @@ internal fun LibraryScreen(
         Spacer(Modifier.height(18.dp))
         if (photoPath.isBlank()) {
             Box(Modifier.fillMaxWidth().height(250.dp)
-                .border(1.dp, Color(0xFFD9DED8), RoundedCornerShape(8.dp)),
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center) {
                 Text("选一张照片开始编辑", color = StudioMuted)
             }
@@ -147,7 +147,7 @@ internal fun LibraryScreen(
                 val width = minOf(maxWidth, 255.dp)
                 Box(Modifier.width(width).aspectRatio(2f / 3f)
                     .background(Color.White)
-                    .border(1.dp, Color(0xFFD9DED8))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant)
                     .pointerInput(photoPath) {
                         detectTransformGestures { centroid, pan, zoom, _ ->
                             val params = currentEdit
@@ -323,6 +323,8 @@ internal fun SettingsScreen(
     found: List<ScanResult>,
     selectedAddress: String?,
     status: String,
+    theme: StudioTheme,
+    onTheme: (StudioTheme) -> Unit,
     onScan: () -> Unit,
     onSelect: (ScanResult) -> Unit,
     onPair: () -> Unit,
@@ -385,6 +387,15 @@ internal fun SettingsScreen(
                     color = StudioMuted)
             }
             1 -> {
+                SectionCard(title = "应用主题") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        StudioTheme.entries.forEach { option ->
+                            FilterChip(selected = theme == option, onClick = { onTheme(option) },
+                                label = { Text(option.label) })
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
                 LayoutSettings()
                 Spacer(Modifier.height(18.dp))
                 Text("六色墨水屏", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
@@ -394,7 +405,7 @@ internal fun SettingsScreen(
                     listOf(Color.White, Color.Black, Color.Red, Color.Blue, Color.Green,
                         Color.Yellow).forEach { color ->
                         Box(Modifier.size(34.dp).background(color, RoundedCornerShape(4.dp))
-                            .border(1.dp, Color(0xFFCED5CE), RoundedCornerShape(4.dp)))
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(4.dp)))
                     }
                 }
                 Spacer(Modifier.height(18.dp))

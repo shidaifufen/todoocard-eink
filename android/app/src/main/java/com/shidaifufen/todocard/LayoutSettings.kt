@@ -10,11 +10,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.json.JSONArray
+import org.json.JSONObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -94,7 +98,10 @@ internal fun LayoutSettings() {
         if (message.isNotBlank()) Text(message, fontSize = 12.sp)
     }
     pending?.let { pack -> LayoutPreview(pack,
-        onDismiss = { pending = null }, onApply = { pending = null; perform { LayoutStore.apply(ctx, pack) } }) }
+        onDismiss = { pending = null }, onApply = { edited ->
+            pending = null
+            perform { LayoutStore.apply(ctx, edited) }
+        }) }
     if (linkDialog) AlertDialog(onDismissRequest = { if (!busy) linkDialog = false },
         title = { Text("从 GitHub 获取版式") },
         text = {
@@ -105,7 +112,9 @@ internal fun LayoutSettings() {
                     isError = linkError.isNotEmpty())
                 Text("仓库已有版式", fontSize = 12.sp)
                 Row(Modifier.horizontalScroll(rememberScrollState())) {
-                    listOf("默认版式" to "default", "蓝色天气" to "weather-blue", "一句＋天气" to "quote-weather").forEach { (name, file) ->
+                    listOf("晨间简报" to "daily-brief", "出门天气" to "weather-field", "天气色卡" to "weather-tiles",
+                        "专注清单" to "focus-list", "诗词日历" to "verse-almanac", "蓝色天气" to "weather-blue",
+                        "一句＋天气" to "quote-weather", "默认版式" to "default").forEach { (name, file) ->
                         TextButton(enabled = !busy, onClick = {
                             link = "https://github.com/shidaifufen/todoocard-eink/blob/main/layouts/$file.json"; linkError = ""
                         }) { Text(name) }
@@ -137,20 +146,22 @@ internal fun LayoutSettings() {
 }
 
 @Composable
-private fun LayoutPreview(pack: LayoutPack.Pack, onDismiss: () -> Unit, onApply: () -> Unit) {
+private fun LayoutPreview(pack: LayoutPack.Pack, onDismiss: () -> Unit, onApply: (LayoutPack.Pack) -> Unit) {
     val ctx = LocalContext.current
     var kind by remember(pack) { mutableStateOf(pack.templates.keys.first()) }
-    var preview by remember(pack) { mutableStateOf<Bitmap?>(null) }
-    var error by remember(pack) { mutableStateOf("") }
-    var ready by remember(pack) { mutableStateOf(false) }
-    LaunchedEffect(pack, kind) {
+    var edited by remember(pack) { mutableStateOf(pack) }
+    val optionState = rememberSaveableStateHolder()
+    var preview by remember(edited, kind) { mutableStateOf<Bitmap?>(null) }
+    var error by remember(edited, kind) { mutableStateOf("") }
+    var ready by remember(edited, kind) { mutableStateOf(false) }
+    LaunchedEffect(edited, kind) {
         ready = false; error = ""
         val result = withContext(Dispatchers.Default) {
             runCatching {
                 // Validate rendering for every changed card, not only the selected preview.
                 val card = PlanStore.card(ctx)
-                pack.templates.filterKeys { it != kind }.forEach { (k, t) -> LayoutRender.render(card.copy(kind = k), t).recycle() }
-                LayoutRender.render(card.copy(kind = kind), pack.templates.getValue(kind))
+                edited.templates.filterKeys { it != kind }.forEach { (k, t) -> LayoutRender.render(card.copy(kind = k), t).recycle() }
+                LayoutRender.render(card.copy(kind = kind), edited.templates.getValue(kind))
             }
         }
         preview = result.getOrNull()
@@ -166,10 +177,74 @@ private fun LayoutPreview(pack: LayoutPack.Pack, onDismiss: () -> Unit, onApply:
                         label = { Text(templateName(k)) }, modifier = Modifier.padding(end = 6.dp)) }
                 }
                 preview?.let { Image(it.asImageBitmap(), "导入版式预览", Modifier.fillMaxWidth().aspectRatio(528f / 792f)) }
+                optionState.SaveableStateProvider(kind) {
+                    LayoutOptions(pack.templates.getValue(kind)) { templateJson ->
+                        val json = JSONObject(edited.json)
+                        json.getJSONObject("templates").put(kind, templateJson)
+                        runCatching { LayoutPack.parse(json.toString()) }
+                            .onSuccess { edited = it }
+                            .onFailure { error = it.message.orEmpty(); ready = false }
+                    }
+                }
                 if (!ready && error.isEmpty()) CircularProgressIndicator()
                 if (error.isNotEmpty()) Text("此版式无法应用：$error", color = MaterialTheme.colorScheme.error)
             }
         },
-        confirmButton = { TextButton(enabled = ready, onClick = onApply) { Text("应用版式") } },
+        confirmButton = { TextButton(enabled = ready, onClick = { onApply(edited) }) { Text("应用版式") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } })
+}
+
+@Composable
+private fun LayoutOptions(template: LayoutPack.Template, onChange: (JSONObject) -> Unit) {
+    val nodes = remember(template) { template.nodes.map { JSONObject(it.json) } }
+    val titleIndex = nodes.indexOfFirst { n ->
+        n.optString("type") == "text" && n.optBoolean("bold") &&
+            n.optString("text").let { it.isNotBlank() && !it.contains("{{") }
+    }
+    val colorKeys = listOf("color", "fill", "border")
+    val blue = nodes.any { n -> colorKeys.any { n.optString(it) == "blue" } }
+    val hasList = nodes.any { it.optString("type") == "list" }
+    val groups = mapOf<String, (JSONObject) -> Boolean>(
+        "小时趋势" to { it.optString("type") == "weatherHours" },
+        "三天预报" to { it.optString("type") == "forecastBars" },
+        "底部引文" to { it.optString("text").contains("{{quote}}") || it.optString("text").contains("{{quoteBy}}") },
+        "诗词赏析" to { it.optString("showIf") == "poemNote" || it.optString("text").contains("{{poemNote}}") },
+    ).filterValues { predicate -> nodes.any(predicate) }
+    if (titleIndex < 0 && !blue && !hasList && groups.isEmpty()) return
+    var title by rememberSaveable { mutableStateOf(nodes.getOrNull(titleIndex)?.optString("text").orEmpty()) }
+    var accent by rememberSaveable { mutableStateOf("blue") }
+    var numbered by rememberSaveable { mutableStateOf(nodes.any { it.optString("type") == "list" && it.optBoolean("numbered") }) }
+    var hidden by rememberSaveable { mutableStateOf(arrayListOf<String>()) }
+    Text("场景选项", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp))
+    if (titleIndex >= 0) OutlinedTextField(value = title, onValueChange = { title = it.take(48) },
+        label = { Text("卡面标题") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    if (blue) {
+        Text("强调色", fontSize = 12.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("蓝" to "blue", "红" to "red", "黑" to "black").forEach { (label, value) ->
+                FilterChip(selected = accent == value, onClick = { accent = value }, label = { Text(label) })
+            }
+        }
+    }
+    if (hasList) FilterChip(selected = numbered, onClick = { numbered = !numbered }, label = { Text("列表编号") })
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        groups.keys.forEach { label ->
+            FilterChip(selected = label !in hidden, onClick = {
+                hidden = ArrayList(if (label in hidden) hidden - label else hidden + label)
+            },
+                label = { Text(label) })
+        }
+    }
+    OutlinedButton(onClick = {
+        val changed = JSONArray()
+        nodes.forEachIndexed { index, source ->
+            if (groups.any { (label, match) -> label in hidden && match(source) }) return@forEachIndexed
+            val node = JSONObject(source.toString())
+            if (index == titleIndex && title.isNotBlank()) node.put("text", title.trim())
+            colorKeys.filter { source.optString(it) == "blue" }.forEach { node.put(it, accent) }
+            if (source.optString("type") == "list") node.put("numbered", numbered)
+            changed.put(node)
+        }
+        onChange(JSONObject(template.json).put("nodes", changed))
+    }) { Text("更新预览") }
 }

@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "name": "专注清单",
+  "templates": {
+    "todo": {
+      "name": "专注清单",
+      "sources": [],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 111,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 30,
+          "y": 18,
+          "width": 460,
+          "height": 54,
+          "text": "专注清单",
+          "textSize": 36,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 32,
+          "y": 72,
+          "width": 460,
+          "height": 30,
+          "text": "{{date}}  ·  {{week}}",
+          "textSize": 19,
+          "color": "black"
+        },
+        {
+          "type": "text",
+          "x": 30,
+          "y": 133,
+          "width": 467,
+          "height": 77,
+          "text": "{{todoCount}} 项待办",
+          "textSize": 53,
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 30,
+          "y": 224,
+          "width": 468,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "list",
+          "x": 31,
+          "y": 251,
+          "width": 466,
+          "height": 398,
+          "source": "todos",
+          "numbered": true,
+          "emptyText": "今天还没有安排",
+          "textSize": 30,
+          "lineHeight": 1.55
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 681,
+          "width": 528,
+          "height": 111,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 32,
+          "y": 697,
+          "width": 464,
+          "height": 34,
+          "text": "年度进度",
+          "textSize": 21,
+          "color": "white"
+        },
+        {
+          "type": "text",
+          "x": 32,
+          "y": 738,
+          "width": 464,
+          "height": 44,
+          "text": "{{year}} 年已过 {{yearPercent}}%",
+          "textSize": 29,
+          "color": "white",
+          "bold": true
+        }
+      ]
+    }
+  }
+}

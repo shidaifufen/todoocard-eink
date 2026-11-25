@@ -76,7 +76,7 @@ internal object WeatherVisuals {
         c.restore()
     }
 
-    fun chart(c: Canvas, hours: List<Render.WeatherHour>, top: Float, height: Float, lineColor: Int = Color.BLUE) {
+    fun chart(c: Canvas, hours: List<Render.WeatherHour>, top: Float, height: Float, lineColor: Int = Color.BLUE, spacing: Float = 1f) {
         val p = Paint().apply { color = Color.BLACK; textSize = 16f; typeface = Typeface.SANS_SERIF }
         if (height >= 100f) c.drawText("未来时段 · 温度趋势", 32f, top + 20f, p)
         val h = hours.take(6)
@@ -86,7 +86,7 @@ internal object WeatherVisuals {
         var px = 0f; var py = 0f
         h.forEachIndexed { i, v ->
             val x = 53f + i * 422f / (h.size - 1)
-            val y = top + height - 25 - (v.temperature - min) / (max - min) * (height - 74).coerceAtLeast(12f)
+            val y = top + height - 25 * spacing - (v.temperature - min) / (max - min) * (height - 49 - 25 * spacing).coerceAtLeast(12f)
             if (i > 0) c.drawLine(px, py, x, y, line)
             c.drawCircle(x, y, 4f, Paint().apply { color = Color.RED })
             val t = "${v.temperature.roundToInt()}°"

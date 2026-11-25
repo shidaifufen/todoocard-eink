@@ -15,6 +15,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import tempfile
 import random
 import shutil
 import sqlite3
@@ -26,6 +28,7 @@ import urllib.error
 import urllib.request
 
 import card_render as R
+import layout_pack as LP
 from ble_lock import BLE_GUARD
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -87,6 +90,16 @@ class CardService:
         self.cards_dir = self.data_dir / "cards"
         self.cards_dir.mkdir(parents=True, exist_ok=True)
         self.cfg_path = self.data_dir / "card.json"
+        self.layout_path = self.data_dir / "layouts.json"
+        self._layout_lock = threading.Lock()
+        try:
+            saved = json.loads(self.layout_path.read_text("utf-8"))
+            self.layout_state = {
+                key: LP.parse(json.dumps(saved[key], ensure_ascii=False).encode()) if saved.get(key) else None
+                for key in ("active", "previous") if key in saved
+            }
+        except (OSError, ValueError, TypeError):
+            self.layout_state = {}
         self.hist_path = self.data_dir / "card_history.json"
         self.skill_dir = Path(base_dir).parent / "todoocard" / "scripts"
         self.bin_dir = self.data_dir / "bin"
@@ -1473,9 +1486,58 @@ class CardService:
         img.save(out)
         return self._send_blocking(out, None)
 
+    def update_layouts(self, action, pack=None):
+        with self._layout_lock:
+            active = self.layout_state.get("active")
+            if action == "apply":
+                templates = {**(active or {}).get("templates", {}), **pack["templates"]}
+                merged = {**pack, "templates": templates}
+                updated = {"active": LP.parse(json.dumps(merged, ensure_ascii=False).encode()), "previous": active}
+            elif action == "reset":
+                updated = {"active": None, "previous": active}
+            elif action == "undo" and "previous" in self.layout_state:
+                updated = {"active": self.layout_state["previous"]}
+            else:
+                raise ValueError("没有可撤销的版式")
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=self.data_dir, delete=False) as output:
+                tmp = Path(output.name)
+                try:
+                    json.dump(updated, output, ensure_ascii=False)
+                    output.close()
+                    os.replace(tmp, self.layout_path)
+                finally:
+                    tmp.unlink(missing_ok=True)
+            self.layout_state = updated
+            return updated
+
+    def render_layout(self, kind, template, fresh=False):
+        deps = LP.sources(template)
+        ctx = {
+            "now": datetime.now(), "todos": self.cfg.get("todos") or [],
+            "countdowns": self.cfg.get("countdowns") or [], "custom": self.cfg.get("custom") or {},
+            "weather": self.weather_data() if "weather" in deps else {},
+            "quote": self.daily_quote(force=fresh) if "quote" in deps else {},
+        }
+        if "poem" in deps:
+            ctx["poem"] = self.daily_poem(force=fresh)
+            ctx["poem_full"] = bool(self.cfg.get("poem_full"))
+            ctx["note"] = (self.cfg.get("poem_note") or "").strip() or self.poem_note(ctx["poem"])
+        scale = float(self.cfg.get("scale", 1.1) or 1.1) * float((self.cfg.get("tpl_scale") or {}).get(kind) or 1)
+        spacing = float(self.cfg.get("line_gap", 1) or 1) * float((self.cfg.get("tpl_line") or {}).get(kind) or 1)
+        with _RENDER_LOCK:
+            R.set_scale(scale)
+            R.set_line(spacing)
+            return LP.render(template, ctx, min(1.5, max(.8, scale / 1.1)), min(1.8, max(.6, spacing)))
+
     # ── 统一出图 ──
     def build_card(self, kind: str, consume: bool = True, fresh: bool = False):
         """按模板出图，返回 (路径, 展示名)。"""
+        active = self.layout_state.get("active") or {}
+        if template := active.get("templates", {}).get(kind):
+            img = self.render_layout(kind, template, fresh)
+            out = self.cards_dir / f"{kind}.png"
+            img.save(out)
+            return out, TEMPLATES.get(kind, kind)
         _sc = float(self.cfg.get("scale", 1.1) or 1.1)
         _lg = float(self.cfg.get("line_gap", 1.0) or 1.0)
         # 单模板系数：与全局相乘
@@ -2568,6 +2630,35 @@ def make_routes():
         return web.json_response({**res, "card": svc.status()},
                                  status=200 if res.get("ok") else 404)
 
+    async def _layouts(request):
+        svc = current()
+        if request.method == "GET":
+            return web.json_response(svc.layout_state)
+        if request.headers.get("Sec-Fetch-Site") == "cross-site":
+            raise web.HTTPForbidden()
+        try:
+            action = request.query.get("action")
+            if action in ("undo", "reset"):
+                return web.json_response(svc.update_layouts(action))
+            raw = await request.content.readexactly(request.content_length) if (
+                request.content_length is not None and request.content_length <= LP.LIMIT
+            ) else None
+            if raw is None:
+                raise ValueError("版式包不能超过 256 KB")
+            if action == "fetch":
+                return web.json_response(await asyncio.to_thread(LP.download, raw.decode("utf-8")))
+            pack = LP.parse(raw)
+            if action == "preview":
+                kind = request.query.get("kind")
+                image = await asyncio.to_thread(svc.render_layout, kind, pack["templates"][kind])
+                return web.Response(body=LP.png(image), content_type="image/png",
+                                    headers={"Cache-Control": "no-store"})
+            if action == "apply":
+                return web.json_response(svc.update_layouts(action, pack))
+            raise ValueError("未知版式操作")
+        except (ValueError, KeyError, TypeError, OSError, asyncio.IncompleteReadError) as err:
+            return web.json_response({"error": str(err)}, status=400)
+
     async def _preview(request):
         kind = request.query.get("kind", "summary")
         fresh = request.query.get("fresh") == "1"
@@ -2755,6 +2846,8 @@ def make_routes():
         ("POST", "/api/card/config", _config),
         ("POST", "/api/card/weather/resolve", _resolve_city),
         ("GET", "/api/card/preview", _preview),
+        ("GET", "/api/card/layouts", _layouts),
+        ("POST", "/api/card/layouts", _layouts),
         ("POST", "/api/card/send", _send),
         ("POST", "/api/card/scan", _scan),
         ("POST", "/api/card/pick-folder", _pick_folder),
