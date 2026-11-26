@@ -275,6 +275,7 @@ internal fun LibraryScreen(
                         modifier = Modifier.weight(1f), contentPadding = PaddingValues(6.dp),
                         shape = RoundedCornerShape(8.dp)) { Text(preset.label) }
                     }
+                    if (group.size == 1) Spacer(Modifier.weight(1f))
                     }
                 }
             }

@@ -22,6 +22,7 @@ object PhotoEdit {
     enum class Preset(val label: String, val defaults: Params) {
         NATURAL("自然", Params()),
         VIVID("鲜明", Params().vivid()),
+        CLEAN("净色", Params().vivid().copy(snapThreshold = 75)),
         ILLUSTRATION("插画净色", Params(exposure = .10f, contrast = 1.18f, gamma = 1.05f,
             saturation = 1.05f, sharpness = .12f, snapThreshold = 45)),
         BLACK_WHITE("黑白", Params(saturation = 0f)),
