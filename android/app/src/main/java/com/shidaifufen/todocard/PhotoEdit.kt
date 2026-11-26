@@ -19,6 +19,14 @@ import kotlin.math.roundToInt
  */
 object PhotoEdit {
 
+    enum class Preset(val label: String, val defaults: Params) {
+        NATURAL("自然", Params()),
+        VIVID("鲜明", Params().vivid()),
+        ILLUSTRATION("插画净色", Params(exposure = .10f, contrast = 1.18f, gamma = 1.05f,
+            saturation = 1.05f, sharpness = .12f, snapThreshold = 45)),
+        BLACK_WHITE("黑白", Params(saturation = 0f)),
+    }
+
     data class Params(
         val zoom: Float = 1f,
         val dx: Float = 0f,          // -1..1（相对可移动范围）
@@ -42,6 +50,8 @@ object PhotoEdit {
             snapThreshold = 40, gamma = 1f, sharpness = 0f, shadows = 0f, brightness = 1.07f)
 
         fun resetTone() = Params(zoom = zoom, dx = dx, dy = dy, fit = fit)
+
+        fun withTone(tone: Params) = tone.copy(zoom = zoom, dx = dx, dy = dy, fit = fit)
     }
 
     /** 色相旋转矩阵 */

@@ -35,13 +35,24 @@ class CardRenderTest {
             saveAttributes()
         }
         assertEquals("23mm 等效  f/1.6  1/250s  ISO 50", PhotoCard.cameraParameters(path.absolutePath))
-        assertEquals("31.8000°, 117.2800°", PhotoCard.embeddedLocation(path.absolutePath))
+        PhotoCard.initialize(RuntimeEnvironment.getApplication())
+        assertEquals("合肥", PhotoCard.embeddedLocation(path.absolutePath))
+        val cities = listOf(Triple("合肥", 31.82, 117.23), Triple("深圳", 22.54, 114.06))
+        assertEquals("合肥", PhotoCard.nearestCity(31.8, 117.28, cities))
+        assertNull(PhotoCard.nearestCity(0.0, 0.0, cities))
+        val compact = PhotoCard.bandHeight(path.absolutePath, PhotoCard.Fields(textScale = .8f))
+        val larger = PhotoCard.bandHeight(path.absolutePath, PhotoCard.Fields(textScale = 1.5f))
+        assertTrue("enlarging the caption adds height", larger > compact)
         val card = PhotoCard.render(path.absolutePath, PhotoCard.Fields(), PhotoEdit.Params(gamma = 1.2f, sharpness = .3f))
         val top = Render.H - PhotoCard.bandHeight(path.absolutePath, PhotoCard.Fields())
         fun headerHasText(columns: IntRange) =
             (top + 4..top + 32).any { y -> columns.any { x -> card.getPixel(x, y) == Color.BLACK } }
         assertTrue("date on the left", headerHasText(24..246))
         assertTrue("camera on the right", headerHasText(300..504))
+        val cityRow = top + 28..top + 54
+        assertTrue("mapped city appears below the camera", cityRow.any { y ->
+            (365 until Render.W - 18).any { x -> card.getPixel(x, y) == Color.BLACK }
+        })
         val encoded = java.io.ByteArrayOutputStream().apply { card.compress(Bitmap.CompressFormat.PNG, 100, this) }
         val png = encoded.toByteArray()
         val restored = android.graphics.BitmapFactory.decodeByteArray(png, 0, png.size)
@@ -188,6 +199,20 @@ class CardRenderTest {
         PlanStore.saveCard(context, card)
         PlanStore.init(context)
         assertEquals(card, PlanStore.card(context))
+    }
+
+    @Test fun layoutHistoryCanBePreviewedAndRestored() {
+        val context = RuntimeEnvironment.getApplication()
+        val base = LayoutPack.parse(LayoutStore.export(context))
+        LayoutStore.apply(context, base.copy(name = "本轮版式 A"))
+        LayoutStore.apply(context, base.copy(name = "本轮版式 B"))
+        val saved = LayoutStore.history(context).first()
+        assertEquals("本轮版式 A", saved.second.name)
+        val bitmap = LayoutRender.render(PlanStore.card(context), saved.second.templates.getValue("summary"))
+        assertEquals(Render.W, bitmap.width)
+        bitmap.recycle()
+        LayoutStore.apply(context, saved.second)
+        assertEquals("本轮版式 A", LayoutStore.name())
     }
 
     @Test fun photoLocationNotesStayWithTheirPhoto() {

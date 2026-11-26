@@ -140,6 +140,9 @@ object LayoutStore {
     }
     fun name() = state?.name ?: "内置版式"
     fun changedKinds() = state?.overrides?.keys.orEmpty()
+    fun matches(pack: LayoutPack.Pack) = pack.templates.all { (kind, template) ->
+        renderTemplate(kind) == template
+    }
     private fun encode(name: String, templates: Map<String, LayoutPack.Template>) = JSONObject()
         .put("schemaVersion", 1).put("name", name).put("templates", JSONObject().apply {
             templates.forEach { (kind, t) -> put(kind, JSONObject(t.json)) }
@@ -149,13 +152,33 @@ object LayoutStore {
         val s = state!!
         return encode(if (defaultsOnly) "土豆片默认版式" else s.name, s.defaults.templates + if (defaultsOnly) emptyMap() else s.overrides)
     }
-    @Synchronized fun apply(ctx: Context, pack: LayoutPack.Pack) {
+    fun history(ctx: Context): List<Pair<Long, LayoutPack.Pack>> =
+        runCatching {
+            val snapshots = JSONArray(prefs(ctx).getString("history", "[]") ?: "[]")
+            (0 until snapshots.length()).mapNotNull { index ->
+                snapshots.getJSONObject(index).let { item ->
+                    runCatching { item.getLong("at") to LayoutPack.parse(item.getString("pack")) }.getOrNull()
+                }
+            }.reversed()
+        }.getOrDefault(emptyList())
+
+    @Synchronized fun apply(ctx: Context, pack: LayoutPack.Pack, restore: Boolean = false) {
         init(ctx)
-        val merged = state!!.overrides + pack.templates
+        val merged = if (restore) pack.templates else state!!.overrides + pack.templates
         val raw = encode(pack.name, merged)
         LayoutPack.parse(raw)
         val p = prefs(ctx)
-        check(p.edit().putString("previous", p.getString("active", "")).putString("active", raw).commit()) { "版式保存失败" }
+        val active = p.getString("active", "").orEmpty()
+        val snapshots = history(ctx).asReversed().map { (at, saved) ->
+            JSONObject().put("at", at).put("pack", saved.json)
+        }.toMutableList()
+        if (active != raw) {
+            val old = active.ifBlank { export(ctx, defaultsOnly = true) }
+            snapshots += JSONObject().put("at", System.currentTimeMillis()).put("pack", old)
+        }
+        val historyJson = JSONArray().apply { snapshots.takeLast(12).forEach(::put) }
+        check(p.edit().putString("previous", active).putString("history", historyJson.toString())
+            .putString("active", raw).commit()) { "版式保存失败" }
         state = state!!.copy(overrides = merged, name = pack.name)
         change.value++
     }
@@ -173,7 +196,15 @@ object LayoutStore {
     @Synchronized fun reset(ctx: Context) {
         init(ctx)
         val p = prefs(ctx)
-        check(p.edit().putString("previous", p.getString("active", "")).remove("active").commit()) { "恢复失败" }
+        val active = p.getString("active", "").orEmpty()
+        val snapshots = history(ctx).asReversed().map { (at, saved) ->
+            JSONObject().put("at", at).put("pack", saved.json)
+        }.toMutableList()
+        if (active.isNotBlank()) snapshots += JSONObject().put("at", System.currentTimeMillis())
+            .put("pack", LayoutPack.parse(active).json)
+        val historyJson = JSONArray().apply { snapshots.takeLast(12).forEach(::put) }
+        check(p.edit().putString("previous", active).putString("history", historyJson.toString())
+            .remove("active").commit()) { "恢复失败" }
         state = state!!.copy(overrides = emptyMap(), name = "内置版式")
         change.value++
     }

@@ -188,9 +188,10 @@ object PlanStore {
         get() = sp_global.getString("lastPhoto", "") ?: ""
         set(v) { sp_global.edit().putString("lastPhoto", v).apply() }
 
-    var photoEdit: PhotoEdit.Params
-        get() = runCatching {
-            val data = JSONObject(sp_global.getString("photoEdit", "{}") ?: "{}")
+    private fun readPhotoEdit(key: String, fallback: PhotoEdit.Params): PhotoEdit.Params {
+        val raw = sp_global.getString(key, null) ?: return fallback
+        return runCatching {
+            val data = JSONObject(raw)
             PhotoEdit.Params(
                 zoom = data.optDouble("zoom", 1.0).toFloat().coerceIn(1f, 4f),
                 dx = data.optDouble("dx", 0.0).toFloat().coerceIn(-1f, 1f),
@@ -206,8 +207,10 @@ object PlanStore {
                 shadows = data.optDouble("shadows", 0.0).toFloat().coerceIn(0f, 1f),
                 brightness = data.optDouble("brightness").takeIf { it.isFinite() }?.toFloat()?.coerceIn(.65f, 1.45f),
             )
-        }.getOrDefault(PhotoEdit.Params())
-        set(value) {
+        }.getOrDefault(fallback)
+    }
+
+    private fun savePhotoEdit(key: String, value: PhotoEdit.Params) {
             val data = JSONObject().put("zoom", value.zoom).put("dx", value.dx).put("dy", value.dy)
                 .put("hue", value.hue).put("saturation", value.saturation)
                 .put("exposure", value.exposure).put("contrast", value.contrast)
@@ -215,8 +218,29 @@ object PlanStore {
                 .put("fit", value.fit).put("gamma", value.gamma).put("sharpness", value.sharpness)
                 .put("shadows", value.shadows)
             value.brightness?.let { data.put("brightness", it) }
-            sp_global.edit().putString("photoEdit", data.toString()).apply()
-        }
+        sp_global.edit().putString(key, data.toString()).apply()
+    }
+
+    var photoEdit: PhotoEdit.Params
+        get() = readPhotoEdit("photoEdit", PhotoEdit.Params())
+        set(value) = savePhotoEdit("photoEdit", value)
+
+    var defaultPhotoPreset: PhotoEdit.Preset
+        get() = PhotoEdit.Preset.entries.firstOrNull { it.name == sp_global.getString("defaultPhotoPreset", null) }
+            ?: PhotoEdit.Preset.NATURAL
+        set(value) { sp_global.edit().putString("defaultPhotoPreset", value.name).apply() }
+
+    val defaultPhotoTone: PhotoEdit.Params get() = photoPreset(defaultPhotoPreset)
+
+    fun photoPreset(preset: PhotoEdit.Preset) = readPhotoEdit("photoPreset_${preset.name}", preset.defaults)
+    fun savePhotoPreset(preset: PhotoEdit.Preset, value: PhotoEdit.Params) =
+        savePhotoEdit("photoPreset_${preset.name}", value)
+
+    fun defaultLayout(ctx: Context, content: Render.Card): Render.Card {
+        val saved = card(ctx)
+        return content.copy(fontScale = saved.fontScale, lineSpacing = saved.lineSpacing,
+            elementSpacing = saved.elementSpacing)
+    }
 
     private fun fieldsKey() = "photoFields"
 
@@ -227,11 +251,13 @@ object PlanStore {
             val p = raw.split(",")
             fun has(i: Int) = p.getOrNull(i) == "1"
             return PhotoCard.Fields(has(0), has(1), has(2), has(3), has(4),
-                p.getOrNull(5) != "0")
+                p.getOrNull(5) != "0", p.getOrNull(6)?.toFloatOrNull()?.takeIf(Float::isFinite)
+                    ?.coerceIn(.8f, 1.5f) ?: .85f, p.getOrNull(7) != "0")
         }
         set(v) {
             val raw = listOf(v.date, v.time, v.camera, v.params, v.weather, v.location)
-                .joinToString(",") { if (it) "1" else "0" }
+                .joinToString(",") { if (it) "1" else "0" } +
+                ",${v.textScale.coerceIn(.8f, 1.5f)},${if (v.resolveOnline) 1 else 0}"
             sp_global.edit().putString(fieldsKey(), raw).apply()
         }
 

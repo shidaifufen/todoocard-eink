@@ -9,27 +9,34 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.net.Uri
-import android.location.Address
-import android.location.Geocoder
 import android.os.Build
 import android.provider.MediaStore
 import androidx.exifinterface.media.ExifInterface
+import org.json.JSONArray
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
-import kotlin.coroutines.resume
+import kotlin.math.asin
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlin.math.roundToInt
 
 /** 照片卡：cover 裁切 + 底部信息带（与桌面版规则一致） */
 object PhotoCard {
 
+    private const val DEFAULT_TEXT_SCALE = .85f
+
     data class Fields(
         val date: Boolean = true, val time: Boolean = true, val camera: Boolean = true,
         val params: Boolean = true, val weather: Boolean = true, val location: Boolean = true,
+        val textScale: Float = DEFAULT_TEXT_SCALE,
+        val resolveOnline: Boolean = true,
     )
 
     private fun paint(size: Float, bold: Boolean = false): Paint = Paint().apply {
@@ -39,26 +46,35 @@ object PhotoCard {
         typeface = if (bold) Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD) else Typeface.SANS_SERIF
     }
 
-    private data class Band(val dateTime: String, val camera: String, val details: List<String>) {
+    private data class Band(val dateTime: String, val camera: String, val params: String, val place: String) {
         val hasHeader get() = dateTime.isNotBlank() || camera.isNotBlank()
-        val rowCount get() = details.size + if (hasHeader) 1 else 0
+        val hasDetails get() = params.isNotBlank() || place.isNotBlank()
+        val rowCount get() = (if (hasHeader) 1 else 0) + (if (hasDetails) 1 else 0)
     }
 
     private fun bandContent(path: String, fields: Fields): Band {
         val meta = readExif(path)
         val dateTime = listOf(if (fields.date) meta.taken else "", if (fields.time) meta.time else "")
             .filter(String::isNotBlank).joinToString("  ")
-        val details = listOf(if (fields.params) meta.params else "", if (fields.location) location(path) else "")
-            .filter(String::isNotBlank)
-        return Band(dateTime, if (fields.camera) meta.camera else "", details)
+        val camera = if (fields.camera) meta.camera else ""
+        val place = if (fields.location) location(path) else ""
+        return Band(dateTime, camera, if (fields.params) meta.params else "", place)
     }
     internal fun cameraParameters(path: String): String = readExif(path).params
-    fun bandHeight(path: String, fields: Fields): Int =
-        bandContent(path, fields).rowCount.let { if (it == 0) 0 else 18 + 28 * it }
+    fun bandHeight(path: String, fields: Fields): Int {
+        val content = bandContent(path, fields)
+        if (content.rowCount == 0) return 0
+        val scale = fields.textScale.coerceIn(.8f, 1.5f)
+        return 14 + (if (content.hasHeader) rowHeight(21f, 19f, scale) else 0) +
+            (if (content.hasDetails) rowHeight(19f, 19f, scale) else 0)
+    }
     fun location(path: String): String = locationNote(path).ifBlank { embeddedLocation(path) }
-    fun embeddedLocation(path: String): String = resolvedPlaces[path] ?: readExif(path).coordinates?.let { (lat, lon) ->
-        String.format(Locale.ROOT, "%.4f°, %.4f°", lat, lon)
-    }.orEmpty()
+    fun embeddedLocation(path: String): String = resolvedPlaces[path]
+        ?: File(path + ".place").takeIf { it.isFile }?.let {
+            runCatching { it.readText().trim() }.getOrDefault("")
+        }?.takeIf(String::isNotBlank) ?: readExif(path).coordinates?.let { (lat, lon) ->
+            nearestCity(lat, lon).orEmpty()
+        }.orEmpty()
     fun locationNote(path: String): String = runCatching { File(path + ".location").readText().trim() }.getOrDefault("")
     fun saveLocationNote(path: String, value: String) {
         require(path.isNotBlank())
@@ -89,29 +105,70 @@ object PhotoCard {
 
     private val metadataCache = ConcurrentHashMap<String, Meta>()
     private val resolvedPlaces = ConcurrentHashMap<String, String>()
+    private val activePlaceLookups = ConcurrentHashMap.newKeySet<String>()
+    private val cityCoordinates = ConcurrentHashMap<String, List<Triple<String, Double, Double>>>()
 
-    @Suppress("DEPRECATION")
-    suspend fun resolvePlace(ctx: Context, path: String): Boolean {
-        if (!Geocoder.isPresent() || resolvedPlaces.containsKey(path) || locationNote(path).isNotBlank()) return false
-        val (lat, lon) = withContext(Dispatchers.IO) { readExif(path).coordinates } ?: return false
-        val geocoder = Geocoder(ctx, Locale.getDefault())
-        val address = withTimeoutOrNull(3500) {
-            if (Build.VERSION.SDK_INT >= 33) suspendCancellableCoroutine<Address?> { result ->
-                try {
-                    geocoder.getFromLocation(lat, lon, 1, object : Geocoder.GeocodeListener {
-                        override fun onGeocode(addresses: MutableList<Address>) { if (result.isActive) result.resume(addresses.firstOrNull()) }
-                        override fun onError(errorMessage: String?) { if (result.isActive) result.resume(null) }
-                    })
-                } catch (_: IllegalArgumentException) { result.resume(null) }
-            } else withContext(Dispatchers.IO) {
-                runCatching { geocoder.getFromLocation(lat, lon, 1)?.firstOrNull() }.getOrNull()
-            }
-        } ?: return false
-        val place = listOfNotNull(address.locality ?: address.adminArea, address.subLocality, address.thoroughfare)
-            .filter(String::isNotBlank).distinct().joinToString(" · ")
-        if (place.isBlank()) return false
-        resolvedPlaces[path] = place
-        return true
+    fun initialize(ctx: Context) {
+        cityCoordinates.getOrPut("builtin") {
+            runCatching {
+                JSONArray(ctx.assets.open("data/cities.json").bufferedReader().use { it.readText() })
+                    .let { cities -> List(cities.length()) { index ->
+                        cities.getJSONObject(index).let {
+                            Triple(it.getString("name"), it.getDouble("lat"), it.getDouble("lon"))
+                        }
+                    } }
+            }.getOrDefault(emptyList())
+        }
+    }
+
+    internal fun nearestCity(lat: Double, lon: Double, cities: List<Triple<String, Double, Double>>): String? =
+        cities.map { (name, cityLat, cityLon) ->
+            val latDelta = Math.toRadians(cityLat - lat)
+            val lonDelta = Math.toRadians(cityLon - lon)
+            val a = sin(latDelta / 2) * sin(latDelta / 2) +
+                cos(Math.toRadians(lat)) * cos(Math.toRadians(cityLat)) *
+                sin(lonDelta / 2) * sin(lonDelta / 2)
+            name to 2 * 6371 * asin(sqrt(a.coerceIn(0.0, 1.0)))
+        }.minByOrNull { it.second }?.takeIf { it.second <= 160 }?.first
+
+    private fun nearestCity(lat: Double, lon: Double) =
+        nearestCity(lat, lon, cityCoordinates["builtin"].orEmpty())
+
+    private fun reverseGeocode(lat: Double, lon: Double): String? {
+        val coordinates = String.format(Locale.ROOT, "lat=%.3f&lon=%.3f", lat, lon)
+        val connection = URL("https://photon.komoot.io/reverse?$coordinates&limit=1")
+            .openConnection() as HttpURLConnection
+        try {
+            connection.connectTimeout = 3_000
+            connection.readTimeout = 3_000
+            connection.setRequestProperty("User-Agent", "TodooCard/1.8")
+            val properties = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+                .optJSONArray("features")?.optJSONObject(0)?.optJSONObject("properties") ?: return null
+            return listOf("city", "municipality", "town", "village", "locality")
+                .firstNotNullOfOrNull { properties.optString(it).takeIf(String::isNotBlank) }
+        } catch (_: Exception) {
+            return null
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    suspend fun resolvePlace(ctx: Context, path: String, fields: Fields): Boolean = withContext(Dispatchers.IO) {
+        if (!fields.location || !fields.resolveOnline) return@withContext false
+        initialize(ctx)
+        val savedPlace = File(path + ".place").takeIf { it.isFile }
+            ?.let { runCatching { it.readText().trim() }.getOrDefault("") }
+        if (savedPlace?.isNotBlank() == true) resolvedPlaces.putIfAbsent(path, savedPlace)
+        if (resolvedPlaces.containsKey(path) || locationNote(path).isNotBlank() || !activePlaceLookups.add(path)) return@withContext false
+        try {
+            val (lat, lon) = readExif(path).coordinates ?: return@withContext false
+            val place = reverseGeocode(lat, lon) ?: return@withContext false
+            resolvedPlaces[path] = place
+            runCatching { File(path + ".place").writeText(place) }
+            true
+        } finally {
+            activePlaceLookups.remove(path)
+        }
     }
 
     private fun ExifInterface.positive(tag: String) = getAttributeDouble(tag, Double.NaN)
@@ -174,27 +231,36 @@ object PhotoCard {
     internal fun drawBand(c: Canvas, path: String, fields: Fields, band: Int) {
         val content = bandContent(path, fields)
         val photoH = Render.H - band
+        val scale = fields.textScale.coerceIn(.8f, 1.5f)
         val rule = paint(0f)
         c.drawRect(0f, photoH.toFloat(), Render.W.toFloat(), Render.H.toFloat(), Paint().apply { color = Color.WHITE })
         c.drawRect(0f, photoH.toFloat(), Render.W.toFloat(), photoH + 2f, rule)
 
         val width = Render.W - 2 * Render.M
-        val detail = paint(19f)
-        var y = photoH + 30f
+        val headerSize = 21f * scale
+        val detailSize = 19f * scale
+        var y = photoH + 8f + detailSize
         if (content.hasHeader) {
-            val date = paint(21f, bold = true)
-            val camera = paint(19f, bold = true).apply { textAlign = Paint.Align.RIGHT }
+            val date = paint(headerSize, bold = true)
+            val camera = paint(detailSize, bold = true).apply { textAlign = Paint.Align.RIGHT }
             val leftWidth = date.measureText(content.dateTime).coerceAtMost(width * .55f)
-            val gap = if (content.dateTime.isBlank()) 0f else 16f
+            val gap = if (content.dateTime.isBlank()) 0f else 10f
             c.drawText(fit(content.dateTime, date, leftWidth), Render.M, y, date)
             c.drawText(fit(content.camera, camera, width - leftWidth - gap), Render.W - Render.M, y, camera)
-            y += 28f
+            y += rowHeight(headerSize, detailSize, scale)
         }
-        for (line in content.details) {
-            c.drawText(fit(line, detail, width), Render.M, y, detail)
-            y += 28f
+        if (content.hasDetails) {
+            val detail = paint(detailSize)
+            val cityWidth = detail.measureText(content.place).coerceAtMost(if (content.params.isBlank()) width else width * .55f)
+            val leftWidth = (width - cityWidth - if (content.place.isBlank()) 0f else 10f).coerceAtLeast(width * .35f)
+            c.drawText(fit(content.params, detail, leftWidth), Render.M, y, detail)
+            detail.textAlign = Paint.Align.RIGHT
+            c.drawText(fit(content.place, detail, cityWidth), Render.W - Render.M, y, detail)
         }
     }
+
+    private fun rowHeight(leftSize: Float, rightSize: Float, scale: Float) =
+        (maxOf(leftSize, rightSize) * 1.25f + 3f * scale).toInt()
 
     private fun fit(text: String, paint: Paint, width: Float): String {
         if (paint.measureText(text) <= width) return text

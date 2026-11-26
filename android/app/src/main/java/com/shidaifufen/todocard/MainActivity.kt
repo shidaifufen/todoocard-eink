@@ -109,7 +109,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun App(activity: MainActivity, incomingIntent: Intent?) {
     val ctx = LocalContext.current
-    remember(ctx) { PlanStore.init(ctx); true }
+    remember(ctx) { PlanStore.init(ctx); PhotoCard.initialize(ctx); true }
     val scope = rememberCoroutineScope()
     val layoutRevision by LayoutStore.revision.collectAsState()
     var tab by rememberSaveable { mutableIntStateOf(0) }
@@ -126,6 +126,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
     var photoLocationRevision by remember { mutableIntStateOf(0) }
     var imageKind by rememberSaveable { mutableStateOf("photo") }
     var fields by remember { mutableStateOf(PlanStore.photoFields) }
+    var defaultFields by remember { mutableStateOf(PlanStore.photoFields) }
     var edit by remember { mutableStateOf(PlanStore.photoEdit) }
     var albums by remember { mutableStateOf(PlanStore.albums(ctx)) }
     var carouselPhotos by remember { mutableStateOf<List<Uri>>(emptyList()) }
@@ -142,7 +143,9 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
     }
     val contentDay = java.time.Instant.ofEpochMilli(clockTick * 60_000)
         .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
-    val onlineContent = remember(kind, sourceRevision) { ContentOptions.online(ctx, kind) }
+    var onlineOverride by remember(kind) { mutableStateOf<Boolean?>(null) }
+    val onlineDefault = remember(kind, sourceRevision) { ContentOptions.online(ctx, kind) }
+    val onlineContent = onlineOverride ?: onlineDefault
     var scanning by remember { mutableStateOf(false) }
     var scanTimedOut by remember { mutableStateOf(false) }
     var showAlbums by remember { mutableStateOf(false) }
@@ -191,15 +194,17 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
             status = "正在获取${templateName(requestedKind)}…"
             if (requestedKind == "bing") {
                 runCatching { ImageSources.bing(ctx) }.onSuccess {
-                    photoPath = it; imageKind = "bing"; edit = PhotoEdit.Params(snapThreshold = edit.snapThreshold)
+                    photoPath = it; imageKind = "bing"; edit = PlanStore.defaultPhotoTone
                     status = ctx.getSharedPreferences("image_sources", 0).getString("bing_credit", "Bing 图片已更新").orEmpty()
                 }.onFailure { status = "壁纸更新失败：${it.message}" }
                 refreshing = false; return@launch
             }
-            runCatching { CardSources.fresh(ctx, requestedKind, requestedCard, force) }.onSuccess {
-                if (ContentOptions.online(ctx, requestedKind)) {
+            runCatching { CardSources.fresh(ctx, requestedKind, requestedCard, force) {
+                kind == requestedKind && (onlineOverride ?: ContentOptions.online(ctx, requestedKind))
+            } }.onSuccess {
+                if (kind == requestedKind && (onlineOverride ?: ContentOptions.online(ctx, requestedKind))) {
                     card = CardSources.mergeUnchanged(card, requestedCard, it, requestedKind)
-                    PlanStore.saveCard(ctx, card)
+                    PlanStore.saveCard(ctx, PlanStore.defaultLayout(ctx, card))
                 }
                 status = "${templateName(requestedKind)}已更新"
             }.onFailure { status = "更新失败，已保留原内容：${it.message}" }
@@ -213,7 +218,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
             refreshing = true; status = "正在获取这首诗的赏析…"
             runCatching { ContentData.analysis(ctx, requestedPoem) }.onSuccess {
                 if (card.poemTitle == requestedPoem.poemTitle && card.poemLines == requestedPoem.poemLines) {
-                    card = card.copy(poemNote = it); PlanStore.saveCard(ctx, card)
+                    card = card.copy(poemNote = it); PlanStore.saveCard(ctx, PlanStore.defaultLayout(ctx, card))
                 }; status = "赏析已更新"
             }.onFailure { status = "赏析刷新失败，已保留原内容：${it.message}" }
             refreshing = false
@@ -224,7 +229,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
         scope.launch {
             refreshing = true; status = "正在生成图片，请稍候…"
             runCatching { ImageSources.generate(ctx, prompt) }.onSuccess {
-                photoPath = it; imageKind = "ai"; edit = PhotoEdit.Params(snapThreshold = edit.snapThreshold)
+                photoPath = it; imageKind = "ai"; edit = PlanStore.defaultPhotoTone
                 status = "AI 图片已生成，可以调整裁切后推送"
             }.onFailure { status = "生成失败：${it.message}" }
             refreshing = false
@@ -251,8 +256,8 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
         PlanStore.photoEdit = edit
     }
 
-    LaunchedEffect(photoPath, fields.location, imageKind) {
-        if (fields.location && imageKind == "photo" && photoPath.isNotBlank() && PhotoCard.resolvePlace(ctx, photoPath)) {
+    LaunchedEffect(photoPath, fields.location, fields.resolveOnline, imageKind) {
+        if (imageKind == "photo" && photoPath.isNotBlank() && PhotoCard.resolvePlace(ctx, photoPath, fields)) {
             photoLocationRevision++
         }
     }
@@ -265,7 +270,8 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
             photoPath = path
             imageKind = "photo"
             PlanStore.lastPhoto = path
-            edit = PhotoEdit.Params(snapThreshold = edit.snapThreshold)
+            fields = defaultFields
+            edit = PlanStore.defaultPhotoTone
             PlanStore.photoEdit = edit
             kind = "photo"
             tab = if (autoSend || !openEditor) 0 else 2
@@ -290,7 +296,8 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
             photoPath = first
             imageKind = "photo"
             PlanStore.lastPhoto = first
-            edit = PhotoEdit.Params(snapThreshold = edit.snapThreshold)
+            fields = defaultFields
+            edit = PlanStore.defaultPhotoTone
             PlanStore.photoEdit = edit
             kind = "photo"
             tab = 0
@@ -331,7 +338,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                     card = card.copy(customTitle = "分享内容",
                         customLines = text.lines().filter { it.isNotBlank() },
                         customBlocks = listOf(Render.CustomBlock(type = "text", text = text.trim(), size = 26f)))
-                    PlanStore.saveCard(ctx, card)
+                    PlanStore.saveCard(ctx, PlanStore.defaultLayout(ctx, card))
                     kind = "custom"
                     tab = 0
                     status = "分享文字已载入"
@@ -504,6 +511,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                 val file = withContext(Dispatchers.IO) {
                     val bmp = if (sentKind in listOf("photo", "bing", "ai")) {
                         check(java.io.File(sentPath).isFile) { "请先选择照片" }
+                        if (sentKind == "photo") PhotoCard.resolvePlace(ctx, sentPath, sentFields)
                         PhotoCard.render(sentPath, sentFields, sentEdit)
                     } else if (sentKind == "online") {
                         checkNotNull(OnlineCard.read(ctx)) { "请先生成在线卡片" }
@@ -642,20 +650,24 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                     0 -> StudioScreen(kind, card, preview, photoReady, status, progress, busy,
                         pairedName.ifEmpty { pairedAddress }, found, device?.device?.address,
                         onKind = { next ->
+                            if (kind != next) {
+                                card = PlanStore.defaultLayout(ctx, card)
+                                fields = defaultFields
+                            }
                             kind = next
                             if (next in listOf("photo", "bing", "ai")) {
                                 photoPath = if (next == "photo") PlanStore.lastPhoto else ImageSources.cached(ctx, next)
                                 imageKind = next
-                                edit = if (next == "photo") PlanStore.photoEdit else PhotoEdit.Params(snapThreshold = edit.snapThreshold)
+                                edit = if (next == "photo") PlanStore.photoEdit.withTone(PlanStore.defaultPhotoTone) else PlanStore.defaultPhotoTone
                             }
                         }, onCard = {
-                            card = it; PlanStore.saveCard(ctx, it)
+                            card = it; PlanStore.saveCard(ctx, PlanStore.defaultLayout(ctx, it))
                             if (kind in listOf("quote", "poem")) {
-                                ContentOptions.setOnline(ctx, kind, false); sourceRevision++
+                                onlineOverride = false
                                 status = "已应用手动内容，可随时切回联网更新"
                             }
                         },
-                        onLayout = { card = it; PlanStore.saveCard(ctx, it) },
+                        onLayout = { card = it },
                         onPhoto = { tab = 2 },
                         onScan = { requestScan() }, onSelectDevice = ::selectDevice,
                         onSend = ::requestSend,
@@ -694,7 +706,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                         photoEdit = edit, onPhotoEdit = { edit = it },
 
                         onSourceMode = { online ->
-                            ContentOptions.setOnline(ctx, kind, online); sourceRevision++
+                            onlineOverride = online
                             if (online) refreshCard() else status = "已选择手动内容，可编辑后推送"
                         })
                     1 -> CarouselScreen(carouselPhotos, selectedCarousel, busy,
@@ -717,15 +729,18 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                         onPickOriginal = ::pickOriginalPhoto,
                         onAddPhotos = ::addCarouselPhotos,
                         onAlbumPhoto = { loadPhoto(it) },
-                        onFields = { fields = it; PlanStore.photoFields = it },
+                        onFields = { fields = it },
                         onLocationSaved = { photoLocationRevision++ },
                         onEdit = { edit = it }, onUse = {
                             PlanStore.photoEdit = edit
                             kind = imageKind; if (imageKind == "photo") PlanStore.lastPhoto = photoPath; tab = 0
                         })
                     3 -> PlanScreen(ctx, onReplay = ::replayHistory)
-                    else -> SettingsScreen(pairedName, pairedAddress, fields, found,
+                    else -> SettingsScreen(pairedName, pairedAddress, defaultFields, found,
                         device?.device?.address, status, theme,
+                        defaultLayout = PlanStore.defaultLayout(ctx, card),
+                        onDefaultLayout = { PlanStore.saveCard(ctx, it); card = it },
+                        onDefaultSource = { sourceRevision++ },
                         onTheme = {
                             theme = it
                             themePrefs.edit().putString("theme", it.name).apply()
@@ -740,7 +755,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                             device = null
                             status = "已解除配对"
                         },
-                        onFields = { fields = it; PlanStore.photoFields = it },
+                        onFields = { defaultFields = it; fields = it; PlanStore.photoFields = it },
                         onScanAll = { requestScan(true) }, scanTimedOut = scanTimedOut)
                 }
                 }

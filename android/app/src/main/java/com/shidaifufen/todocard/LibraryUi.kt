@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -250,6 +251,8 @@ internal fun LibraryScreen(
                 Text("显示拍摄位置", Modifier.weight(1f))
                 Switch(fields.location, onCheckedChange = { onFields(fields.copy(location = it)) })
             }
+            Adjustment("信息字号", fields.textScale * 100f, 80f..150f,
+                { onFields(fields.copy(textScale = it / 100f)) }, "%.0f%%")
             OutlinedTextField(value = locationNote, onValueChange = { locationNote = it.take(120) },
                 label = { Text("这张照片的地点备注（可选）") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             TextButton(onClick = { PhotoCard.saveLocationNote(photoPath, locationNote); locationRevision++; onLocationSaved() }) { Text("保存地点") }
@@ -262,22 +265,15 @@ internal fun LibraryScreen(
             }
             if (tool == 1) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                for (group in listOf(listOf(0, 1), listOf(2, 3))) {
+                for (group in PhotoEdit.Preset.entries.chunked(2)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for (index in group) {
+                    for (preset in group) {
                     OutlinedButton(onClick = {
-                        val neutral = edit.resetTone()
-                        onEdit(when (index) {
-                            1 -> edit.vivid()
-                            2 -> neutral.copy(exposure = .10f, contrast = 1.18f, gamma = 1.05f,
-                                saturation = 1.05f, sharpness = .12f, snapThreshold = 45)
-                            3 -> neutral.copy(saturation = 0f)
-                            else -> neutral
-                        })
+                        onEdit(edit.withTone(PlanStore.photoPreset(preset)))
                         sixColors = true
                     },
                         modifier = Modifier.weight(1f), contentPadding = PaddingValues(6.dp),
-                        shape = RoundedCornerShape(8.dp)) { Text(listOf("自然", "鲜明", "插画净色", "黑白")[index]) }
+                        shape = RoundedCornerShape(8.dp)) { Text(preset.label) }
                     }
                     }
                 }
@@ -313,9 +309,10 @@ internal fun LibraryScreen(
 
 @Composable
 internal fun PhotoToneAdjustments(edit: PhotoEdit.Params, onEdit: (PhotoEdit.Params) -> Unit, showPresets: Boolean = true) {
-    if (showPresets) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = { onEdit(edit.resetTone()) }) { Text("原色") }
-        FilledTonalButton(onClick = { onEdit(edit.vivid()) }) { Text("鲜明") }
+    if (showPresets) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        PhotoEdit.Preset.entries.forEach { preset ->
+            OutlinedButton(onClick = { onEdit(edit.withTone(PlanStore.photoPreset(preset))) }) { Text(preset.label) }
+        }
     }
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
         .padding(horizontal = 14.dp, vertical = 8.dp)) {
@@ -344,6 +341,50 @@ private fun Adjustment(label: String, value: Float, range: ClosedFloatingPointRa
 }
 
 @Composable
+private fun PhotoPresetSettings() {
+    val ctx = LocalContext.current
+    var preset by remember { mutableStateOf(PlanStore.defaultPhotoPreset) }
+    var defaultPreset by remember { mutableStateOf(PlanStore.defaultPhotoPreset) }
+    var tone by remember(preset) { mutableStateOf(PlanStore.photoPreset(preset)) }
+    val preview by produceState<Bitmap?>(null, tone) {
+        delay(120)
+        value = withContext(Dispatchers.Default) {
+            val photo = runCatching { PhotoEdit.decodePreview(PlanStore.lastPhoto, 700) }.getOrNull()
+                ?: ctx.assets.open("data/photo-tone-sample.jpg").use(android.graphics.BitmapFactory::decodeStream)
+            photo?.let {
+                val adjusted = try { PhotoEdit.renderBitmap(it, tone) } finally { it.recycle() }
+                try { PhotoEdit.panelPreview(adjusted) } finally { adjusted.recycle() }
+            }
+        }
+    }
+    fun update(value: PhotoEdit.Params) {
+        tone = value
+        PlanStore.savePhotoPreset(preset, value)
+    }
+    SectionCard(title = "图片调色预设") {
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            PhotoEdit.Preset.entries.forEach { option ->
+                FilterChip(selected = preset == option, onClick = { preset = option }, label = { Text(option.label) })
+            }
+        }
+        Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
+            preview?.let { Image(it.asImageBitmap(), "六色预览", Modifier.fillMaxHeight()) }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(enabled = preset != defaultPreset, onClick = {
+                defaultPreset = preset
+                PlanStore.defaultPhotoPreset = preset
+            }) { Text(if (preset == defaultPreset) "当前默认" else "设为默认") }
+            TextButton(onClick = { update(preset.defaults) }) { Text("恢复预设默认") }
+        }
+        PhotoToneAdjustments(tone, ::update, showPresets = false)
+        Adjustment("色相", tone.hue, -180f..180f, { update(tone.copy(hue = it)) }, "%+.0f°")
+        Adjustment("杂色吸附", tone.snapThreshold.toFloat(), 0f..100f,
+            { update(tone.copy(snapThreshold = it.toInt())) }, "%.0f")
+    }
+}
+
+@Composable
 internal fun SettingsScreen(
     pairedName: String,
     pairedAddress: String,
@@ -352,6 +393,9 @@ internal fun SettingsScreen(
     selectedAddress: String?,
     status: String,
     theme: StudioTheme,
+    defaultLayout: Render.Card,
+    onDefaultLayout: (Render.Card) -> Unit,
+    onDefaultSource: () -> Unit,
     onTheme: (StudioTheme) -> Unit,
     onScan: () -> Unit,
     onSelect: (ScanResult) -> Unit,
@@ -361,7 +405,7 @@ internal fun SettingsScreen(
     onScanAll: () -> Unit,
     scanTimedOut: Boolean,
 ) {
-    var section by remember { mutableStateOf(0) }
+    var section by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
     var aiSettings by remember { mutableStateOf(false) }
     val settingsContext = LocalContext.current
     Column(Modifier.fillMaxSize().background(StudioBackground).verticalScroll(rememberScrollState())
@@ -375,8 +419,8 @@ internal fun SettingsScreen(
                 FilterChip(selected = theme == option, onClick = { onTheme(option) }, label = { Text(option.label) })
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("设备", "外观", "关于").forEachIndexed { i, label ->
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("设备", "外观", "数据源", "调色预设", "关于").forEachIndexed { i, label ->
                 FilterChip(selected = section == i, onClick = { section = i },
                     label = { Text(label) }, shape = RoundedCornerShape(8.dp))
             }
@@ -423,6 +467,14 @@ internal fun SettingsScreen(
                     color = StudioMuted)
             }
             1 -> {
+                SectionCard(title = "卡片默认排版") {
+                    LayoutSlider("文字大小", defaultLayout.fontScale, .8f..1.5f) { onDefaultLayout(defaultLayout.copy(fontScale = it)) }
+                    LayoutSlider("行间距", defaultLayout.lineSpacing, .8f..1.6f) { onDefaultLayout(defaultLayout.copy(lineSpacing = it)) }
+                    LayoutSlider("元素间距", defaultLayout.elementSpacing, .7f..1.4f) { onDefaultLayout(defaultLayout.copy(elementSpacing = it)) }
+                    TextButton(onClick = {
+                        onDefaultLayout(defaultLayout.copy(fontScale = 1f, lineSpacing = 1f, elementSpacing = 1f))
+                    }) { Text("恢复默认排版") }
+                }
                 LayoutSettings()
                 Spacer(Modifier.height(18.dp))
                 Text("六色墨水屏", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
@@ -437,12 +489,15 @@ internal fun SettingsScreen(
                 }
                 Spacer(Modifier.height(18.dp))
                 Text("照片信息带", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Adjustment("信息字号", fields.textScale * 100f, 80f..150f,
+                    { onFields(fields.copy(textScale = it / 100f)) }, "%.0f%%")
                 listOf(
                     Triple("拍摄日期", fields.date, { value: Boolean -> fields.copy(date = value) }),
                     Triple("拍摄时间", fields.time, { value: Boolean -> fields.copy(time = value) }),
                     Triple("相机机身", fields.camera, { value: Boolean -> fields.copy(camera = value) }),
                     Triple("拍摄参数", fields.params, { value: Boolean -> fields.copy(params = value) }),
                     Triple("拍摄位置（照片含 GPS 时）", fields.location, { value: Boolean -> fields.copy(location = value) }),
+                    Triple("联网解析拍摄城市", fields.resolveOnline, { value: Boolean -> fields.copy(resolveOnline = value) }),
                 ).forEach { (label, enabled, update) ->
                     Row(Modifier.fillMaxWidth().height(50.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(label, modifier = Modifier.weight(1f))
@@ -452,13 +507,29 @@ internal fun SettingsScreen(
                 Text("位置从照片自身的 GPS 信息读取；系统照片选择器可能会移除定位数据。",
                     fontSize = 12.sp, color = StudioMuted)
             }
+            2 -> {
+                SectionCard(title = "默认联网更新") {
+                    listOf("summary", "weather", "weather2", "quote", "poem", "custom").forEach { kind ->
+                        var enabled by remember(kind) { mutableStateOf(ContentOptions.online(settingsContext, kind)) }
+                        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(templateName(kind), Modifier.weight(1f))
+                            Switch(enabled, onCheckedChange = {
+                                enabled = it
+                                ContentOptions.setOnline(settingsContext, kind, it)
+                                onDefaultSource()
+                            })
+                        }
+                    }
+                    TextButton(onClick = { aiSettings = true }) { Text("API 接口与密钥") }
+                }
+            }
+            3 -> PhotoPresetSettings()
             else -> {
                 Text("土豆片", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
                 Text("六色墨水屏卡片工坊", fontSize = 14.sp)
                 Text("Android · 528 × 792", fontSize = 12.sp, color = StudioMuted,
                     modifier = Modifier.padding(top = 4.dp))
-                TextButton(onClick = { aiSettings = true }) { Text("配置诗词赏析 / AI 生图接口") }
                 TextButton(onClick = {
                     val opened = android.os.Build.VERSION.SDK_INT >= 36 &&
                         runCatching { settingsContext.startActivity(PushStatus.promotionSettings(settingsContext)) }.isSuccess

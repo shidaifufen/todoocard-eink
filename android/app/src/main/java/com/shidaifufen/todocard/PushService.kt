@@ -19,6 +19,7 @@ class PushService : Service() {
     override fun onCreate() {
         super.onCreate()
         PlanStore.init(this)
+        PhotoCard.initialize(this)
         PushStatus.ensureChannel(this)
         startForeground(PushStatus.ID, PushStatus.notification(this, "准备推送…"))
     }

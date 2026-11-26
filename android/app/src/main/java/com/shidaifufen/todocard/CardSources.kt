@@ -59,8 +59,9 @@ object CardSources {
         return result
     }
 
-    suspend fun fresh(ctx: Context, kind: String, card: Render.Card, force: Boolean = false): Render.Card {
-        if (!ContentOptions.online(ctx, kind)) return card
+    suspend fun fresh(ctx: Context, kind: String, card: Render.Card, force: Boolean = false,
+                      online: () -> Boolean = { ContentOptions.online(ctx, kind) }): Render.Card {
+        if (!online()) return card
         val requestedAt = System.currentTimeMillis()
         gate.lock()
         try {
@@ -81,7 +82,7 @@ object CardSources {
                         poemLines = it.lines, poemNote = it.note) }
                     else -> WeatherData.refresh(result)
                 }
-                if (!ContentOptions.online(ctx, kind)) return card
+                if (!online()) return card
                 val latest = PlanStore.card(ctx)
                 PlanStore.saveCard(ctx, mergeUnchanged(latest, card, result, resource))
                 prefs.edit().putLong(key(resource, result), System.currentTimeMillis()).apply()
@@ -120,24 +121,33 @@ object CardSources {
             val path = if (kind == "bing") ImageSources.bing(ctx) else ImageSources.cached(ctx, kind)
             check(path.isNotBlank()) { "请先生成一张 AI 图片" }
             return withContext(Dispatchers.IO) { PhotoCard.render(path, PlanStore.photoFields,
-                PhotoEdit.Params(snapThreshold = PlanStore.photoEdit.snapThreshold)) }
+                PlanStore.defaultPhotoTone) }
         }
         if (kind == "photo") return withContext(Dispatchers.IO) {
             val uri = AlbumStore.randomImage(ctx, PlanStore.albums(ctx), PlanStore.lastDrawnUri)
             if (uri != null) PlanStore.lastDrawnUri = uri.toString()
             val path = uri?.let { PhotoCard.importToFiles(ctx, it) } ?: PlanStore.lastPhoto
             check(path.isNotBlank()) { "轮播相册没有可用照片，请重新授权或添加照片" }
-            try { PhotoCard.render(path, PlanStore.photoFields,
-                if (uri == null) PlanStore.photoEdit else PhotoEdit.Params(
-                    snapThreshold = PlanStore.photoEdit.snapThreshold)) }
-            finally { if (uri != null) java.io.File(path).delete() }
+            try {
+                val fields = PlanStore.photoFields
+                PhotoCard.resolvePlace(ctx, path, fields)
+                PhotoCard.render(path, fields,
+                    if (uri == null) PlanStore.photoEdit.withTone(PlanStore.defaultPhotoTone) else PlanStore.defaultPhotoTone)
+            }
+            finally {
+                if (uri != null) {
+                    java.io.File(path).delete()
+                    java.io.File(path + ".place").delete()
+                }
+            }
         }
         val card = scheduledCard(ctx, kind, onNotice)
         return withContext(Dispatchers.Default) { Render.render(card.copy(kind = kind)) }
     }
 
     internal suspend fun scheduledCard(ctx: Context, kind: String, onNotice: (String) -> Unit = {},
-        fetch: suspend (Context, String, Render.Card, Boolean) -> Render.Card = ::fresh): Render.Card {
+        fetch: suspend (Context, String, Render.Card, Boolean) -> Render.Card =
+            { context, template, card, force -> fresh(context, template, card, force) }): Render.Card {
         // Every scheduled send refreshes online content, even inside the normal UI cache TTL.
         return try { fetch(ctx, kind, PlanStore.card(ctx), true) }
         catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }

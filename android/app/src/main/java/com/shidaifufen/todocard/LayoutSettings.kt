@@ -31,6 +31,9 @@ internal fun LayoutSettings() {
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
     var pending by remember { mutableStateOf<LayoutPack.Pack?>(null) }
+    var showHistory by remember { mutableStateOf(false) }
+    var restoring by remember { mutableStateOf(false) }
+    val history = remember(revision) { LayoutStore.history(ctx) }
     var reset by remember { mutableStateOf(false) }
     var exportText by remember { mutableStateOf("") }
     val linkPrefs = remember(ctx) { ctx.getSharedPreferences("layout_links_v1", 0) }
@@ -82,7 +85,7 @@ internal fun LayoutSettings() {
         Text(packName, fontSize = 15.sp)
         Text(if (changed.isEmpty()) "正在使用内置版式" else "已覆盖：${changed.joinToString { templateName(it) }}", fontSize = 12.sp, color = StudioMuted)
         Text("导入 JSON 调整排版，内容、相册、设备和计划单独保存。只替换包内列出的卡片。", fontSize = 12.sp, color = StudioMuted)
-        OutlinedButton(enabled = !busy, onClick = { linkError = ""; linkDialog = true }) { Text("从 GitHub 导入 / 更新") }
+        OutlinedButton(enabled = !busy, onClick = { linkError = ""; linkDialog = true }) { Text("检查 GitHub 更新 / 导入版式") }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(enabled = !busy, onClick = { importFile.launch(arrayOf("application/json", "text/*", "application/octet-stream")) }) { Text("导入版式") }
             OutlinedButton(enabled = !busy, onClick = {
@@ -97,14 +100,30 @@ internal fun LayoutSettings() {
             }) { Text("导出默认") }
             TextButton(enabled = !busy && LayoutStore.canUndo(ctx), onClick = { perform { LayoutStore.undo(ctx) } }) { Text("撤销上次更改") }
         }
+        if (history.isNotEmpty()) TextButton(enabled = !busy, onClick = { showHistory = !showHistory }) {
+            Text(if (showHistory) "收起版式历史" else "预览历史版本（${history.size}）")
+        }
+        if (showHistory) history.forEach { (at, pack) ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("${java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault())
+                    .format(java.util.Date(at))} · ${pack.name}", modifier = Modifier.weight(1f), fontSize = 12.sp)
+                TextButton(enabled = !busy, onClick = {
+                    restoring = true
+                    pending = pack
+                    message = "正在预览历史版式，确认后可应用"
+                }) { Text("预览") }
+            }
+        }
         TextButton(enabled = !busy && changed.isNotEmpty(), onClick = { reset = true }) { Text("恢复内置版式") }
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (message.isNotBlank()) Text(message, fontSize = 12.sp)
     }
     pending?.let { pack -> LayoutPreview(pack,
-        onDismiss = { pending = null }, onApply = { edited ->
+        onDismiss = { pending = null; restoring = false }, onApply = { edited ->
             pending = null
-            perform { LayoutStore.apply(ctx, edited) }
+            val restore = restoring
+            restoring = false
+            perform { LayoutStore.apply(ctx, edited, restore) }
         }) }
     if (linkDialog) AlertDialog(onDismissRequest = { if (!busy) linkDialog = false },
         title = { Text("从 GitHub 获取版式") },
@@ -135,7 +154,13 @@ internal fun LayoutSettings() {
                 try {
                     val pack = withContext(Dispatchers.IO) { LayoutDownload.fetch(requested) }
                     linkPrefs.edit().putString("last", requested).apply()
-                    linkDialog = false; pending = pack; message = "下载并校验通过，请预览后应用"
+                    linkDialog = false
+                    if (LayoutStore.matches(pack)) {
+                        message = "云端内容与当前版式一致，已是最新版本"
+                    } else {
+                        pending = pack
+                        message = "发现云端版式更新，请预览后应用"
+                    }
                 } catch (e: Exception) {
                     linkError = "获取失败：${e.message ?: "请检查网络连接"}"
                     message = "获取失败，当前版式继续使用"
