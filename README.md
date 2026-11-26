@@ -9,7 +9,7 @@
 
 ## 安卓版（原生 Kotlin）
 
-- 安装包 [Android 1.8.3](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.8.3-android)。使用固定签名，可覆盖升级已采用该签名的版本。安装后可在「设置 → 在线升级」检查并安装后续正式版。
+- 安装包 [Android 1.8.4](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.8.4-android)。使用固定签名，可覆盖升级已采用该签名的版本。安装后可在「设置 → 在线升级」检查并安装后续正式版。
 - 源码：`android/`；构建：push 到 main 触发 `.github/workflows/build-android.yml`
 - 功能：卡片模板、照片裁切与调色、相册、每日计划与发送历史、配对后等广播推送、Android 系统分享与跨窗口拖放图片
 - 荣耀任意门由 MagicOS 推荐服务。土豆片的厂商服务接入及 MagicOS 11 真机验证待完成。[荣耀任意门说明](https://www.honor.com/cn/support/content/zh-cn15868678/)
@@ -38,8 +38,8 @@ Windows、macOS 和纯网页版也可以导入同一份 JSON。在「看板版�
 
 | 平台 | 下载 |
 |---|---|
-| macOS (Apple Silicon) | [macOS 1.0.24](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.0.24-macos) |
-| Windows (x64) | [Windows 1.0.23](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.0.23-windows) |
+| macOS (Apple Silicon) | [macOS 1.0.25](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.0.25-macos) |
+| Windows (x64) | [Windows 1.0.25](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.0.25-windows) |
 
 1. 解压到任意文件夹（路径别带特殊符号）
 2. macOS 双击 `start-mac.command`（首次右键 → 打开）；Windows 双击 `土豆片卡片工坊.exe`
