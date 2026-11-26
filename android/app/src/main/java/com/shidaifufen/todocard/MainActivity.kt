@@ -320,6 +320,10 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
     }
 
     LaunchedEffect(incomingIntent) {
+        if (incomingIntent?.action == SchedulerWorker.OPEN_PLANS) {
+            tab = 3
+            return@LaunchedEffect
+        }
         handleSharedIntent(incomingIntent,
             onPhotos = { loadSharedPhotos(it) },
             onText = { text ->

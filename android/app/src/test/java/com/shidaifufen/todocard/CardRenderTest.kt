@@ -23,6 +23,9 @@ class CardRenderTest {
         path.outputStream().use { Bitmap.createBitmap(40, 60, Bitmap.Config.ARGB_8888)
             .compress(Bitmap.CompressFormat.JPEG, 90, it) }
         ExifInterface(path).apply {
+            setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, "2026:11:26 09:45:00")
+            setAttribute(ExifInterface.TAG_MAKE, "Xiaomi")
+            setAttribute(ExifInterface.TAG_MODEL, "Xiaomi 14 Ultra")
             setAttribute(ExifInterface.TAG_FOCAL_LENGTH, "541/100")
             setAttribute(ExifInterface.TAG_FOCAL_LENGTH_IN_35MM_FILM, "23")
             setAttribute(ExifInterface.TAG_F_NUMBER, "1.6")
@@ -34,7 +37,27 @@ class CardRenderTest {
         assertEquals("23mm 等效  f/1.6  1/250s  ISO 50", PhotoCard.cameraParameters(path.absolutePath))
         assertEquals("31.8000°, 117.2800°", PhotoCard.embeddedLocation(path.absolutePath))
         val card = PhotoCard.render(path.absolutePath, PhotoCard.Fields(), PhotoEdit.Params(gamma = 1.2f, sharpness = .3f))
-        assertEquals(Color.WHITE, card.getPixel(5, Render.H - 10))
+        val top = Render.H - PhotoCard.bandHeight(path.absolutePath, PhotoCard.Fields())
+        fun headerHasText(columns: IntRange) =
+            (top + 4..top + 32).any { y -> columns.any { x -> card.getPixel(x, y) == Color.BLACK } }
+        assertTrue("date on the left", headerHasText(24..246))
+        assertTrue("camera on the right", headerHasText(300..504))
+        val encoded = java.io.ByteArrayOutputStream().apply { card.compress(Bitmap.CompressFormat.PNG, 100, this) }
+        val png = encoded.toByteArray()
+        val restored = android.graphics.BitmapFactory.decodeByteArray(png, 0, png.size)
+        val controller = Payload.build(restored).controller
+        for (y in top until Render.H) for (x in 0 until Render.W) {
+            val pixel = card.getPixel(x, y)
+            assertTrue(pixel == Color.WHITE || pixel == Color.BLACK)
+            val index = (Render.W - 1 - x) * Render.H + y
+            val packed = controller[index / 2].toInt() and 255
+            val color = if (index % 2 == 0) packed ushr 4 else packed and 15
+            assertEquals(if (pixel == Color.WHITE) 1 else 0, color)
+            if (y > top + 1 && (x < 8 || x >= Render.W - 8 || y >= Render.H - 8)) {
+                assertEquals("blank photo-band margins", Color.WHITE, pixel)
+            }
+        }
+        save("photo-information-band", card)
     }
 
     @Before fun defaultLayouts() {

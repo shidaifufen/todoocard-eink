@@ -52,6 +52,7 @@ class PushService : Service() {
 
     private suspend fun push(path: String?, kind: String, scheduledAt: Long, replay: Boolean) {
         val started = System.currentTimeMillis()
+        if (scheduledAt > 0) android.util.Log.i(SchedulerWorker.TAG, "Background push started for $scheduledAt")
         var message = "准备推送…"
         var ok = false
         var client: BleClient? = null
@@ -80,6 +81,7 @@ class PushService : Service() {
             val saved = PlanStore.deviceAddress
             val ble = BleClient(this).also { client = it }
             report("查找中 · 请唤醒卡片", 0, true)
+            if (scheduledAt > 0) android.util.Log.i(SchedulerWorker.TAG, "Scanning for card")
             var target: android.bluetooth.le.ScanResult? = null
             val deadline = System.currentTimeMillis() + 120_000
             while (System.currentTimeMillis() < deadline && target == null) {
@@ -112,6 +114,7 @@ class PushService : Service() {
             message = if (ok) "推送成功 · 已收到显影确认" else lastLog.ifBlank { "数据已发送，未收到显影确认" }
         } catch (error: Exception) {
             message = "失败：${error.message ?: "推送中断"}"
+            if (scheduledAt > 0) android.util.Log.w(SchedulerWorker.TAG, "Background push failed", error)
         } finally {
             client?.close()
             path?.let { File(it).delete() }
@@ -119,6 +122,7 @@ class PushService : Service() {
             val result = listOf(if (replay) "原图重推" else "", message, notice).filter(String::isNotBlank).joinToString(" · ")
             val detail = if (scheduledAt > 0) "计划 ${java.text.SimpleDateFormat("HH:mm", java.util.Locale.CHINA)
                 .format(java.util.Date(scheduledAt))} · $result" else result
+            if (scheduledAt > 0) android.util.Log.i(SchedulerWorker.TAG, "Background push finished (confirmed=$ok)")
             PlanStore.addHistory(this, PlanStore.Hist(System.currentTimeMillis(), kind, ok,
                 ((System.currentTimeMillis() - started) / 1000).toInt(), detail, snapshot, replay))
             state.value = State(false, message, if (ok) 100 else state.value.progress)

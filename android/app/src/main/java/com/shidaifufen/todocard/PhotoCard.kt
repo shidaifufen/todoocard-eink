@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.net.Uri
@@ -33,22 +34,27 @@ object PhotoCard {
 
     private fun paint(size: Float, bold: Boolean = false): Paint = Paint().apply {
         isAntiAlias = false
-        color = android.graphics.Color.BLACK
+        color = Color.BLACK
         textSize = size
         typeface = if (bold) Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD) else Typeface.SANS_SERIF
     }
 
-    private fun rows(path: String, fields: Fields): List<String> {
+    private data class Band(val dateTime: String, val camera: String, val details: List<String>) {
+        val hasHeader get() = dateTime.isNotBlank() || camera.isNotBlank()
+        val rowCount get() = details.size + if (hasHeader) 1 else 0
+    }
+
+    private fun bandContent(path: String, fields: Fields): Band {
         val meta = readExif(path)
-        return listOf(
-            listOf(if (fields.date) meta.taken else "", if (fields.time) meta.time else "").filter(String::isNotBlank).joinToString("  "),
-            if (fields.camera) meta.camera else "",
-            if (fields.params) meta.params else "",
-            if (fields.location) location(path) else ""
-        ).filter(String::isNotBlank)
+        val dateTime = listOf(if (fields.date) meta.taken else "", if (fields.time) meta.time else "")
+            .filter(String::isNotBlank).joinToString("  ")
+        val details = listOf(if (fields.params) meta.params else "", if (fields.location) location(path) else "")
+            .filter(String::isNotBlank)
+        return Band(dateTime, if (fields.camera) meta.camera else "", details)
     }
     internal fun cameraParameters(path: String): String = readExif(path).params
-    fun bandHeight(path: String, fields: Fields): Int = rows(path, fields).size.let { if (it == 0) 0 else 24 + 26 * it }
+    fun bandHeight(path: String, fields: Fields): Int =
+        bandContent(path, fields).rowCount.let { if (it == 0) 0 else 18 + 28 * it }
     fun location(path: String): String = locationNote(path).ifBlank { embeddedLocation(path) }
     fun embeddedLocation(path: String): String = resolvedPlaces[path] ?: readExif(path).coordinates?.let { (lat, lon) ->
         String.format(Locale.ROOT, "%.4f°, %.4f°", lat, lon)
@@ -166,24 +172,33 @@ object PhotoCard {
     }
 
     internal fun drawBand(c: Canvas, path: String, fields: Fields, band: Int) {
-        val lines = rows(path, fields)
+        val content = bandContent(path, fields)
         val photoH = Render.H - band
-        c.drawRect(0f, photoH.toFloat(), Render.W.toFloat(), Render.H.toFloat(), Paint().apply {
-            color = android.graphics.Color.WHITE
-        })
-        c.drawRect(0f, photoH.toFloat(), Render.W.toFloat(), photoH + 2f, Paint().apply {
-            color = android.graphics.Color.BLACK
-        })
-        var y = photoH + 26f
-        lines.forEachIndexed { index, line ->
-            val p = paint(if (index == 0) 21f else 16f, index == 0)
-            var display = line
-            val width = Render.W - Render.M * 2
-            if (p.measureText(display) > width) {
-                display = display.take(p.breakText(display, true, width - p.measureText("…"), null))
-            }
-            c.drawText(display + if (display.length < line.length) "…" else "", Render.M, y, p)
-            y += 26f
+        val rule = paint(0f)
+        c.drawRect(0f, photoH.toFloat(), Render.W.toFloat(), Render.H.toFloat(), Paint().apply { color = Color.WHITE })
+        c.drawRect(0f, photoH.toFloat(), Render.W.toFloat(), photoH + 2f, rule)
+
+        val width = Render.W - 2 * Render.M
+        val detail = paint(19f)
+        var y = photoH + 30f
+        if (content.hasHeader) {
+            val date = paint(21f, bold = true)
+            val camera = paint(19f, bold = true).apply { textAlign = Paint.Align.RIGHT }
+            val leftWidth = date.measureText(content.dateTime).coerceAtMost(width * .55f)
+            val gap = if (content.dateTime.isBlank()) 0f else 16f
+            c.drawText(fit(content.dateTime, date, leftWidth), Render.M, y, date)
+            c.drawText(fit(content.camera, camera, width - leftWidth - gap), Render.W - Render.M, y, camera)
+            y += 28f
         }
+        for (line in content.details) {
+            c.drawText(fit(line, detail, width), Render.M, y, detail)
+            y += 28f
+        }
+    }
+
+    private fun fit(text: String, paint: Paint, width: Float): String {
+        if (paint.measureText(text) <= width) return text
+        val count = paint.breakText(text, true, width - paint.measureText("…"), null)
+        return text.take(count) + "…"
     }
 }
