@@ -912,19 +912,11 @@ class CardService:
         _on = lambda k: bool(_pf.get(k, True))
         _show_date, _show_time = _on("date"), _on("time")
         _show_cam, _show_params, _show_wx = _on("camera"), _on("params"), _on("weather")
-        line2_parts = [x for x in ((place if _show_cam else ""),
-                                   (meta.get("camera") if _show_cam else ""),
-                                   (meta.get("lens") if _show_cam else "")) if x]
+        camera = " · ".join(x for x in (meta.get("camera"), meta.get("lens")) if x) if _show_cam else ""
         params = [meta.get(k) for k in ("focal", "aperture", "shutter", "iso")]
         params = [x for x in params if x]
 
-        extra = []
-        if line2_parts:
-            extra.append(" · ".join(line2_parts))
-        if params and _show_params:
-            extra.append("  ".join(params))
-
-        # 天气放在信息带右侧，补上时间那一行的空白
+        details = [line for line in ("  ".join(params) if _show_params else "", place if _show_cam else "") if line]
         # 信息带显示"拍摄当天"的天气（历史日期走存档接口，今天用实时）
         try:
             wx_txt = self.weather_on(meta.get("taken").date()) if (meta.get("taken") and _show_wx) else ""
@@ -933,32 +925,25 @@ class CardService:
 
 
         # 信息带：左右边距、字号、行距跟 card_render 的版式规范走（M / 行距 24）
-        MX = R.M
-        date_f = R.font("bold", 22)
-        meta_f = R.font("light", 16)
-        time_f = R.font("num", 22)
-        # 信息带的字号/行距必须跟滑杆走：用字体实际像素算行高，band 才不会被撑高或留白
-        _line_k = float(getattr(R, "_LINE", 1.0) or 1.0)
-        _h_date = int(date_f.size * 1.28)
-        _h_meta = int(meta_f.size * 1.30)
-        _gap = int(6 * _line_k)
-        _k = max(0.8, min(1.4, R.scale()))
-        _single = not extra
-        _pad_top = max(7, int((8 if _single else 11) * _k))
-        _pad_bot = max(5, int((6 if _single else 8) * _k))
-        if not (_show_date or _show_time or extra or wx_txt):
+        has_header = bool(_show_date or _show_time or camera)
+        if not (has_header or details or wx_txt):
             artwork(H).save(out)
             return out
-        _heights = ([_h_date] if (_show_date or _show_time) else []) + [_h_meta] * len(extra)
-        _content = sum(_heights) + _gap * (len(_heights) - 1)
-        band = _content + _pad_top + _pad_bot
+        margin = R.M
+        width = W - 2 * margin
+        date_font = R.font("bold", 21)
+        camera_font = R.font("bold", 19)
+        detail_font = R.font("light", 19)
+        gap = int(6 * R._LINE)
+        head_height = max(date_font.size, camera_font.size) + gap
+        row_height = detail_font.size + gap
+        band = 18 + (head_height if has_header else 0) + row_height * (len(details) + bool(wx_txt))
         photo_h = H - band
         canvas = Image.new("RGB", (W, H), WHITE)
-        canvas.paste(artwork(photo_h), (0, 0))
+        canvas.paste(image_tone.panel_preview(artwork(photo_h)), (0, 0))
 
         d = ImageDraw.Draw(canvas)
-        d.rectangle([0, photo_h, W, H], fill=WHITE)
-        d.line([0, photo_h, W, photo_h], fill=BLACK, width=3)
+        d.rectangle([0, photo_h, W - 1, photo_h + 1], fill=BLACK)
 
         try:
             _fallback_ts = datetime.fromtimestamp(photo_path.stat().st_mtime)
@@ -969,30 +954,35 @@ class CardService:
                      if taken.year != datetime.now().year
                      else f"{taken.month}月{taken.day}日")
 
-        y0 = photo_h + _pad_top
-        _has_head = _show_date or _show_time
-        if _show_date:
-            d.text((MX, y0), f"{_date_txt} {WEEKDAYS[taken.weekday()]}", font=date_f, fill=BLACK)
-        tm = taken.strftime("%H:%M")
-        # 没有机身信息时把天气并到时间这一行，整条带子只留一行，少占照片高度
-        if not _show_time:
-            pass
-        elif wx_txt and not extra:
-            _rf = R.font("light", 18)
-            _right = f"{tm}  {wx_txt}"
-            d.text((W - MX - d.textlength(_right, font=_rf), y0 + int(_h_date * 0.28)),
-                   _right, font=_rf, fill=BLACK)
-        else:
-            d.text((W - MX - d.textlength(tm, font=time_f), y0), tm, font=time_f, fill=BLACK)
+        def fit(text, font, limit):
+            if d.textlength(text, font=font) <= limit:
+                return text
+            lo, hi = 0, len(text)
+            while lo < hi:
+                mid = (lo + hi + 1) // 2
+                if d.textlength(text[:mid] + "…", font=font) <= limit:
+                    lo = mid
+                else:
+                    hi = mid - 1
+            return text[:lo] + "…"
 
-        yy = y0 + ((_h_date + _gap) if _has_head else 0)
-        for i, line in enumerate(extra):
-            if line and line != wx_txt:
-                d.text((MX, yy), line, font=meta_f, fill=BLACK)
-            if i == 0 and wx_txt and extra:
-                d.text((W - MX - d.textlength(wx_txt, font=meta_f), yy),
-                       wx_txt, font=meta_f, fill=BLACK)
-            yy += _heights[i + 1] + _gap
+        y = photo_h + 10
+        if has_header:
+            date_time = "  ".join(x for x in (
+                f"{_date_txt} {WEEKDAYS[taken.weekday()]}" if _show_date else "",
+                taken.strftime("%H:%M") if _show_time else "",
+            ) if x)
+            left_width = min(d.textlength(date_time, font=date_font), width * .55)
+            d.text((margin, y), fit(date_time, date_font, left_width), font=date_font, fill=BLACK)
+            right_width = width - left_width - (16 if date_time else 0)
+            d.text((W - margin, y), fit(camera, camera_font, right_width), font=camera_font, fill=BLACK, anchor="ra")
+            y += head_height
+
+        for line in details:
+            d.text((margin, y), fit(line, detail_font, width), font=detail_font, fill=BLACK)
+            y += row_height
+        if wx_txt:
+            d.text((W - margin, y), fit(wx_txt, detail_font, width), font=detail_font, fill=BLACK, anchor="ra")
 
         # 照片区继续抖动，信息带吸附成 6 色（否则白底上会飘彩色噪点）
         canvas = R.snap_palette(canvas, keep=[(0, 0, W, photo_h)])
