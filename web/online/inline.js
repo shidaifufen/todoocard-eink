@@ -9,6 +9,7 @@ function sendCard() {
 }
 const picker = mountOnline(root, canvas, {
   showPrompt: false,
+  remember: !new URLSearchParams(location.search).has('scheduled'),
   openLyrics: selection => window.TodooScene.lyrics(JSON.stringify(selection)),
   onCard: (_canvas, _item, bounds) => {
     imageBounds = bounds;

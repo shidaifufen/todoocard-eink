@@ -154,7 +154,7 @@ fun PlanScreen(ctx: android.content.Context, onReplay: (PlanStore.Hist) -> Unit)
             title = if (idx >= 0) "编辑计划" else "新增计划",
             onDismiss = { editFixed = null },
             onConfirm = { item ->
-                fixed = if (idx >= 0) fixed.toMutableList().also { it[idx] = item } else fixed + item
+                fixed = PlanStore.byExecutionTime(if (idx >= 0) fixed.toMutableList().also { it[idx] = item } else fixed + item)
                 PlanStore.saveFixed(ctx, fixed); SchedulerWorker.schedule(ctx)
                 editFixed = null
             },
@@ -312,6 +312,7 @@ private fun IntervalEditDialog(initial: PlanStore.Interval, title: String, onDis
                 Text("推送卡片 · 已选 ${item.templates.size} 张", fontSize = 13.sp)
                 Text("每次到点随机推送其中一张", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 val choices = TEMPLATES.filter { it.first != "online" || "online" in initial.templates } + OnlinePlanCategories
+                Column(Modifier.heightIn(max = 240.dp).verticalScroll(rememberScrollState())) {
                 choices.forEach { (key, name) ->
                     val checked = key in item.templates
                     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
@@ -321,6 +322,7 @@ private fun IntervalEditDialog(initial: PlanStore.Interval, title: String, onDis
                         Checkbox(checked, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp))
                         Text(name)
                     }
+                }
                 }
             }
         },

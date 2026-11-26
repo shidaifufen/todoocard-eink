@@ -30,14 +30,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.CancellationException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 internal object OnlineCard {
-    private fun file(ctx: Context) = AtomicFile(File(ctx.filesDir, "online-card.png"))
+    private fun file(ctx: Context, category: String?) =
+        AtomicFile(File(ctx.filesDir, if (category == null) "online-card.png" else "online-$category.png"))
 
-    fun read(ctx: Context): Bitmap? = try {
-        file(ctx).openRead().use { BitmapFactory.decodeStream(it) }
+    fun read(ctx: Context, category: String? = null): Bitmap? = try {
+        file(ctx, category).openRead().use { BitmapFactory.decodeStream(it) }
     } catch (_: java.io.FileNotFoundException) { null }
 
     fun decode(raw: String): Bitmap {
@@ -69,8 +72,8 @@ internal object OnlineCard {
         } finally { source.recycle() }
     }
 
-    fun save(ctx: Context, bitmap: Bitmap) {
-        val disk = file(ctx)
+    fun save(ctx: Context, bitmap: Bitmap, category: String? = null) {
+        val disk = file(ctx, category)
         val out = disk.startWrite()
         try {
             check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, out))
@@ -123,6 +126,7 @@ private fun onlineWebView(
 ): WebView = WebView(ctx).apply {
     setBackgroundColor(android.graphics.Color.TRANSPARENT)
     settings.javaScriptEnabled = true
+    settings.domStorageEnabled = true
     settings.allowFileAccess = false
     settings.allowContentAccess = false
     addJavascriptInterface(OnlineBridge(onCard, onHeight, onLyrics), "TodooScene")
@@ -138,7 +142,7 @@ private fun onlineWebView(
         }
 
         override fun onPageFinished(view: WebView, url: String) {
-            if (url == "$LOCAL/online/index.html") onReady(view)
+            if (url.substringBefore('?') == "$LOCAL/online/index.html") onReady(view)
         }
     }
 }
@@ -216,7 +220,7 @@ internal fun OnlineSceneInline(enabled: Boolean, dark: Boolean, onCard: (String)
         modifier = Modifier.fillMaxWidth().height(height.dp),
         factory = {
             onlineWebView(ctx, { raw -> scope.launch { callback(raw) } },
-                { px -> scope.launch { height = px.coerceIn(156, 700) } }, ::style,
+                { px -> scope.launch { height = px.coerceIn(156, 1200) } }, ::style,
                 onLyrics = { raw -> scope.launch { lyrics = LyricSelection.parse(raw) } })
                 .also { browser = it; it.loadUrl("$LOCAL/online/index.html") }
         },
@@ -232,8 +236,23 @@ internal fun OnlineSceneInline(enabled: Boolean, dark: Boolean, onCard: (String)
     }
 }
 
-internal suspend fun randomOnlineCard(ctx: Context, category: String): Bitmap {
+internal suspend fun randomOnlineCard(ctx: Context, category: String, onNotice: (String) -> Unit): Bitmap {
     require(OnlinePlanCategories.any { it.first == "online_$category" })
+    try {
+        val bitmap = fetchRandomOnlineCard(ctx, category)
+        try { withContext(Dispatchers.IO) { OnlineCard.save(ctx, bitmap, category) } }
+        catch (error: CancellationException) { bitmap.recycle(); throw error }
+        catch (error: java.io.IOException) { onNotice("卡片已生成，缓存写入失败") }
+        return bitmap
+    } catch (error: Exception) {
+        if (error is CancellationException && error !is TimeoutCancellationException) throw error
+        val cached = withContext(Dispatchers.IO) { OnlineCard.read(ctx, category) } ?: throw error
+        onNotice("在线来源暂时不可用，使用上次缓存")
+        return cached
+    }
+}
+
+private suspend fun fetchRandomOnlineCard(ctx: Context, category: String): Bitmap {
     val raw = withContext(Dispatchers.Main) {
         var browser: WebView? = null
         try {
@@ -250,7 +269,7 @@ internal suspend fun randomOnlineCard(ctx: Context, category: String): Bitmap {
                     }, onReady = { view ->
                         view.evaluateJavascript("window.drawRandom('$category')", null)
                     })
-                    browser!!.loadUrl("$LOCAL/online/index.html")
+                    browser!!.loadUrl("$LOCAL/online/index.html?scheduled=1")
                 }
             }
         } finally { browser?.closeScene() }

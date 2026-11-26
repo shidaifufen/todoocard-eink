@@ -112,7 +112,7 @@ object CardSources {
     }
 
     suspend fun scheduledBitmap(ctx: Context, kind: String, onNotice: (String) -> Unit = {}): Bitmap {
-        if (OnlinePlanCategories.any { it.first == kind }) return randomOnlineCard(ctx, kind.removePrefix("online_"))
+        if (OnlinePlanCategories.any { it.first == kind }) return randomOnlineCard(ctx, kind.removePrefix("online_"), onNotice)
         if (kind == "online") return withContext(Dispatchers.IO) {
             checkNotNull(OnlineCard.read(ctx)) { "请先生成在线卡片" }
         }

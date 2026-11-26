@@ -9,6 +9,8 @@ object PlanStore {
 
     data class Fixed(val time: String, val template: String, val enabled: Boolean = true)
 
+    internal fun byExecutionTime(list: List<Fixed>) = list.sortedBy { it.time.padStart(5, '0') }
+
     data class Interval(
         val everyMin: Int,
         val start: String,
@@ -29,15 +31,15 @@ object PlanStore {
     fun fixed(c: Context): List<Fixed> {
         val raw = sp(c).getString("fixed", "[]") ?: "[]"
         val arr = JSONArray(raw)
-        return (0 until arr.length()).map {
+        return byExecutionTime((0 until arr.length()).map {
             val o = arr.getJSONObject(it)
             Fixed(o.optString("time", "08:00"), o.optString("template", "summary"), o.optBoolean("enabled", true))
-        }
+        })
     }
 
     fun saveFixed(c: Context, list: List<Fixed>) {
         val arr = JSONArray()
-        list.forEach { arr.put(JSONObject().put("time", it.time).put("template", it.template).put("enabled", it.enabled)) }
+        byExecutionTime(list).forEach { arr.put(JSONObject().put("time", it.time).put("template", it.template).put("enabled", it.enabled)) }
         sp(c).edit().putString("fixed", arr.toString()).apply()
     }
 

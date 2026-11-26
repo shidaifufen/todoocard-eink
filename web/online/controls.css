@@ -30,3 +30,5 @@
 .online-controls .theme-swatch{width:28px;height:28px;margin-bottom:12px;border:1px solid var(--scene-ink);border-radius:7px}
 .online-controls .music-type{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
 .online-controls .music-type output{float:right;font-variant-numeric:tabular-nums}
+.online-controls [data-online=appearance],.online-controls [data-online=tone]{padding:0 8px;border:1px solid var(--scene-panel);border-radius:8px;margin:6px 0}
+@media(max-width:340px){.online-controls .music-type{grid-template-columns:1fr;gap:0}}

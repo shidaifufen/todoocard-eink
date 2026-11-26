@@ -23,12 +23,15 @@ internal fun PlanReadiness(ctx: Context) {
         ctx.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED
     }) }
     var message by remember { mutableStateOf("") }
+    val power = ctx.getSystemService(android.os.PowerManager::class.java)
+    var unrestricted by remember { mutableStateOf(power.isIgnoringBatteryOptimizations(ctx.packageName)) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
     val lifecycle = (ctx as androidx.activity.ComponentActivity).lifecycle
     DisposableEffect(lifecycle) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 exact = SchedulerWorker.exactAllowed(ctx)
+                unrestricted = power.isIgnoringBatteryOptimizations(ctx.packageName)
                 ready = planPermissions().all { ctx.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
                 SchedulerWorker.schedule(ctx)
             }
@@ -45,14 +48,15 @@ internal fun PlanReadiness(ctx: Context) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween) {
             Text("计划权限")
-            Text(if (exact && ready) "已就绪 ›" else "查看设置 ›", color = MaterialTheme.colorScheme.primary)
+            Text(if (exact && ready && unrestricted) "已就绪 ›" else "查看设置 ›", color = MaterialTheme.colorScheme.primary)
         }
     }
     if (showSettings) AlertDialog(onDismissRequest = { showSettings = false },
         title = { Text("计划权限") }, text = {
         Column {
             Text(if (exact) "精确定时已开启" else "需要开启“闹钟与提醒”以准点执行")
-            Text("到点开始查找卡片；连接、传输和显影仍需一些时间。设备休眠时可等待广播最多 120 秒。")
+            Text("到点开始查找卡片，锁屏时也会等待广播，最多 120 秒。")
+            if (!unrestricted) Text("系统仍在优化后台耗电。荣耀可在「应用启动管理」允许土豆片自启动和后台活动。")
             if (!exact) Text("未授权时只能使用系统宽松定时，可能延迟。短间隔在深度休眠下也受系统频率限制。")
             TextButton(onClick = { permission.launch(planPermissions()) }) {
                 Text(if (ready) "检查蓝牙与通知权限" else "允许蓝牙与推送通知")

@@ -26,6 +26,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -139,7 +142,23 @@ internal fun StudioScreen(
                 }
             }
         }) {
-    BoxWithConstraints(Modifier.fillMaxSize().background(StudioBackground)) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(StudioBackground).pointerInput(drawer) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            val threshold = 68.dp.toPx()
+            while (true) {
+                val change = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Final)
+                    .changes.firstOrNull { it.id == down.id } ?: break
+                if (!change.pressed || change.isConsumed || drawer.isOpen) break
+                val delta = change.position - down.position
+                if (kotlin.math.abs(delta.y) > viewConfiguration.touchSlop * 2) break
+                if (delta.x >= threshold) {
+                    scope.launch { drawer.open() }
+                    break
+                }
+            }
+        }
+    }) {
     val previewHeight = (maxHeight - 320.dp).coerceIn(200.dp, 560.dp)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),

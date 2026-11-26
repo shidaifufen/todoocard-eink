@@ -125,13 +125,13 @@ export function mountTone(host, initial, onChange) {
   const presets = host.querySelector('.tone-presets');
   const controls = host.querySelector('.tone-sliders');
   const sliders = {};
-  function update(next) {
+  function update(next, notify = true) {
     value = { ...next };
     for (const [key, {input, output}] of Object.entries(sliders)) {
       input.value = value[key];
       output.textContent = value[key] + (key === 'snap' ? '' : '%');
     }
-    onChange(value);
+    if (notify) onChange(value);
   }
   for (const [label, preset] of [['原色', neutral], ['鲜明', vivid], ['净色', {...vivid, snap: 75}]]) {
     const button = document.createElement('button');
@@ -156,4 +156,5 @@ export function mountTone(host, initial, onChange) {
     controls.append(row);
     sliders[key] = {input, output};
   }
+  return update;
 }

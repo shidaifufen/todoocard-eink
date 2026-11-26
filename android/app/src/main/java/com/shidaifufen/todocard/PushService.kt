@@ -83,7 +83,10 @@ class PushService : Service() {
             var target: android.bluetooth.le.ScanResult? = null
             val deadline = System.currentTimeMillis() + 120_000
             while (System.currentTimeMillis() < deadline && target == null) {
-                val list = withContext(Dispatchers.IO) { ble.scanAll(10_000) }
+                val list = withContext(Dispatchers.IO) {
+                    if (scheduledAt > 0) ble.scanForPush(saved, 10_000)
+                    else ble.scanAll(10_000)
+                }
                 target = DeviceDiscovery.target(list, saved)
                 if (target == null) {
                     val left = ((deadline - System.currentTimeMillis()) / 1000).coerceAtLeast(0)

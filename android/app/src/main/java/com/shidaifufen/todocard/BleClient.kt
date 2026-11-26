@@ -8,6 +8,7 @@ import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
@@ -51,7 +52,8 @@ class BleClient(private val ctx: Context) {
 
     /** 扫描 timeout 毫秒，返回**全部**设备（按 RSSI 排序），由界面让用户挑。 */
     @SuppressLint("MissingPermission")
-    suspend fun scanAll(timeoutMs: Long = 12_000, onLog: (String) -> Unit = {}): List<ScanResult> {
+    suspend fun scanAll(timeoutMs: Long = 12_000, onLog: (String) -> Unit = {},
+                        filters: List<ScanFilter>? = null): List<ScanResult> {
         val scanner = adapter?.bluetoothLeScanner ?: run { onLog("蓝牙未开启"); return emptyList() }
         val found = java.util.concurrent.ConcurrentHashMap<String, ScanResult>()
         val cb = object : ScanCallback() {
@@ -66,13 +68,27 @@ class BleClient(private val ctx: Context) {
             }
         }
         onLog("开始扫描 ${timeoutMs / 1000}s…")
-        scanner.startScan(null, ScanSettings.Builder()
+        scanner.startScan(filters, ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build(), cb)
-        kotlinx.coroutines.delay(timeoutMs)
-        scanner.stopScan(cb)
+        try { kotlinx.coroutines.delay(timeoutMs) }
+        finally { scanner.stopScan(cb) }
         onLog("扫到 ${found.size} 台设备")
         return found.values.sortedByDescending { it.rssi }
+    }
+
+    internal suspend fun scanForPush(address: String, timeoutMs: Long): List<ScanResult> {
+        val filters = buildList {
+            val normalized = address.uppercase(java.util.Locale.ROOT)
+            if (BluetoothAdapter.checkBluetoothAddress(normalized)) {
+                add(ScanFilter.Builder().setDeviceAddress(normalized).build())
+            }
+            add(ScanFilter.Builder().setManufacturerData(0x5053, byteArrayOf()).build())
+            for (service in listOf(SVC_PRIMARY, SVC_FALLBACK)) {
+                add(ScanFilter.Builder().setServiceUuid(android.os.ParcelUuid(service)).build())
+            }
+        }
+        return scanAll(timeoutMs, filters = filters)
     }
 
     fun isLikelyCard(r: ScanResult): Boolean {

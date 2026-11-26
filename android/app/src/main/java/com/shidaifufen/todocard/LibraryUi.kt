@@ -79,18 +79,19 @@ internal fun LibraryScreen(
             }
         }
     }
-    var tool by remember { mutableIntStateOf(0) }
-    var sixColors by remember { mutableStateOf(true) }
-    var showGrid by remember { mutableStateOf(true) }
+    var tool by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
+    var sixColors by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(true) }
+    var showGrid by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(true) }
     var showAdvanced by remember { mutableStateOf(false) }
     val panelPreview by produceState<Bitmap?>(null, source, edit, band, sixColors) {
         value = null
         val bitmap = source
-        if (bitmap != null && sixColors) {
+        if (bitmap != null && (sixColors || edit.gamma != 1f || edit.sharpness != 0f || edit.shadows != 0f || edit.snapThreshold > 0)) {
             delay(160)
             value = withContext(Dispatchers.Default) {
                 val adjusted = PhotoEdit.renderBitmap(bitmap, edit, band)
-                try { PhotoEdit.panelPreview(adjusted) } finally { adjusted.recycle() }
+                if (sixColors) try { PhotoEdit.panelPreview(adjusted) } finally { adjusted.recycle() }
+                else adjusted
             }
         }
     }
@@ -184,10 +185,8 @@ internal fun LibraryScreen(
                                 native.save()
                                 native.scale(size.width / Render.W, size.height / Render.H)
                                 val panel = panelPreview
-                                val shown = if (sixColors) edit else PhotoEdit.Params(zoom = edit.zoom,
-                                    dx = edit.dx, dy = edit.dy, fit = edit.fit)
-                                if (panel != null && sixColors) native.drawBitmap(panel, 0f, 0f, null)
-                                else PhotoEdit.drawInto(native, bitmap, shown, band)
+                                if (panel != null) native.drawBitmap(panel, 0f, 0f, null)
+                                else PhotoEdit.drawInto(native, bitmap, edit, band)
                                 infoBand?.let { native.drawBitmap(it, 0f, 0f, null) }
                                 native.restore()
                             }
@@ -206,7 +205,7 @@ internal fun LibraryScreen(
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                FilterChip(!sixColors, { sixColors = false }, label = { Text("原图色彩") })
+                FilterChip(!sixColors, { sixColors = false }, label = { Text("调色预览") })
                 Spacer(Modifier.width(8.dp))
                 FilterChip(sixColors, { sixColors = true }, label = { Text("六色预览") })
             }
@@ -262,8 +261,10 @@ internal fun LibraryScreen(
             }
             }
             if (tool == 1) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("自然", "鲜明", "插画净色", "黑白").forEachIndexed { index, label ->
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (group in listOf(listOf(0, 1), listOf(2, 3))) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (index in group) {
                     OutlinedButton(onClick = {
                         val neutral = edit.resetTone()
                         onEdit(when (index) {
@@ -276,7 +277,9 @@ internal fun LibraryScreen(
                         sixColors = true
                     },
                         modifier = Modifier.weight(1f), contentPadding = PaddingValues(6.dp),
-                        shape = RoundedCornerShape(8.dp)) { Text(label) }
+                        shape = RoundedCornerShape(8.dp)) { Text(listOf("自然", "鲜明", "插画净色", "黑白")[index]) }
+                    }
+                    }
                 }
             }
             PhotoToneAdjustments(edit, onEdit, showPresets = false)
@@ -286,8 +289,6 @@ internal fun LibraryScreen(
                     onEdit(edit.copy(snapThreshold = if (it) 60 else 0))
                 })
             }
-            Text("适合截图和文字图片，清理白底彩点、锐化灰色边缘。照片开启后会减少灰阶层次。新选图片和分享图片沿用此设置。",
-                fontSize = 12.sp, color = StudioMuted)
             if (edit.snapThreshold > 0) Adjustment("强度", edit.snapThreshold.toFloat(), 1f..100f,
                 { onEdit(edit.copy(snapThreshold = it.toInt())) }, "%.0f")
             TextButton(onClick = { showAdvanced = !showAdvanced }) {

@@ -30,6 +30,8 @@ import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -110,17 +112,19 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
     remember(ctx) { PlanStore.init(ctx); true }
     val scope = rememberCoroutineScope()
     val layoutRevision by LayoutStore.revision.collectAsState()
-    var tab by remember { mutableIntStateOf(0) }
-    var kind by remember { mutableStateOf("summary") }
+    var tab by rememberSaveable { mutableIntStateOf(0) }
+    var kind by rememberSaveable { mutableStateOf("summary") }
+    val tabState = rememberSaveableStateHolder()
+    LaunchedEffect(Unit) { SchedulerWorker.clearLegacyWork(ctx) }
     var onlineSaving by remember { mutableStateOf(false) }
     val onlineSaveMutex = remember { kotlinx.coroutines.sync.Mutex() }
     var onlineSequence by remember { mutableIntStateOf(0) }
     var onlineRevision by remember { mutableIntStateOf(0) }
     var card by remember { mutableStateOf(PlanStore.card(ctx)) }
     var preview by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-    var photoPath by remember { mutableStateOf(PlanStore.lastPhoto) }
+    var photoPath by rememberSaveable { mutableStateOf(PlanStore.lastPhoto) }
     var photoLocationRevision by remember { mutableIntStateOf(0) }
-    var imageKind by remember { mutableStateOf("photo") }
+    var imageKind by rememberSaveable { mutableStateOf("photo") }
     var fields by remember { mutableStateOf(PlanStore.photoFields) }
     var edit by remember { mutableStateOf(PlanStore.photoEdit) }
     var albums by remember { mutableStateOf(PlanStore.albums(ctx)) }
@@ -630,7 +634,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
             }
         }) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
-                when (tab) {
+                tabState.SaveableStateProvider(tab) { when (tab) {
                     0 -> StudioScreen(kind, card, preview, photoReady, status, progress, busy,
                         pairedName.ifEmpty { pairedAddress }, found, device?.device?.address,
                         onKind = { next ->
@@ -734,6 +738,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                         },
                         onFields = { fields = it; PlanStore.photoFields = it },
                         onScanAll = { requestScan(true) }, scanTimedOut = scanTimedOut)
+                }
                 }
             }
         }

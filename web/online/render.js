@@ -50,17 +50,20 @@ function wrap(g, text, width) {
   return rows;
 }
 
-function block(g, value, x, y, width, height, size, color = BLACK, bold = false, fit = true, outline) {
+function block(g, value, x, y, width, height, size, color = BLACK, bold = false, fit = true, outline,
+  centered = false) {
   const style = bold ? '700 ' : '400 ';
   let rows, step;
   for (;;) {
     g.font = style + size + 'px ' + family;
     rows = wrap(g, String(value || ''), width);
     step = Math.round(size * 1.38);
-    if (!fit || (rows.length - 1) * step + size * 1.2 <= height || size <= 17) break;
+    if (!fit || ((rows.length - 1) * step + size * 1.2 <= height &&
+        rows.every(row => g.measureText(row).width <= width)) || size <= 17) break;
     size -= 2;
   }
   const cap = Math.max(1, Math.floor((height - size * 1.2) / step) + 1);
+  if (centered) y += Math.max(0, (height - (Math.min(rows.length, cap) - 1) * step - size * 1.2) / 2);
   let bottom = y;
   for (let i = 0; i < Math.min(rows.length, cap); i++) {
     const row = i === cap - 1 && rows.length > cap ? rows[i] + '…' : rows[i];
@@ -82,7 +85,7 @@ function artwork(g, img, x, y, width, height, tone, crop = [0, 0, img.naturalWid
   return bounds;
 }
 
-function music(g, item, img, verses, tone, style, { theme = BLACK, ink = 'auto', fontScale = 1, crop } = {}) {
+function music(g, item, img, verses, tone, style, { theme = BLACK, ink = 'auto', fontScale = 1, autoFont = true, crop } = {}) {
   const defaultInk = [WHITE, YELLOW].includes(theme) ? BLACK : WHITE;
   const textColor = ink === 'auto' ? defaultInk : ink;
   const outline = textColor === theme ? (textColor === WHITE ? BLACK : WHITE) : undefined;
@@ -109,7 +112,8 @@ function music(g, item, img, verses, tone, style, { theme = BLACK, ink = 'auto',
   line(g, item.by, 298, title.bottom + 9, 202, size(22), textColor, false, 18, outline);
   rect(g, 0, 276, W, H - 276, lyricBackground);
   const lyricInk = lyricBackground === WHITE ? BLACK : WHITE;
-  const { fits } = block(g, verses.join('\n'), 32, 310, 464, 411, size(34), lyricInk, true, false);
+  const { fits } = block(g, verses.join('\n'), 28, 294, 472, 433, autoFont ? 60 : size(34),
+    lyricInk, true, autoFont, undefined, true);
   rect(g, 32, 736, 464, 3, BLUE);
   line(g, item.source + ' · 歌词 LRCLIB', 32, 754, 464, size(18), lyricInk);
   return { bounds, fits };

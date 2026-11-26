@@ -834,7 +834,7 @@ async function preview(kind, fresh){
 function renderSched(list){
   const box = $('schedList'); if (!box) return;
   box.innerHTML = '';
-  list.forEach(it => {
+  [...list].sort((a, b) => a.time.localeCompare(b.time)).forEach(it => {
     const div = document.createElement('div'); div.className = 'sched';
     const opts = Object.keys(TPL_LABEL).map(k =>
       `<option value="${k}"${it.kind===k?' selected':''}>${TPL_LABEL[k]}</option>`).join('');
@@ -1447,6 +1447,7 @@ function setOnlineReady(ready) {
 }
 mountOnline(document.getElementById('onlinePicker'), onlineCanvas, {
   showPrompt: false,
+  remember: true,
   onCard: (_canvas, _item, bounds) => {
     const revision = ++onlineRevision;
     setOnlineReady(false);
