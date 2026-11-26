@@ -161,9 +161,10 @@ object CardSources {
 /** 只负责设备发现与选择，不涉及任何传输命令。 */
 object DeviceDiscovery {
     fun matches(address: String) = address.startsWith("FF:FF", ignoreCase = true)
+    internal fun matchesTarget(address: String, saved: String) =
+        if (saved.isNotBlank()) address.equals(saved, true) else matches(address)
     fun filter(found: List<android.bluetooth.le.ScanResult>, all: Boolean) =
         found.filter { all || matches(it.device.address) }
     fun target(found: List<android.bluetooth.le.ScanResult>, saved: String) =
-        if (saved.isNotBlank()) found.firstOrNull { it.device.address.equals(saved, true) }
-        else found.firstOrNull { matches(it.device.address) }
+        found.firstOrNull { matchesTarget(it.device.address, saved) }
 }

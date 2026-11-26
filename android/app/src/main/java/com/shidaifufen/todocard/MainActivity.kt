@@ -678,7 +678,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                         onScanAll = { requestScan(true) }, scanTimedOut = scanTimedOut,
                         onGenerate = ::generateImage, onlineContent = onlineContent,
                         onlineControls = {
-                            OnlineSceneInline(!busy, dark) { raw ->
+                            OnlineSceneInline(!busy, dark) { category, raw ->
                                 val sequence = ++onlineSequence
                                 onlineSaving = true
                                 scope.launch {
@@ -687,8 +687,16 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                                             onlineSaveMutex.lock()
                                             try {
                                                 val image = OnlineCard.decode(raw)
-                                                try { withContext(Dispatchers.IO) { OnlineCard.save(ctx, image) } }
-                                                finally { image.recycle() }
+                                                try {
+                                                    withContext(Dispatchers.IO) {
+                                                        OnlineCard.save(ctx, image)
+                                                        try {
+                                                            OnlineCard.save(ctx, image, category)
+                                                        } catch (error: java.io.IOException) {
+                                                            android.util.Log.w("TodooOnline", "Could not save category cache", error)
+                                                        }
+                                                    }
+                                                } finally { image.recycle() }
                                             } finally { onlineSaveMutex.unlock() }
                                         }
                                         onlineRevision++

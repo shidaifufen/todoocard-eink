@@ -3,7 +3,7 @@ import { analyzeCover, mountTone, neutral, panelColors, vivid } from './tone.js'
 import { paint, paintPrompt } from './render.js';
 
 export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {}, showPrompt = true, openLyrics,
-  remember = false, initialTone = vivid, presets } = {}) {
+  remember = false, initialTone = vivid, presets, onError = () => {} } = {}) {
   root.innerHTML = [
     '<div class="online-picker">',
     '<label>类型<select aria-label="类型" data-online="kind"></select></label>',
@@ -240,7 +240,10 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
         }
       }
     } catch (error) {
-      if (current() && ticket === operation) status.textContent = error.message || '在线来源暂时不可用';
+      if (current() && ticket === operation) {
+        status.textContent = error.message || '在线来源暂时不可用';
+        onError(status.textContent);
+      }
     }
   }
 

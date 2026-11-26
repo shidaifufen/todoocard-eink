@@ -1,7 +1,8 @@
 const endpoints = {
   apple: 'https://itunes.apple.com',
   lyrics: 'https://lrclib.net',
-  idioms: 'https://raw.githubusercontent.com/pwxcoo/chinese-xinhua/master/data/idiom.json',
+  idioms: 'https://cdn.jsdelivr.net/gh/pwxcoo/chinese-xinhua@master/data/idiom.json',
+  idiomsFallback: 'https://raw.githubusercontent.com/pwxcoo/chinese-xinhua/master/data/idiom.json',
   english: 'https://api.datamuse.com/words',
 };
 
@@ -20,9 +21,9 @@ function url(base, parameters) {
   return result.href;
 }
 
-async function fetchJSON(address, maxBytes) {
+async function fetchJSON(address, maxBytes, timeoutMs) {
   const timer = new AbortController();
-  const deadline = setTimeout(() => timer.abort(), 25000);
+  const deadline = setTimeout(() => timer.abort(), timeoutMs);
   try {
     const reply = await fetch(address, { signal: timer.signal, credentials: 'omit' });
     if (!reply.ok) throw new Error('接口返回 HTTP ' + reply.status);
@@ -41,15 +42,18 @@ async function fetchJSON(address, maxBytes) {
       }
     } finally { await reader.cancel().catch(() => {}); }
     return JSON.parse(source + decoder.decode());
+  } catch (error) {
+    if (timer.signal.aborted) throw new Error('在线接口请求超时');
+    throw error;
   } finally { clearTimeout(deadline); }
 }
 
-function json(address, maxBytes = 1024 * 1024) {
+function json(address, maxBytes = 1024 * 1024, timeoutMs = 25000) {
   const old = requests.get(address);
   if (old && Date.now() < old.until) return old.data;
   if (requests.size >= 64) requests.delete(requests.keys().next().value);
   const record = { until: Date.now() + 15 * 60000 };
-  record.data = fetchJSON(address, maxBytes).catch(error => {
+  record.data = fetchJSON(address, maxBytes, timeoutMs).catch(error => {
     if (requests.get(address) === record) requests.delete(address);
     throw error;
   });
@@ -75,17 +79,18 @@ function song(item) {
     by: item.artistName, artwork, source: 'Apple Music', duration: item.trackTimeMillis / 1000 };
 }
 
-async function songs(query, market) {
+async function songs(query, market, timeoutMs) {
   const region = market || (/\p{Script=Han}/u.test(query) ? 'hk' : 'us');
   const search = country => json(url(endpoints.apple + '/search', {
     term: query, country, media: 'music', entity: 'song', limit: '30',
-  })).then(data => (data.results || []).map(song).filter(Boolean));
+  }), undefined, timeoutMs).then(data => (data.results || []).map(song).filter(Boolean));
   const first = await search(region);
   return first.length || region === 'us' ? unique(first) : unique(await search('us'));
 }
 
-async function chart(kind, country) {
-  const feed = await json(endpoints.apple + '/' + country + '/rss/top' + (kind === 'music' ? 'songs' : 'movies') + '/limit=50/json');
+async function chart(kind, country, timeoutMs) {
+  const address = endpoints.apple + '/' + country + '/rss/top' + (kind === 'music' ? 'songs' : 'movies') + '/limit=50/json';
+  const feed = await json(address, undefined, timeoutMs);
   const entries = feed.feed?.entry || [];
   return entries.flatMap(item => {
     const artwork = imageURL(item['im:image']?.at(-1)?.label, 600, kind === 'movie' ? 900 : 600);
@@ -144,7 +149,8 @@ async function phrases(query) {
 }
 
 async function idioms(query) {
-  const all = await json(endpoints.idioms, 16 * 1024 * 1024);
+  const limit = 16 * 1024 * 1024;
+  const all = await json(endpoints.idioms, limit).catch(() => json(endpoints.idiomsFallback, limit));
   const plain = value => normalized(value).normalize('NFD').replace(/[\p{M}\s]+/gu, '');
   const filter = plain(query);
   const selected = filter ? all.filter(item => item.word?.includes(filter) ||
@@ -173,8 +179,18 @@ export async function findItems(kind, query) {
 const randomIndex = length => Math.floor(Math.random() * length);
 export async function randomItems(kind) {
   if (kind === 'music') {
+    const timeoutMs = 8000;
     const country = ['hk', 'us'][randomIndex(2)];
-    return chart(kind, country).catch(() => chart(kind, country === 'hk' ? 'us' : 'hk'));
+    const loadChart = async market => {
+      const items = await chart(kind, market, timeoutMs);
+      if (!items.length) throw new Error('音乐榜单没有可用封面');
+      return items;
+    };
+    const other = country === 'hk' ? 'us' : 'hk';
+    return loadChart(country).catch(() => loadChart(other)).catch(() => {
+      const performers = country === 'hk' ? ['周杰伦', '陈奕迅', '孙燕姿'] : ['Adele', 'Coldplay', 'Taylor Swift'];
+      return songs(performers[randomIndex(performers.length)], country, timeoutMs);
+    });
   }
   if (kind === 'movie') return chart(kind, 'us');
   if (kind === 'english') return phrases(verbs[randomIndex(verbs.length)] + ' *');

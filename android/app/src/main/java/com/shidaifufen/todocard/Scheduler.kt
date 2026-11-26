@@ -19,6 +19,7 @@ object SchedulerWorker {
     private const val ARMED = "armed_at"
     private const val EXACT = "exact"
     internal const val TAG = "TodooSchedule"
+    private var armedInProcess = false
     fun exactAllowed(ctx: Context): Boolean = Build.VERSION.SDK_INT < 31 ||
         ctx.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
 
@@ -36,13 +37,15 @@ object SchedulerWorker {
             SchedulePlanner.slots(fixed, intervals, armed, armed).isNotEmpty()) return
         val next = SchedulePlanner.slots(fixed, intervals, now + 1, now + 8 * 86_400_000L).firstOrNull()
         val at = next?.at ?: 0L
-        if (!restore && at > 0 && at == armed && exact == state.getBoolean(EXACT, false)) return
+        // The system can clear alarms on package replacement while preferences survive.
+        if (!restore && armedInProcess && at > 0 && at == armed && exact == state.getBoolean(EXACT, false)) return
         val armedExact = at > 0 && arm(ctx, alarm, at, pending(ctx, ACTION, at))
         if (armed > 0 && armed != at) alarm.cancel(pending(ctx, ACTION, armed))
         // Cancel the pre-1.8.5 PendingIntent, whose identity had no time URI.
         PendingIntent.getBroadcast(ctx, 8301, Intent(ctx, ScheduleReceiver::class.java).setAction(ACTION),
             PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)?.let(alarm::cancel)
         state.edit().putLong(ARMED, at).putBoolean(EXACT, armedExact).apply()
+        armedInProcess = at > 0
     }
 
     private fun pending(ctx: Context, action: String, scheduledAt: Long) =

@@ -4,6 +4,8 @@ import android.app.Service
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.os.IBinder
+import android.os.SystemClock
+import android.util.Log
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -52,8 +54,9 @@ class PushService : Service() {
     }
 
     private suspend fun push(path: String?, kind: String, scheduledAt: Long, replay: Boolean) {
-        val started = System.currentTimeMillis()
-        if (scheduledAt > 0) android.util.Log.i(SchedulerWorker.TAG, "Background push started for $scheduledAt")
+        val started = SystemClock.elapsedRealtime()
+        Log.i(TAG, "Push started: kind=$kind, scheduledAt=$scheduledAt")
+        var stage = "准备卡片"
         var message = "准备推送…"
         var ok = false
         var client: BleClient? = null
@@ -64,7 +67,7 @@ class PushService : Service() {
         state.value = State(true, message)
         try {
             wake.acquire(10 * 60_000L)
-            report("正在准备卡片…", 0, true)
+            report(if (kind.startsWith("online_") && path == null) "正在获取在线卡片…" else "正在准备卡片…", 0, true)
             val source = if (path == null) CardSources.scheduledBitmap(this, kind) { notice = it }
                 else BitmapFactory.decodeFile(path) ?: error("无法读取卡片图片")
             val payload = withContext(Dispatchers.Default) {
@@ -81,29 +84,23 @@ class PushService : Service() {
             }
             val saved = PlanStore.deviceAddress
             val ble = BleClient(this).also { client = it }
+            stage = "扫描"
             report("查找中 · 请唤醒卡片", 0, true)
-            if (scheduledAt > 0) android.util.Log.i(SchedulerWorker.TAG, "Scanning for card")
-            var target: android.bluetooth.le.ScanResult? = null
-            val deadline = System.currentTimeMillis() + 120_000
-            while (System.currentTimeMillis() < deadline && target == null) {
-                val list = withContext(Dispatchers.IO) {
-                    if (scheduledAt > 0) ble.scanForPush(saved, 10_000)
-                    else ble.scanAll(10_000)
-                }
-                target = DeviceDiscovery.target(list, saved)
-                if (target == null) {
-                    val left = ((deadline - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
-                    report("等待卡片广播，剩余 $left 秒")
-                }
+            Log.i(TAG, "Scanning for selected card; paired address available=${saved.isNotBlank()}")
+            val selected = withContext(Dispatchers.IO) {
+                ble.scanForPush(saved, 120_000, allowUnfiltered = scheduledAt <= 0)
+                    ?: error("未找到卡片，请唤醒后重试")
             }
-            val selected = target ?: error("未找到卡片，请唤醒后重试")
+            Log.i(TAG, "Found card after ${SystemClock.elapsedRealtime() - started} ms")
             PlanStore.deviceAddress = selected.device.address
             PlanStore.deviceName = selected.device.name ?: ""
+            stage = "连接"
             report("连接中…", force = true)
             if (!withContext(Dispatchers.IO) { ble.connect(selected) })
                 error("连接失败：卡片可能在休眠或被占用")
             report("已连接 · 准备推送", 0, true)
             delay(700)
+            stage = "传图"
             report("推送中（${payload.size / 1024} KB）", force = true)
             var lastLog = ""
             withContext(Dispatchers.IO) {
@@ -113,9 +110,12 @@ class PushService : Service() {
             }
             ok = lastLog == "已完成并收到显影确认"
             message = if (ok) "推送成功 · 已收到显影确认" else lastLog.ifBlank { "数据已发送，未收到显影确认" }
+        } catch (cancelled: CancellationException) {
+            message = "推送已中断"
+            throw cancelled
         } catch (error: Exception) {
-            message = "失败：${error.message ?: "推送中断"}"
-            if (scheduledAt > 0) android.util.Log.w(SchedulerWorker.TAG, "Background push failed", error)
+            message = "失败（$stage）：${error.message ?: "推送中断"}"
+            Log.w(TAG, "Push failed: kind=$kind, stage=$stage", error)
         } finally {
             client?.close()
             path?.let { File(it).delete() }
@@ -123,9 +123,9 @@ class PushService : Service() {
             val result = listOf(if (replay) "原图重推" else "", message, notice).filter(String::isNotBlank).joinToString(" · ")
             val detail = if (scheduledAt > 0) "计划 ${java.text.SimpleDateFormat("HH:mm", java.util.Locale.CHINA)
                 .format(java.util.Date(scheduledAt))} · $result" else result
-            if (scheduledAt > 0) android.util.Log.i(SchedulerWorker.TAG, "Background push finished (confirmed=$ok)")
+            Log.i(TAG, "Push finished: kind=$kind, confirmed=$ok")
             PlanStore.addHistory(this, PlanStore.Hist(System.currentTimeMillis(), kind, ok,
-                ((System.currentTimeMillis() - started) / 1000).toInt(), detail, snapshot, replay))
+                ((SystemClock.elapsedRealtime() - started) / 1000).toInt(), detail, snapshot, replay))
             state.value = State(false, message, if (ok) 100 else state.value.progress)
             PushStatus.update(this, message, finished = true)
         }
@@ -136,6 +136,7 @@ class PushService : Service() {
 
     data class State(val running: Boolean = false, val message: String = "", val progress: Int = 0)
     companion object {
+        private const val TAG = "TodooPush"
         private val state = MutableStateFlow(State())
         val status = state.asStateFlow()
     }

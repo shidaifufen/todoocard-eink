@@ -77,18 +77,39 @@ class BleClient(private val ctx: Context) {
         return found.values.sortedByDescending { it.rssi }
     }
 
-    internal suspend fun scanForPush(address: String, timeoutMs: Long): List<ScanResult> {
+    @SuppressLint("MissingPermission")
+    internal suspend fun scanForPush(address: String, timeoutMs: Long, allowUnfiltered: Boolean): ScanResult? {
+        val scanner = adapter?.bluetoothLeScanner ?: error("蓝牙未开启")
+        val normalized = address.trim().uppercase(java.util.Locale.ROOT)
         val filters = buildList {
-            val normalized = address.uppercase(java.util.Locale.ROOT)
             if (BluetoothAdapter.checkBluetoothAddress(normalized)) {
                 add(ScanFilter.Builder().setDeviceAddress(normalized).build())
-            }
-            add(ScanFilter.Builder().setManufacturerData(0x5053, byteArrayOf()).build())
-            for (service in listOf(SVC_PRIMARY, SVC_FALLBACK)) {
-                add(ScanFilter.Builder().setServiceUuid(android.os.ParcelUuid(service)).build())
+            } else if (!allowUnfiltered) {
+                add(ScanFilter.Builder().setManufacturerData(0x5053, byteArrayOf()).build())
+                for (service in listOf(SVC_PRIMARY, SVC_FALLBACK)) {
+                    add(ScanFilter.Builder().setServiceUuid(android.os.ParcelUuid(service)).build())
+                }
             }
         }
-        return scanAll(timeoutMs, filters = filters)
+        val match = CompletableDeferred<ScanResult>()
+        val callback = object : ScanCallback() {
+            override fun onScanResult(callbackType: Int, result: ScanResult) {
+                if (DeviceDiscovery.matchesTarget(result.device.address, normalized)) match.complete(result)
+            }
+            override fun onBatchScanResults(results: MutableList<ScanResult>) {
+                DeviceDiscovery.target(results, normalized)?.let { match.complete(it) }
+            }
+            override fun onScanFailed(errorCode: Int) {
+                match.completeExceptionally(IllegalStateException("系统蓝牙扫描失败（$errorCode）"))
+            }
+        }
+        scanner.startScan(filters, ScanSettings.Builder()
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build(), callback)
+        return try { withTimeoutOrNull(timeoutMs) { match.await() } }
+        finally {
+            runCatching { scanner.stopScan(callback) }
+        }
     }
 
     fun isLikelyCard(r: ScanResult): Boolean {

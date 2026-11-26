@@ -8,9 +8,12 @@ import android.util.AtomicFile
 import android.util.Base64
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
+import android.webkit.WebResourceError
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.JavascriptInterface
+import android.widget.FrameLayout
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -39,6 +42,7 @@ internal object OnlineCard {
     private fun file(ctx: Context, category: String?) =
         AtomicFile(File(ctx.filesDir, if (category == null) "online-card.png" else "online-$category.png"))
 
+    @Synchronized
     fun read(ctx: Context, category: String? = null): Bitmap? = try {
         file(ctx, category).openRead().use { BitmapFactory.decodeStream(it) }
     } catch (_: java.io.FileNotFoundException) { null }
@@ -72,6 +76,7 @@ internal object OnlineCard {
         } finally { source.recycle() }
     }
 
+    @Synchronized
     fun save(ctx: Context, bitmap: Bitmap, category: String? = null) {
         val disk = file(ctx, category)
         val out = disk.startWrite()
@@ -102,12 +107,17 @@ internal val OnlinePlanCategories = listOf(
 )
 
 internal class OnlineBridge(
-    private val onCard: (String) -> Unit,
+    private val onCard: (String, String) -> Unit,
     private val onHeight: (Int) -> Unit,
     private val onLyrics: (String) -> Unit,
+    private val onError: (String) -> Unit,
 ) {
     @JavascriptInterface
-    fun card(png: String) = onCard(png)
+    fun card(category: String, png: String) {
+        if (OnlinePlanCategories.any { it.first == "online_$category" }) onCard(category, png)
+    }
+    @JavascriptInterface
+    fun error(message: String) = onError(message.take(160))
 
     @JavascriptInterface
     fun height(value: Int) = onHeight(value)
@@ -119,17 +129,19 @@ internal class OnlineBridge(
 @SuppressLint("SetJavaScriptEnabled")
 private fun onlineWebView(
     ctx: Context,
-    onCard: (String) -> Unit,
+    onCard: (String, String) -> Unit,
     onHeight: (Int) -> Unit = {},
     onReady: (WebView) -> Unit = {},
     onLyrics: (String) -> Unit = {},
+    onError: (String) -> Unit = {},
+    onRendererGone: (WebView) -> Unit,
 ): WebView = WebView(ctx).apply {
     setBackgroundColor(android.graphics.Color.TRANSPARENT)
     settings.javaScriptEnabled = true
     settings.domStorageEnabled = true
     settings.allowFileAccess = false
     settings.allowContentAccess = false
-    addJavascriptInterface(OnlineBridge(onCard, onHeight, onLyrics), "TodooScene")
+    addJavascriptInterface(OnlineBridge(onCard, onHeight, onLyrics, onError), "TodooScene")
     webViewClient = object : WebViewClient() {
         override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest) = true
 
@@ -143,6 +155,16 @@ private fun onlineWebView(
 
         override fun onPageFinished(view: WebView, url: String) {
             if (url.substringBefore('?') == "$LOCAL/online/index.html") onReady(view)
+        }
+
+        override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+            if (request.isForMainFrame) onError("在线卡片页面加载失败（${error.errorCode}）")
+        }
+
+        override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+            onRendererGone(view)
+            view.destroy()
+            return true
         }
     }
 }
@@ -222,7 +244,7 @@ private fun LyricsDialog(selection: LyricSelection, onDismiss: () -> Unit, onApp
 }
 
 @Composable
-internal fun OnlineSceneInline(enabled: Boolean, dark: Boolean, onCard: (String) -> Unit) {
+internal fun OnlineSceneInline(enabled: Boolean, dark: Boolean, onCard: (String, String) -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val callback by rememberUpdatedState(onCard)
@@ -232,21 +254,42 @@ internal fun OnlineSceneInline(enabled: Boolean, dark: Boolean, onCard: (String)
     var height by remember { mutableIntStateOf(232) }
     var lyrics by remember { mutableStateOf<LyricSelection?>(null) }
     var browser by remember { mutableStateOf<WebView?>(null) }
+    var rendererGone by remember { mutableStateOf(false) }
     fun style(view: WebView) {
         view.evaluateJavascript("window.setTheme?.($dark,$foreground,$surface,$accent,$enabled)", null)
     }
-    AndroidView(
-        modifier = Modifier.fillMaxWidth().height(height.dp),
-        factory = {
-            onlineWebView(ctx, { raw -> scope.launch { callback(raw) } },
-                { px -> scope.launch { height = px.coerceIn(156, 1200) } }, ::style,
-                onLyrics = { raw -> scope.launch { lyrics = LyricSelection.parse(raw) } })
-                .also { browser = it; it.loadUrl(sceneUrl()) }
-        },
-        onReset = null,
-        onRelease = { browser = null; it.closeScene() },
-        update = ::style,
-    )
+    if (rendererGone) {
+        TextButton(onClick = { rendererGone = false }) { Text("重新载入在线场景") }
+    } else {
+        AndroidView(
+            modifier = Modifier.fillMaxWidth().height(height.dp),
+            factory = {
+                FrameLayout(ctx).apply {
+                    val view = onlineWebView(ctx, { category, raw -> scope.launch { callback(category, raw) } },
+                        { px -> scope.launch { height = px.coerceIn(156, 1200) } }, ::style,
+                        onLyrics = { raw -> scope.launch { lyrics = LyricSelection.parse(raw) } },
+                        onRendererGone = {
+                            removeView(it)
+                            browser = null
+                            lyrics = null
+                            rendererGone = true
+                        })
+                    addView(view, FrameLayout.LayoutParams(-1, -1))
+                    browser = view
+                    view.loadUrl(sceneUrl())
+                }
+            },
+            onReset = null,
+            onRelease = { container ->
+                (container.getChildAt(0) as? WebView)?.let {
+                    container.removeView(it)
+                    it.closeScene()
+                }
+                browser = null
+            },
+            update = { container -> (container.getChildAt(0) as? WebView)?.let(::style) },
+        )
+    }
     lyrics?.let { selection ->
         LyricsDialog(selection, onDismiss = { lyrics = null }, onApply = { start, end ->
             browser?.evaluateJavascript("window.applyLyrics(${selection.token},$start,$end)", null)
@@ -257,18 +300,18 @@ internal fun OnlineSceneInline(enabled: Boolean, dark: Boolean, onCard: (String)
 
 internal suspend fun randomOnlineCard(ctx: Context, category: String, onNotice: (String) -> Unit): Bitmap {
     require(OnlinePlanCategories.any { it.first == "online_$category" })
-    try {
-        val bitmap = fetchRandomOnlineCard(ctx, category)
-        try { withContext(Dispatchers.IO) { OnlineCard.save(ctx, bitmap, category) } }
-        catch (error: CancellationException) { bitmap.recycle(); throw error }
-        catch (error: java.io.IOException) { onNotice("卡片已生成，缓存写入失败") }
-        return bitmap
+    val bitmap = try {
+        fetchRandomOnlineCard(ctx, category)
     } catch (error: Exception) {
-        if (error is CancellationException && error !is TimeoutCancellationException) throw error
+        if (error is CancellationException) throw error
         val cached = withContext(Dispatchers.IO) { OnlineCard.read(ctx, category) } ?: throw error
-        onNotice("在线来源暂时不可用，使用上次缓存")
+        onNotice("在线更新失败，使用上次缓存：${error.message.orEmpty().take(100)}")
         return cached
     }
+    try { withContext(Dispatchers.IO) { OnlineCard.save(ctx, bitmap, category) } }
+    catch (error: CancellationException) { bitmap.recycle(); throw error }
+    catch (_: Exception) { onNotice("卡片已生成，缓存写入失败") }
+    return bitmap
 }
 
 private suspend fun fetchRandomOnlineCard(ctx: Context, category: String): Bitmap {
@@ -278,19 +321,26 @@ private suspend fun fetchRandomOnlineCard(ctx: Context, category: String): Bitma
             withTimeout(70_000) {
                 suspendCancellableCoroutine<String> { result ->
                     val handler = android.os.Handler(android.os.Looper.getMainLooper())
-                    browser = onlineWebView(ctx, { encoded ->
+                    fun fail(message: String) = handler.post {
+                        if (result.isActive) result.resumeWithException(IllegalStateException(message))
+                    }
+                    browser = onlineWebView(ctx, { selected, encoded ->
                         handler.post {
-                            if (result.isActive) {
-                                if (encoded.isEmpty()) result.resumeWithException(IllegalStateException("此类别暂时没有可用的在线卡片"))
-                                else result.resume(encoded)
-                            }
+                            if (result.isActive && selected == category) result.resume(encoded)
                         }
                     }, onReady = { view ->
-                        view.evaluateJavascript("window.drawRandom('$category')", null)
+                        view.evaluateJavascript("typeof window.drawRandom === 'function' && (window.drawRandom('$category'), true)") {
+                            if (it != "true") fail("在线卡片脚本未能加载")
+                        }
+                    }, onError = { fail(it) }, onRendererGone = {
+                        browser = null
+                        fail("在线卡片渲染进程已退出")
                     })
                     browser!!.loadUrl(sceneUrl(scheduled = true))
                 }
             }
+        } catch (error: TimeoutCancellationException) {
+            throw IllegalStateException("在线卡片获取超时", error)
         } finally { browser?.closeScene() }
     }
     return withContext(Dispatchers.Default) { OnlineCard.decode(raw) }
