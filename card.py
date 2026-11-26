@@ -127,8 +127,11 @@ class CardService:
             self._note_cache = {}
         try:
             self._cities = json.loads((self.data_dir / "cities.json").read_text(encoding="utf-8"))
-        except Exception:
-            self._cities = []
+        except (OSError, ValueError):
+            try:
+                self._cities = json.loads((self.base / "data" / "cities.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                self._cities = []
         self.cfg = self._load_cfg()
         self.history = self._load_history()
         # 上次 AI 生成的图（存在配置里，重启后还能预览/直接推送）
@@ -905,8 +908,6 @@ class CardService:
         # 先决定信息带要有几行：没有的行就不画，整条带子跟着缩，不拿占位文字凑数
         gps = meta.get("gps")
         place = self.nearest_city(gps[0], gps[1]) if gps else ""
-        if not place and gps:
-            place = f"{gps[0]:.2f}, {gps[1]:.2f}"
 
         _pf = self.cfg.get("photo_fields") or {}
         _on = lambda k: bool(_pf.get(k, True))
@@ -916,7 +917,7 @@ class CardService:
         params = [meta.get(k) for k in ("focal", "aperture", "shutter", "iso")]
         params = [x for x in params if x]
 
-        details = [line for line in ("  ".join(params) if _show_params else "", place if _show_cam else "") if line]
+        details = [line for line in ("  ".join(params) if _show_params else "",) if line]
         # 信息带显示"拍摄当天"的天气（历史日期走存档接口，今天用实时）
         try:
             wx_txt = self.weather_on(meta.get("taken").date()) if (meta.get("taken") and _show_wx) else ""
@@ -926,18 +927,19 @@ class CardService:
 
         # 信息带：左右边距、字号、行距跟 card_render 的版式规范走（M / 行距 24）
         has_header = bool(_show_date or _show_time or camera)
-        if not (has_header or details or wx_txt):
+        if not (has_header or details or wx_txt or place):
             artwork(H).save(out)
             return out
         margin = R.M
         width = W - 2 * margin
-        date_font = R.font("bold", 21)
+        date_font = R.font("bold", 19)
         camera_font = R.font("bold", 19)
-        detail_font = R.font("light", 19)
-        gap = int(6 * R._LINE)
+        detail_font = R.font("light", 16)
+        gap = int(3 * R._LINE)
         head_height = max(date_font.size, camera_font.size) + gap
         row_height = detail_font.size + gap
-        band = 18 + (head_height if has_header else 0) + row_height * (len(details) + bool(wx_txt))
+        right_detail = " · ".join(x for x in (place, wx_txt) if x)
+        band = 14 + (head_height if has_header else 0) + row_height * bool(details or right_detail)
         photo_h = H - band
         canvas = Image.new("RGB", (W, H), WHITE)
         canvas.paste(image_tone.panel_preview(artwork(photo_h)), (0, 0))
@@ -966,7 +968,7 @@ class CardService:
                     hi = mid - 1
             return text[:lo] + "…"
 
-        y = photo_h + 10
+        y = photo_h + 8
         if has_header:
             date_time = "  ".join(x for x in (
                 f"{_date_txt} {WEEKDAYS[taken.weekday()]}" if _show_date else "",
@@ -978,14 +980,20 @@ class CardService:
             d.text((W - margin, y), fit(camera, camera_font, right_width), font=camera_font, fill=BLACK, anchor="ra")
             y += head_height
 
-        for line in details:
-            d.text((margin, y), fit(line, detail_font, width), font=detail_font, fill=BLACK)
-            y += row_height
-        if wx_txt:
-            d.text((W - margin, y), fit(wx_txt, detail_font, width), font=detail_font, fill=BLACK, anchor="ra")
+        if details or right_detail:
+            right_width = min(d.textlength(right_detail, font=detail_font), width * .55 if details else width)
+            if details:
+                left_width = width - right_width - (12 if right_detail else 0)
+                d.text((margin, y), fit(details[0], detail_font, left_width),
+                       font=detail_font, fill=BLACK)
+            if right_detail:
+                d.text((W - margin, y), fit(right_detail, detail_font, right_width),
+                       font=detail_font, fill=BLACK, anchor="ra")
 
         # 照片区继续抖动，信息带吸附成 6 色（否则白底上会飘彩色噪点）
-        canvas = R.snap_palette(canvas, keep=[(0, 0, W, photo_h)])
+        band_pixels = canvas.crop((0, photo_h, W, H)).convert("L")
+        band_pixels = band_pixels.point(lambda value: 255 if value >= 128 else 0).convert("RGB")
+        canvas.paste(band_pixels, (0, photo_h))
         canvas.save(out)
         return out
 

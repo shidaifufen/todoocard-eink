@@ -9,10 +9,10 @@
 
 ## 安卓版（原生 Kotlin）
 
-- 安装包 [Android 1.8.4](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.8.4-android)。使用固定签名，可覆盖升级已采用该签名的版本。安装后可在「设置 → 在线升级」检查并安装后续正式版。
+- 安装包 [Android 1.8.5](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.8.5-android)。使用固定签名，可覆盖升级已采用该签名的版本。安装后可在「设置 → 在线升级」检查并安装后续正式版。
 - 源码：`android/`；构建：push 到 main 触发 `.github/workflows/build-android.yml`
 - 功能：卡片模板、照片裁切与调色、相册、每日计划与发送历史、配对后等广播推送、Android 系统分享与跨窗口拖放图片
-- 荣耀任意门由 MagicOS 推荐服务。土豆片的厂商服务接入及 MagicOS 11 真机验证待完成。[荣耀任意门说明](https://www.honor.com/cn/support/content/zh-cn15868678/)
+- 荣耀任意门由 MagicOS 推荐服务。土豆片已接入 Android 系统图片分享入口，任意门的厂商级独立服务仍需荣耀官方推荐服务接入。[荣耀任意门说明](https://www.honor.com/cn/support/content/zh-cn15868678/)
 - 交接与真机调试：见 [HANDOFF-ANDROID.md](HANDOFF-ANDROID.md)
 
 ### 在线场景与看板版式
@@ -20,6 +20,8 @@
 在卡片列表打开「在线场景」，可按名称搜索或随手抽一张。音乐使用 Apple Music 封面，「大封面＋一句」可选一行歌词，「封面＋歌词」点选起止行后自动选中中间各行。歌词来自 LRCLIB。电影海报铺满卡片，底部显示片名和上映年份。计划中可分别选择随机音乐封面、电影海报、英语短语和成语。
 
 先升级一次应用，之后修改引擎支持的布局无需重新打包。进入 **设置 → 外观 → 看板版式包 → 从 GitHub 导入 / 更新**，粘贴公开的 JSON 文件链接，获取并预览后应用。也可以下载 JSON 后选择“导入版式”。相册、内容、设备、计划及密钥与版式单独保存；手动和定时推送共用导入版式。
+
+Android 1.8.6 起，「设置 → 外观 → 看板版式包」可检查上次使用的 GitHub 链接，预览更新并确认应用，也可预览恢复最近 12 份本机版式记录。「设置 → 外观」管理默认字号、间距和照片信息带，「数据源」管理默认联网方式和 API 密钥，「调色预设」提供自然、鲜明、插画净色、黑白的六色预览与单项恢复。照片和在线场景可分别指定默认预设，卡片编辑页可即时调整。联网解析照片城市时会向 Photon 发送取整后的拍摄坐标，可在「外观」关闭联网解析。
 
 - [默认版式](https://github.com/shidaifufen/todoocard-eink/blob/main/layouts/default.json)
 - [蓝色天气](https://github.com/shidaifufen/todoocard-eink/blob/main/layouts/weather-blue.json)
