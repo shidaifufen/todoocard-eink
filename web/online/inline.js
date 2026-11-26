@@ -3,13 +3,18 @@ const canvas = document.querySelector('#card');
 const root = document.querySelector('#picker');
 let automatic = false;
 let imageBounds;
+const options = new URLSearchParams(location.search);
+let presets;
+try { presets = Object.entries(JSON.parse(options.get('presets') || '{}')); } catch {}
 function sendCard() {
   const area = imageBounds ? [imageBounds.x, imageBounds.y, imageBounds.width, imageBounds.height].join(',') : '';
   window.TodooScene.card(area + '|' + canvas.toDataURL('image/png').split(',')[1]);
 }
 const picker = mountOnline(root, canvas, {
   showPrompt: false,
-  remember: !new URLSearchParams(location.search).has('scheduled'),
+  remember: options.get('scheduled') !== '1',
+  presets: presets?.length ? presets : undefined,
+  initialTone: presets?.find(([name]) => name === options.get('defaultPreset'))?.[1],
   openLyrics: selection => window.TodooScene.lyrics(JSON.stringify(selection)),
   onCard: (_canvas, _item, bounds) => {
     imageBounds = bounds;

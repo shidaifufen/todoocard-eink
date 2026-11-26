@@ -232,6 +232,11 @@ object PlanStore {
 
     val defaultPhotoTone: PhotoEdit.Params get() = photoPreset(defaultPhotoPreset)
 
+    var defaultOnlinePhotoPreset: PhotoEdit.Preset
+        get() = PhotoEdit.Preset.entries.firstOrNull { it.name == sp_global.getString("defaultOnlinePhotoPreset", null) }
+            ?: PhotoEdit.Preset.VIVID
+        set(value) { sp_global.edit().putString("defaultOnlinePhotoPreset", value.name).apply() }
+
     fun photoPreset(preset: PhotoEdit.Preset) = readPhotoEdit("photoPreset_${preset.name}", preset.defaults)
     fun savePhotoPreset(preset: PhotoEdit.Preset, value: PhotoEdit.Params) =
         savePhotoEdit("photoPreset_${preset.name}", value)

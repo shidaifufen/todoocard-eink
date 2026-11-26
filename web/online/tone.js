@@ -73,21 +73,55 @@ export function analyzeCover(artwork) {
 }
 
 export function tuneImage(context, x, y, width, height, settings) {
-  const { brightness, contrast, saturation, shadows = 0, snap } = settings;
+  const { brightness, contrast, saturation, shadows = 0, snap, hue = 0, exposure = 0,
+    gamma = 1, sharpness = 0 } = settings;
   const image = context.getImageData(x,y,width,height);
   const pixels = image.data;
   const clamp = v => Math.max(0, Math.min(255,v));
   const gain = contrast / 100;
   const offset = 128 * (1-gain) + (brightness-100)*2.55;
+  const exposureGain = 2 ** exposure;
+  const angle = hue * Math.PI / 180;
+  const c = Math.cos(angle), s = Math.sin(angle), h = 1 - c;
+  const hueMatrix = [
+    .213*h+c-.213*s, .715*h-.715*s, .072*h+.928*s,
+    .213*h+.143*s, .715*h+c+.140*s, .072*h-.283*s,
+    .213*h-.787*s, .715*h+.715*s, .072*h+c+.072*s,
+  ];
   for (let i=0; i<pixels.length; i+=4) {
     const gray = .299*pixels[i] + .587*pixels[i+1] + .114*pixels[i+2];
-    const adjust = channel => clamp((gray + (channel-gray) * saturation/100)*gain + offset);
-    let r = adjust(pixels[i]), g = adjust(pixels[i+1]), b = adjust(pixels[i+2]);
+    const saturate = channel => gray + (channel-gray) * saturation/100;
+    let r = saturate(pixels[i]), g = saturate(pixels[i+1]), b = saturate(pixels[i+2]);
+    if (hue) [r, g, b] = [
+      hueMatrix[0]*r + hueMatrix[1]*g + hueMatrix[2]*b,
+      hueMatrix[3]*r + hueMatrix[4]*g + hueMatrix[5]*b,
+      hueMatrix[6]*r + hueMatrix[7]*g + hueMatrix[8]*b,
+    ];
+    const adjust = channel => {
+      const level = clamp(channel * exposureGain * gain + offset);
+      return gamma === 1 ? level : 255 * (level / 255) ** (1 / gamma);
+    };
+    r = adjust(r); g = adjust(g); b = adjust(b);
     if (shadows) {
       const luminance = (.299*r + .587*g + .114*b) / 255;
       const lift = shadows * 2.55 * luminance * (1 - luminance) ** 3;
       r = clamp(r + lift); g = clamp(g + lift); b = clamp(b + lift);
     }
+    pixels[i] = r; pixels[i+1] = g; pixels[i+2] = b;
+  }
+  if (sharpness && width > 2 && height > 2) {
+    const original = pixels.slice(), stride = width * 4;
+    for (let y = 1; y < height - 1; y++) for (let x = 1; x < width - 1; x++) {
+      const offset = y * stride + x * 4;
+      for (let channel = 0; channel < 3; channel++) {
+        const i = offset + channel;
+        const average = (original[i-4] + original[i+4] + original[i-stride] + original[i+stride]) / 4;
+        pixels[i] = original[i] + sharpness * (original[i] - average);
+      }
+    }
+  }
+  for (let i=0; snap && i<pixels.length; i+=4) {
+    const r = pixels[i], g = pixels[i+1], b = pixels[i+2];
     const chroma = Math.max(r,g,b)-Math.min(r,g,b);
     let ink;
     if (snap && chroma < snap * .45) {
@@ -119,7 +153,7 @@ export function finishGraphics(context, artwork) {
   context.putImageData(image,0,0);
 }
 
-export function mountTone(host, initial, onChange) {
+export function mountTone(host, initial, onChange, choices = [['原色', neutral], ['鲜明', vivid], ['净色', {...vivid, snap: 75}]]) {
   let value = { ...neutral, ...initial };
   host.innerHTML = '<summary>图片调色</summary><div class="tone-presets"></div><div class="tone-sliders"></div>';
   const presets = host.querySelector('.tone-presets');
@@ -133,16 +167,17 @@ export function mountTone(host, initial, onChange) {
     }
     if (notify) onChange(value);
   }
-  for (const [label, preset] of [['原色', neutral], ['鲜明', vivid], ['净色', {...vivid, snap: 75}]]) {
+  for (const [label, preset] of choices) {
     const button = document.createElement('button');
     button.type = 'button'; button.textContent = label;
     button.onclick = () => update(preset);
     presets.append(button);
   }
-  for (const [key, label, min, max] of [
+  const slidersList = [
     ['brightness','亮度',65,145], ['contrast','对比度',65,160],
-    ['saturation','饱和度',0,180], ['shadows','暗部提亮',0,100], ['snap','杂色吸附',0,100],
-  ]) {
+    ['saturation','饱和度',0,200], ['shadows','暗部提亮',0,100], ['snap','杂色吸附',0,100],
+  ];
+  for (const [key, label, min, max] of slidersList) {
     const row = document.createElement('label');
     row.textContent = label + ' ';
     const output = document.createElement('output');

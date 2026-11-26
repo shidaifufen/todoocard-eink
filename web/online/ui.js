@@ -3,7 +3,7 @@ import { analyzeCover, mountTone, neutral, panelColors, vivid } from './tone.js'
 import { paint, paintPrompt } from './render.js';
 
 export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {}, showPrompt = true, openLyrics,
-  remember = false } = {}) {
+  remember = false, initialTone = vivid, presets } = {}) {
   root.innerHTML = [
     '<div class="online-picker">',
     '<label>类型<select aria-label="类型" data-online="kind"></select></label>',
@@ -32,7 +32,7 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
   const seen = new Set();
   const current = () => root.isConnected;
   let ready = false;
-  let anchor = -1, end = -1, selectingEnd = false, tone = vivid, redraw;
+  let anchor = -1, end = -1, selectingEnd = false, tone = initialTone, redraw;
   const cacheKey = 'todocard-online-editor-v1';
   let cache = {};
   try { if (remember) cache = JSON.parse(localStorage.getItem(cacheKey)) || {}; } catch {}
@@ -41,7 +41,7 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
     tone = next;
     cancelAnimationFrame(redraw);
     redraw = requestAnimationFrame(draw);
-  });
+  }, presets);
 
   function persist() {
     if (!remember) return;

@@ -740,7 +740,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                         device?.device?.address, status, theme,
                         defaultLayout = PlanStore.defaultLayout(ctx, card),
                         onDefaultLayout = { PlanStore.saveCard(ctx, it); card = it },
-                        onDefaultSource = { sourceRevision++ },
+                        onDefaultSource = { onlineOverride = null; sourceRevision++ },
                         onTheme = {
                             theme = it
                             themePrefs.edit().putString("theme", it.name).apply()

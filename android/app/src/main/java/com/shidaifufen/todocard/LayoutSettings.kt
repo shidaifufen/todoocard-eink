@@ -37,6 +37,8 @@ internal fun LayoutSettings() {
     var reset by remember { mutableStateOf(false) }
     var exportText by remember { mutableStateOf("") }
     val linkPrefs = remember(ctx) { ctx.getSharedPreferences("layout_links_v1", 0) }
+    var autoCheck by remember { mutableStateOf(linkPrefs.getBoolean("autoCheck", true)) }
+    var availableUpdate by remember { mutableStateOf<LayoutPack.Pack?>(null) }
     var linkDialog by remember { mutableStateOf(false) }
     var link by remember {
         val saved = linkPrefs.getString("last", null)
@@ -81,11 +83,34 @@ internal fun LayoutSettings() {
     // Reading revision makes the status update when a pack is applied from this dialog.
     val packName = remember(revision) { LayoutStore.name() }
     val changed = remember(revision) { LayoutStore.changedKinds() }
+    LaunchedEffect(autoCheck) {
+        if (!autoCheck) return@LaunchedEffect
+        val subscribed = linkPrefs.getString("last", null) ?: LayoutDownload.DEFAULT_URL
+        try {
+            val pack = withContext(Dispatchers.IO) { LayoutDownload.fetch(subscribed) }
+            availableUpdate = pack.takeUnless(LayoutStore::matches)
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // The manual check can retry and report network errors.
+        }
+    }
     SectionCard(title = "看板版式包") {
         Text(packName, fontSize = 15.sp)
         Text(if (changed.isEmpty()) "正在使用内置版式" else "已覆盖：${changed.joinToString { templateName(it) }}", fontSize = 12.sp, color = StudioMuted)
         Text("导入 JSON 调整排版，内容、相册、设备和计划单独保存。只替换包内列出的卡片。", fontSize = 12.sp, color = StudioMuted)
         OutlinedButton(enabled = !busy, onClick = { linkError = ""; linkDialog = true }) { Text("检查 GitHub 更新 / 导入版式") }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text("打开版式设置时检查更新", Modifier.weight(1f))
+            Switch(autoCheck, onCheckedChange = {
+                autoCheck = it
+                linkPrefs.edit().putBoolean("autoCheck", it).apply()
+            })
+        }
+        availableUpdate?.takeUnless { LayoutStore.matches(it) }?.let { update ->
+            TextButton(enabled = !busy, onClick = { pending = update }) { Text("预览云端更新") }
+        }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(enabled = !busy, onClick = { importFile.launch(arrayOf("application/json", "text/*", "application/octet-stream")) }) { Text("导入版式") }
             OutlinedButton(enabled = !busy, onClick = {

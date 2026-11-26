@@ -153,6 +153,25 @@ private fun WebView.closeScene() {
     destroy()
 }
 
+private fun sceneUrl(scheduled: Boolean = false): String {
+    val presets = JSONObject().apply {
+        PhotoEdit.Preset.entries.forEach { preset ->
+            val tone = PlanStore.photoPreset(preset)
+            put(preset.label, JSONObject()
+                .put("brightness", (tone.brightness ?: 1f) * 100f)
+                .put("contrast", tone.contrast * 100f).put("saturation", tone.saturation * 100f)
+                .put("shadows", tone.shadows * 100f).put("snap", tone.snapThreshold)
+                .put("hue", tone.hue).put("exposure", tone.exposure)
+                .put("gamma", tone.gamma).put("sharpness", tone.sharpness))
+        }
+    }
+    return android.net.Uri.parse("$LOCAL/online/index.html").buildUpon()
+        .appendQueryParameter("scheduled", if (scheduled) "1" else "0")
+        .appendQueryParameter("presets", presets.toString())
+        .appendQueryParameter("defaultPreset", PlanStore.defaultOnlinePhotoPreset.label)
+        .build().toString()
+}
+
 private data class LyricSelection(val token: Int, val lines: List<String>, val anchor: Int, val end: Int, val single: Boolean) {
     companion object {
         fun parse(raw: String): LyricSelection? = runCatching {
@@ -222,7 +241,7 @@ internal fun OnlineSceneInline(enabled: Boolean, dark: Boolean, onCard: (String)
             onlineWebView(ctx, { raw -> scope.launch { callback(raw) } },
                 { px -> scope.launch { height = px.coerceIn(156, 1200) } }, ::style,
                 onLyrics = { raw -> scope.launch { lyrics = LyricSelection.parse(raw) } })
-                .also { browser = it; it.loadUrl("$LOCAL/online/index.html") }
+                .also { browser = it; it.loadUrl(sceneUrl()) }
         },
         onReset = null,
         onRelease = { browser = null; it.closeScene() },
@@ -269,7 +288,7 @@ private suspend fun fetchRandomOnlineCard(ctx: Context, category: String): Bitma
                     }, onReady = { view ->
                         view.evaluateJavascript("window.drawRandom('$category')", null)
                     })
-                    browser!!.loadUrl("$LOCAL/online/index.html?scheduled=1")
+                    browser!!.loadUrl(sceneUrl(scheduled = true))
                 }
             }
         } finally { browser?.closeScene() }

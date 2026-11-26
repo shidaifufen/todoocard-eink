@@ -345,6 +345,7 @@ private fun PhotoPresetSettings() {
     val ctx = LocalContext.current
     var preset by remember { mutableStateOf(PlanStore.defaultPhotoPreset) }
     var defaultPreset by remember { mutableStateOf(PlanStore.defaultPhotoPreset) }
+    var onlinePreset by remember { mutableStateOf(PlanStore.defaultOnlinePhotoPreset) }
     var tone by remember(preset) { mutableStateOf(PlanStore.photoPreset(preset)) }
     val preview by produceState<Bitmap?>(null, tone) {
         delay(120)
@@ -374,9 +375,13 @@ private fun PhotoPresetSettings() {
             TextButton(enabled = preset != defaultPreset, onClick = {
                 defaultPreset = preset
                 PlanStore.defaultPhotoPreset = preset
-            }) { Text(if (preset == defaultPreset) "当前默认" else "设为默认") }
+            }) { Text(if (preset == defaultPreset) "照片默认" else "设为照片默认") }
             TextButton(onClick = { update(preset.defaults) }) { Text("恢复预设默认") }
         }
+        TextButton(enabled = preset != onlinePreset, onClick = {
+            onlinePreset = preset
+            PlanStore.defaultOnlinePhotoPreset = preset
+        }) { Text(if (preset == onlinePreset) "在线场景默认" else "设为在线场景默认") }
         PhotoToneAdjustments(tone, ::update, showPresets = false)
         Adjustment("色相", tone.hue, -180f..180f, { update(tone.copy(hue = it)) }, "%+.0f°")
         Adjustment("杂色吸附", tone.snapThreshold.toFloat(), 0f..100f,
