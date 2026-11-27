@@ -10,7 +10,17 @@ import java.net.URLEncoder
 /** Public GitHub layout files only; uses no account credentials. */
 internal object LayoutDownload {
     private const val LAYOUT_ROOT = "https://raw.githubusercontent.com/shidaifufen/todoocard-eink/main/layouts"
-    data class Scene(val title: String, val group: String, val description: String, val url: String)
+    data class Scene(val title: String, val group: String, val description: String, val url: String) {
+        val searchText: String
+            get() {
+                val aliases = when (url.substringAfterLast('/')) {
+                    "profile-card.json" -> "工牌 胸牌 名牌"
+                    "history-note.json" -> "历史上的今天 历史上的今日"
+                    else -> ""
+                }
+                return "$title $description $group $url $aliases"
+            }
+    }
     private val hosts = setOf("github.com", "raw.githubusercontent.com", "objects.githubusercontent.com",
         "release-assets.githubusercontent.com", "github-releases.githubusercontent.com", "api.github.com")
 

@@ -48,6 +48,10 @@ internal object LayoutRender {
             "quote" to card.quote, "quoteBy" to card.quoteBy, "poemTitle" to card.poemTitle,
             "poemBy" to card.poemBy, "poemNote" to card.poemNote, "poemText" to card.poemLines.joinToString("\n"),
             "customTitle" to card.customTitle, "customText" to card.customLines.joinToString("\n"),
+            "historyDate" to (card.history?.date() ?: date.toString().takeLast(5).replace('-', '.')),
+            "historyTitle" to (card.history?.title ?: "历史上的今天"),
+            "historyText" to (card.history?.description ?: "联网后获取当天的历史事件。"),
+            "historySource" to (card.history?.source ?: "等待联网更新"),
             "todoCount" to card.todos.size.toString(), "yearPercent" to (date.dayOfYear * 100 / date.lengthOfYear()).toString())
     }
     private fun bind(text: String, values: Map<String, String>) = Regex("\\{\\{([A-Za-z][A-Za-z0-9]*)\\}\\}").replace(text) {

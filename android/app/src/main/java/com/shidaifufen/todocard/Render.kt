@@ -62,6 +62,7 @@ object Render {
         val elementSpacing: Float = 1f,
         val customBlocks: List<CustomBlock> = emptyList(),
         val customAccent: String = "red",
+        val history: HistoryToday.Event? = null,
         val customComposition: Boolean = false,
     )
 

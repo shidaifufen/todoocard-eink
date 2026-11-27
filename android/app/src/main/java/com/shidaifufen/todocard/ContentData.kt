@@ -17,7 +17,7 @@ object ContentData {
         val note: String,
     )
 
-    private fun getJson(url: String): JSONObject {
+    internal fun getJson(url: String, limit: Int = 512 * 1024): JSONObject {
         val connection = URL(url).openConnection() as HttpURLConnection
         connection.connectTimeout = 8_000
         connection.readTimeout = 8_000
@@ -25,7 +25,17 @@ object ContentData {
         connection.setRequestProperty("User-Agent", "TodooCard Android")
         return try {
             check(connection.responseCode in 200..299) { "内容服务暂时不可用" }
-            connection.inputStream.bufferedReader().use { JSONObject(it.readText()) }
+            connection.inputStream.use { input ->
+                val bytes = java.io.ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                var count = input.read(buffer)
+                while (count >= 0) {
+                    check(bytes.size() + count <= limit) { "内容服务返回过多数据" }
+                    bytes.write(buffer, 0, count)
+                    count = input.read(buffer)
+                }
+                JSONObject(bytes.toByteArray().toString(Charsets.UTF_8))
+            }
         } finally { connection.disconnect() }
     }
 

@@ -19,6 +19,7 @@ class LayoutDownloadTest {
         assertTrue(scenes[1].url.endsWith("/layouts/daily-brief.json"))
         assertEquals("天气与待办", scenes[1].description)
         assertEquals("学习与创作", scenes[0].group)
+        assertTrue(scenes[0].searchText.contains("工牌"))
     }
 
     @Test fun acceptsRepositoryAndReleaseDownloadLinks() {

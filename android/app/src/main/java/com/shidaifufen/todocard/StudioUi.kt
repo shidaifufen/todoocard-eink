@@ -18,6 +18,8 @@ import androidx.compose.material.icons.outlined.BluetoothSearching
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material3.*
@@ -115,6 +117,10 @@ internal fun StudioScreen(
     var layoutOpen by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
     var managingBoards by remember { mutableStateOf(false) }
+    var sorting by remember { mutableStateOf(false) }
+    var cardSearch by remember { mutableStateOf("") }
+    var sortError by remember { mutableStateOf("") }
+    var savingOrder by remember { mutableStateOf(false) }
     var editingBoard by remember { mutableStateOf(false) }
     var savingBoard by remember { mutableStateOf(false) }
     var boardSaveError by remember { mutableStateOf("") }
@@ -124,6 +130,36 @@ internal fun StudioScreen(
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val cards = rememberLazyListState()
+    val ctx = LocalContext.current
+    var savedOrder by remember(ctx) { mutableStateOf(CloudBoards.savedOrder(ctx)) }
+    val boardById = boards.associateBy { it.id }
+    val titles = TEMPLATES.toMap()
+    val newBoards = boards.map { it.id }.filterNot { it in savedOrder }
+    val order = CloudBoards.ordered(boards.map { it.id } + TEMPLATES.map { it.first }, newBoards + savedOrder)
+    val visibleCards = if (sorting || cardSearch.isBlank()) order else order.filter { key ->
+        val name = boardById[key]?.title ?: titles.getValue(key)
+        name.contains(cardSearch.trim(), ignoreCase = true)
+    }
+    fun move(index: Int, offset: Int) {
+        if (savingOrder) return
+        val next = order.toMutableList()
+        val item = next.removeAt(index)
+        next.add(index + offset, item)
+        savingOrder = true
+        sortError = ""
+        scope.launch {
+            try {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { CloudBoards.saveOrder(ctx, next) }
+                savedOrder = next
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                sortError = failure.message ?: "卡片顺序保存失败"
+            } finally {
+                savingOrder = false
+            }
+        }
+    }
     val hasOnlineSources = if (selectedBoard != null) {
         LayoutStore.sources(kind, card, selectedBoard.template).orEmpty().isNotEmpty()
     } else {
@@ -132,8 +168,7 @@ internal fun StudioScreen(
     }
     LaunchedEffect(drawer.targetValue) {
         if (drawer.targetValue == DrawerValue.Open) {
-            val selected = if (selectedBoard != null) boards.indexOfFirst { it.id == selectedBoard.id }
-                else boards.size + TEMPLATES.indexOfFirst { it.first == kind }.coerceAtLeast(0)
+            val selected = visibleCards.indexOf(selectedBoard?.id ?: kind)
             if (selected >= 0 && cards.layoutInfo.visibleItemsInfo.none { it.index == selected }) cards.scrollToItem(selected)
         }
     }
@@ -144,29 +179,51 @@ internal fun StudioScreen(
                     Text("切换卡片", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                     IconButton(onClick = { scope.launch { drawer.close() } }) { Icon(Icons.Outlined.Close, "收起侧栏") }
                 }
-                FilledTonalButton(onClick = { managingBoards = true }, enabled = !busy,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                    Text("云端看板")
+                Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FilledTonalButton(onClick = { managingBoards = true }, enabled = !busy && !savingOrder,
+                        modifier = Modifier.weight(1f)) { Text("云端看板") }
+                    TextButton(onClick = { sorting = !sorting }, enabled = !savingOrder) {
+                        Text(if (sorting) "完成" else "排序")
+                    }
+                }
+                if (sortError.isNotBlank()) Text(sortError, color = StudioRed, modifier = Modifier.padding(horizontal = 12.dp))
+                if (!sorting) {
+                    OutlinedTextField(cardSearch, {
+                        cardSearch = it
+                        scope.launch { cards.scrollToItem(0) }
+                    }, label = { Text("搜索卡片") }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp))
                 }
                 LazyColumn(state = cards, modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    items(boards, key = { it.id }) { board ->
-                        NavigationDrawerItem(label = { Text(board.title, maxLines = 2) },
-                            selected = selectedBoard?.id == board.id, onClick = {
-                                if (!busy) {
-                                    onBoard(board)
-                                    scope.launch { drawer.close() }
-                                }
-                            })
+                    if (visibleCards.isEmpty()) item {
+                        Text("没有匹配的卡片", color = StudioMuted, modifier = Modifier.padding(12.dp))
                     }
-                    items(TEMPLATES, key = { it.first }) { (key, title) ->
-                        NavigationDrawerItem(label = { Text(title) }, selected = selectedBoard == null && kind == key, onClick = {
-                            if (!busy) {
-                                onKind(key)
-                                scope.launch { drawer.close() }
+                    items(visibleCards, key = { it }) { key ->
+                        val board = boardById[key]
+                        val title = board?.title ?: titles.getValue(key)
+                        if (sorting) {
+                            val index = order.indexOf(key)
+                            Row(Modifier.heightIn(min = 48.dp).padding(start = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Text(title, Modifier.weight(1f), maxLines = 2)
+                                IconButton(enabled = index > 0 && !savingOrder, onClick = { move(index, -1) }) {
+                                    Icon(Icons.Outlined.KeyboardArrowUp, "上移$title")
+                                }
+                                IconButton(enabled = index < order.lastIndex && !savingOrder, onClick = { move(index, 1) }) {
+                                    Icon(Icons.Outlined.KeyboardArrowDown, "下移$title")
+                                }
                             }
-                        })
+                        } else {
+                            NavigationDrawerItem(label = { Text(title, maxLines = 2) },
+                                selected = (selectedBoard?.id ?: kind) == key, onClick = {
+                                    if (!busy) {
+                                        if (board != null) onBoard(board) else onKind(key)
+                                        scope.launch { drawer.close() }
+                                    }
+                                })
+                        }
                     }
                 }
             }
@@ -323,10 +380,9 @@ internal fun StudioScreen(
     }
     }
     }
-    if (managingBoards) CloudBoardManager(boards, onSaveBoards, onSelect = {
-        onBoard(it)
-        scope.launch { drawer.close() }
-    }, onDismiss = { managingBoards = false })
+    if (managingBoards) CloudBoardManager(order.mapNotNull(boardById::get), onSaveBoards,
+        onSort = { managingBoards = false; sorting = true },
+        onDismiss = { managingBoards = false })
     if (editingBoard && selectedBoard != null) {
         LayoutPreview(selectedBoard.pack, onDismiss = { if (!savingBoard) editingBoard = false }, onApply = { pack ->
             savingBoard = true

@@ -121,6 +121,12 @@ Android、Windows、macOS 和纯网页版支持同一套 JSON。Android 从「�
 
 `sources` 可显式声明 weather / quote / poem，渲染器还会根据绑定字段、图表和组合组件推断依赖。进入卡片时按缓存时效后台刷新；手动刷新和定时推送沿用应用的数据准备规则。用户选择“手动内容”时不联网替换。导入配置不主动请求网络。
 
+### 安卓历史数据
+
+Android 1.8.11 起可声明 `sources: ["history"]`，或在文字中绑定 `{{historyDate}}`、`{{historyTitle}}`、`{{historyText}}`、`{{historySource}}`。应用按设备本地日期读取百度百科「历史上的今天」，中文接口不可用时尝试维基百科英文数据。同一天点击「换一张」会切换已下载的事件。断网时可显示上次加载的事件，卡面保留其实际日期。版式 JSON 只声明来源名称和字段，接口地址由应用管理。
+
+官方「历史一页」沿用原来的 JSON 链接。新版安卓会把旧样例中的历史日期、事件和来源转换为动态字段，兼容已添加的看板。桌面和网页仍可读取原始静态版式。
+
 ## 给后续开发者
 
 版式修改优先提交 `layouts/*.json`，直接把文件交给用户导入。内置默认改动同步到 `android/app/src/main/assets/layouts/default.json`，供新安装使用。更改独立 JSON 不需要触发 Android 构建；更改内置资产或引擎才需要构建 APK。保持 schemaVersion 1 兼容；添加新能力需要引擎版本或新的 schemaVersion。

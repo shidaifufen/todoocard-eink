@@ -18,6 +18,19 @@ internal object CloudBoards {
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("cloud_boards", Context.MODE_PRIVATE)
 
+    fun savedOrder(ctx: Context): List<String> {
+        val order = runCatching { JSONArray(prefs(ctx).getString("sidebar_order", "[]")) }.getOrNull()
+            ?: return emptyList()
+        return (0 until order.length()).map { order.optString(it) }
+    }
+
+    fun saveOrder(ctx: Context, keys: List<String>) {
+        check(prefs(ctx).edit().putString("sidebar_order", JSONArray(keys).toString()).commit()) { "卡片顺序保存失败" }
+    }
+
+    fun ordered(available: List<String>, saved: List<String>): List<String> =
+        (saved.filter { it in available } + available).distinct()
+
     fun load(ctx: Context): List<Board> {
         val saved = runCatching { JSONArray(prefs(ctx).getString("boards", "[]")) }.getOrNull()
             ?: return emptyList()

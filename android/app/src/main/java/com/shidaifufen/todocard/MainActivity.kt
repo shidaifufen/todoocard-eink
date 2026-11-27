@@ -123,7 +123,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
     val onlineSaveMutex = remember { kotlinx.coroutines.sync.Mutex() }
     var onlineSequence by remember { mutableIntStateOf(0) }
     var onlineRevision by remember { mutableIntStateOf(0) }
-    var card by remember { mutableStateOf(PlanStore.card(ctx)) }
+    var card by remember { mutableStateOf(PlanStore.card(ctx).copy(history = HistoryToday.cached(ctx))) }
     var preview by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var photoPath by rememberSaveable { mutableStateOf(PlanStore.lastPhoto) }
     var photoLocationRevision by remember { mutableIntStateOf(0) }
@@ -253,7 +253,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                 if (kind in listOf("photo", "bing", "ai")) {
                     if (!photoReady) null else PhotoCard.render(photoPath, fields, edit, sixColors = true)
                 } else if (kind == "online") OnlineCard.read(ctx)
-                else Render.render(card.copy(kind = kind), selectedBoard?.template)
+                else Render.render(card.copy(kind = kind, history = HistoryToday.cached(ctx)), selectedBoard?.template)
             }.getOrNull()
         }
     }
@@ -525,7 +525,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                         PhotoCard.render(sentPath, sentFields, sentEdit)
                     } else if (sentKind == "online") {
                         checkNotNull(OnlineCard.read(ctx)) { "请先生成在线卡片" }
-                    } else Render.render(sentCard, sentBoard?.template)
+                    } else Render.render(sentCard.copy(history = HistoryToday.cached(ctx)), sentBoard?.template)
                     val output = java.io.File.createTempFile("push_", ".png", ctx.cacheDir)
                     try {
                         output.outputStream().use {

@@ -449,8 +449,6 @@ internal fun SettingsScreen(
             }
         }
         Spacer(Modifier.height(18.dp))
-        AppUpdateRow()
-        Spacer(Modifier.height(12.dp))
         when (section) {
             0 -> {
                 Text("我的卡片", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
@@ -549,6 +547,8 @@ internal fun SettingsScreen(
             3 -> PhotoPresetSettings()
             5 -> WidgetShuffleSettings()
             else -> {
+                AppUpdateRow()
+                Spacer(Modifier.height(12.dp))
                 Text("土豆片", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
                 Text("六色墨水屏卡片工坊", fontSize = 14.sp)

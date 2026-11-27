@@ -205,12 +205,24 @@ internal fun LayoutPreview(
     var preview by remember(edited, kind) { mutableStateOf<Bitmap?>(null) }
     var error by remember(edited, kind) { mutableStateOf("") }
     var ready by remember(edited, kind) { mutableStateOf(false) }
-    LaunchedEffect(edited, kind) {
+    var history by remember(pack) { mutableStateOf(HistoryToday.cached(ctx)) }
+    LaunchedEffect(pack) {
+        if (pack.templates.values.any { "history" in it.sources }) {
+            try {
+                history = HistoryToday.update(ctx, force = false)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // The preview can still render using the last fetched event.
+            }
+        }
+    }
+    LaunchedEffect(edited, kind, history) {
         ready = false; error = ""
         val result = withContext(Dispatchers.Default) {
             runCatching {
                 // Validate rendering for every changed card, not only the selected preview.
-                val card = PlanStore.card(ctx)
+                val card = PlanStore.card(ctx).copy(history = history)
                 edited.templates.filterKeys { it != kind }.forEach { (k, t) -> LayoutRender.render(card.copy(kind = k), t).recycle() }
                 LayoutRender.render(card.copy(kind = kind), edited.templates.getValue(kind))
             }

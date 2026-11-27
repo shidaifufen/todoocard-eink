@@ -20,6 +20,7 @@ object CardSources {
     private fun key(resource: String, card: Render.Card) = if (resource == "weather")
         "weather:" + card.weatherLatitude + ":" + card.weatherLongitude else resource
     private fun expired(ctx: Context, resource: String, card: Render.Card): Boolean {
+        if (resource == "history") return HistoryToday.cached(ctx)?.day != java.time.LocalDate.now()
         val at = ctx.getSharedPreferences("source_cache_v2", 0).getLong(key(resource, card), 0)
         val ttl = if (resource == "weather") 20 * 60_000L else 24 * 60 * 60_000L
         return System.currentTimeMillis() - at !in 0 until ttl
@@ -31,6 +32,7 @@ object CardSources {
 
     /** Only merge fetched fields; preserve edits made while requests were in flight. */
     fun merge(current: Render.Card, data: Render.Card, kind: String): Render.Card = when (kind) {
+        "history" -> current.copy(history = data.history)
         "quote" -> current.copy(quote = data.quote, quoteBy = data.quoteBy)
         "poem" -> current.copy(poemTitle = data.poemTitle, poemBy = data.poemBy,
             poemLines = data.poemLines, poemNote = data.poemNote)
@@ -55,6 +57,7 @@ object CardSources {
     private fun mergeResources(current: Render.Card, requested: Render.Card, fetched: Render.Card,
                                resources: List<String>): Render.Card {
         fun same(resource: String) = when (resource) {
+            "history" -> true
             "quote" -> current.quote == requested.quote && current.quoteBy == requested.quoteBy
             "poem" -> current.poemTitle == requested.poemTitle && current.poemBy == requested.poemBy &&
                 current.poemLines == requested.poemLines && current.poemNote == requested.poemNote
@@ -77,6 +80,10 @@ object CardSources {
         try {
             var result = card
             for (resource in resources(kind, card, template)) {
+                if (resource == "history") {
+                    result = result.copy(history = HistoryToday.update(ctx, force))
+                    continue
+                }
                 val saved = PlanStore.card(ctx)
                 val prefs = ctx.getSharedPreferences("source_cache_v2", 0)
                 // Requests already completed after this caller started are shared, including manual refreshes.
@@ -169,11 +176,12 @@ object CardSources {
         fetch: suspend (Context, String, Render.Card, Boolean) -> Render.Card =
             { context, template, card, force -> fresh(context, template, card, force) }): Render.Card {
         // Every scheduled send refreshes online content, even inside the normal UI cache TTL.
-        return try { fetch(ctx, kind, PlanStore.card(ctx), true) }
+        val saved = PlanStore.card(ctx).copy(history = HistoryToday.cached(ctx))
+        return try { fetch(ctx, kind, saved, true) }
         catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
         catch (error: Exception) {
             onNotice("在线更新失败，使用已保存内容：${error.message.orEmpty().take(100)}")
-            PlanStore.card(ctx)
+            PlanStore.card(ctx).copy(history = HistoryToday.cached(ctx))
         }
     }
 }

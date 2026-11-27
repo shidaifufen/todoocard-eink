@@ -12,11 +12,12 @@ object LayoutPack {
     val kinds = setOf("summary", "quote", "todo", "progress", "calendar", "weather", "weather2", "countdown", "poem", "custom")
     private val types = setOf("rect", "text", "list", "weatherIcon", "weatherHours", "forecastBars", "block", "builtin")
     private val colors = setOf("white", "black", "red", "blue", "green", "yellow", "aqiColor", "aqiInk")
-    private val sources = setOf("weather", "quote", "poem")
+    private val sources = setOf("weather", "quote", "poem", "history")
     internal val fields = setOf("weatherCity", "weatherText", "weatherTemp", "weatherHigh", "weatherLow", "weatherAqi",
         "weatherHumidity", "weatherFeels", "weatherSunrise", "weatherSunset", "weatherUpdated", "wearAdvice",
         "date", "time", "week", "year", "month", "day", "quote", "quoteBy", "poemTitle", "poemBy", "poemNote",
-        "poemText", "customTitle", "customText", "todoCount", "yearPercent")
+        "poemText", "customTitle", "customText", "todoCount", "yearPercent",
+        "historyDate", "historyTitle", "historyText", "historySource")
     private val lists = setOf("todos", "poemLines", "customLines", "weatherForecast", "countdowns")
     private val binding = Regex("\\{\\{([A-Za-z][A-Za-z0-9]*)\\}\\}")
     data class Node(val type: String, val x: Float, val y: Float, val width: Float, val height: Float, val json: String)
@@ -53,9 +54,10 @@ object LayoutPack {
             require(kind in kinds) { "不支持的卡片：$kind" }
             val t = templates.getJSONObject(kind)
             keys(t, setOf("name", "sources", "nodes"), kind)
+            if (kind == "custom" && t.optString("name") == "历史一页") HistoryToday.migrate(t)
             val deps = linkedSetOf<String>()
             t.optJSONArray("sources")?.let { a ->
-                repeat(a.length()) { require(a.get(it) is String && a.getString(it) in sources) { "$kind 数据来源只支持 weather、quote、poem" }; deps += a.getString(it) }
+                repeat(a.length()) { require(a.get(it) is String && a.getString(it) in sources) { "$kind 数据来源无效" }; deps += a.getString(it) }
             }
             require(!t.has("sources") || t.get("sources") is JSONArray) { "sources 必须是数组" }
             val nodes = t.getJSONArray("nodes")
@@ -103,6 +105,7 @@ object LayoutPack {
                     n.optString("source") == "weatherForecast" || n.optString("blockType") == "weather") deps += "weather"
                 if (used.any { it.startsWith("quote") } || n.optString("blockType") == "quote") deps += "quote"
                 if (used.any { it.startsWith("poem") } || n.optString("source") == "poemLines" || n.optString("blockType") == "poem") deps += "poem"
+                if (used.any { it.startsWith("history") }) deps += "history"
                 if (type == "builtin") when (n.getString("kind")) {
                     "summary" -> deps += listOf("weather", "quote")
                     "weather", "weather2" -> deps += "weather"

@@ -25,6 +25,27 @@ class LayoutPackTest {
     @Before fun setup() { LayoutStore.init(ctx); LayoutStore.reset(ctx) }
     @After fun cleanup() { LayoutStore.reset(ctx) }
 
+    @Test fun historySceneUpgradesOldCopiesAndParsesTheRequestedDay() {
+        val legacy = java.io.File("../../layouts/scenes/history-note.json")
+        val pack = LayoutPack.parse(legacy.readText())
+        val template = pack.templates.getValue("custom")
+        assertEquals(setOf("history"), template.sources)
+        assertTrue(template.json.contains("{{historyDate}}"))
+        assertEquals(pack, LayoutPack.parse(pack.json))
+        val events = HistoryToday.parseEvents(JSONObject("""{"11":{"1127":[
+            {"year":"1900","title":"纪念人物","type":"birth"},
+            {"year":"25","title":"定都于<a>雒阳</a>","desc":"事件&amp;详情","type":"event"},
+            {"year":"25","title":"定都于雒阳","type":"event"},
+            {"year":"bad","title":"无效年份","type":"event"}
+        ]}}"""), java.time.LocalDate.of(2026, 11, 27))
+        assertEquals(2, events.size)
+        assertEquals("25.11.27", events.first().date())
+        assertEquals("定都于雒阳", events.first().title)
+        assertEquals("事件&详情", events.first().description)
+        assertEquals(listOf("todo", "summary", "cloud"), CloudBoards.ordered(
+            listOf("cloud", "summary", "todo"), listOf("removed", "todo", "summary", "todo")))
+    }
+
     @Test fun savedCloudBoardsKeepIndependentLayoutsAndPersistOrdering() {
         val first = CloudBoards.add(emptyList(), pack(fill = "blue"), "first").first
         val both = CloudBoards.add(first, pack(fill = "green"), "second").first
