@@ -114,6 +114,9 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
     val layoutRevision by LayoutStore.revision.collectAsState()
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var kind by rememberSaveable { mutableStateOf("summary") }
+    var boards by remember(ctx) { mutableStateOf(CloudBoards.load(ctx)) }
+    var boardId by rememberSaveable { mutableStateOf<String?>(null) }
+    val selectedBoard = boards.find { it.id == boardId && it.kind == kind }
     val tabState = rememberSaveableStateHolder()
     LaunchedEffect(Unit) { SchedulerWorker.clearLegacyWork(ctx) }
     var onlineSaving by remember { mutableStateOf(false) }
@@ -143,7 +146,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
     }
     val contentDay = java.time.Instant.ofEpochMilli(clockTick * 60_000)
         .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
-    var onlineOverride by remember(kind) { mutableStateOf<Boolean?>(null) }
+    var onlineOverride by remember(kind, boardId) { mutableStateOf<Boolean?>(null) }
     val onlineDefault = remember(kind, sourceRevision) { ContentOptions.online(ctx, kind) }
     val onlineContent = onlineOverride ?: onlineDefault
     var scanning by remember { mutableStateOf(false) }
@@ -188,10 +191,13 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
     fun refreshCard(force: Boolean = true) {
         if (refreshing) return
         val requestedKind = kind
+        val requestedBoard = selectedBoard
         val requestedCard = card
+        fun stillSelected() = kind == requestedKind && boardId == requestedBoard?.id
         scope.launch {
             refreshing = true
-            status = "正在获取${templateName(requestedKind)}…"
+            val title = requestedBoard?.title ?: templateName(requestedKind)
+            status = "正在获取$title…"
             if (requestedKind == "bing") {
                 runCatching { ImageSources.bing(ctx) }.onSuccess {
                     photoPath = it; imageKind = "bing"; edit = PlanStore.defaultPhotoTone
@@ -199,15 +205,15 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                 }.onFailure { status = "壁纸更新失败：${it.message}" }
                 refreshing = false; return@launch
             }
-            runCatching { CardSources.fresh(ctx, requestedKind, requestedCard, force) {
-                kind == requestedKind && (onlineOverride ?: ContentOptions.online(ctx, requestedKind))
+            runCatching { CardSources.fresh(ctx, requestedKind, requestedCard, force, requestedBoard?.template) {
+                stillSelected() && (onlineOverride ?: ContentOptions.online(ctx, requestedKind))
             } }.onSuccess {
-                if (kind == requestedKind && (onlineOverride ?: ContentOptions.online(ctx, requestedKind))) {
-                    card = CardSources.mergeUnchanged(card, requestedCard, it, requestedKind)
+                if (stillSelected() && (onlineOverride ?: ContentOptions.online(ctx, requestedKind))) {
+                    card = CardSources.mergeUnchanged(card, requestedCard, it, requestedKind, requestedBoard?.template)
                     PlanStore.saveCard(ctx, PlanStore.defaultLayout(ctx, card))
+                    status = "${title}已更新"
                 }
-                status = "${templateName(requestedKind)}已更新"
-            }.onFailure { status = "更新失败，已保留原内容：${it.message}" }
+            }.onFailure { if (stillSelected()) status = "更新失败，已保留原内容：${it.message}" }
             refreshing = false
         }
     }
@@ -235,19 +241,19 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
             refreshing = false
         }
     }
-    LaunchedEffect(kind, contentDay, sourceRevision, layoutRevision) {
+    LaunchedEffect(kind, selectedBoard, contentDay, sourceRevision, layoutRevision) {
         while (refreshing) kotlinx.coroutines.delay(100)
         if (onlineContent && kind in LayoutPack.kinds &&
-            !refreshing && CardSources.stale(ctx, kind)) refreshCard(false)
+            !refreshing && CardSources.stale(ctx, kind, selectedBoard?.template)) refreshCard(false)
     }
-    LaunchedEffect(kind, card, photoPath, fields, edit, tab, refreshing, onlineContent, clockTick, photoLocationRevision, layoutRevision, onlineRevision) {
+    LaunchedEffect(kind, selectedBoard, card, photoPath, fields, edit, tab, refreshing, onlineContent, clockTick, photoLocationRevision, layoutRevision, onlineRevision) {
         if (tab != 0) return@LaunchedEffect
         preview = withContext(Dispatchers.Default) {
             runCatching {
                 if (kind in listOf("photo", "bing", "ai")) {
                     if (!photoReady) null else PhotoCard.render(photoPath, fields, edit, sixColors = true)
                 } else if (kind == "online") OnlineCard.read(ctx)
-                else Render.render(card.copy(kind = kind))
+                else Render.render(card.copy(kind = kind), selectedBoard?.template)
             }.getOrNull()
         }
     }
@@ -274,6 +280,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
             edit = PlanStore.defaultPhotoTone
             PlanStore.photoEdit = edit
             kind = "photo"
+            boardId = null
             tab = if (autoSend || !openEditor) 0 else 2
             if (autoSend) pendingSharedPush = path
             status = if (autoSend) "分享照片已收到，准备直接推送…" else "照片已载入"
@@ -300,6 +307,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
             edit = PlanStore.defaultPhotoTone
             PlanStore.photoEdit = edit
             kind = "photo"
+            boardId = null
             tab = 0
             pendingSharedPush = first
             albums = PlanStore.albums(ctx)
@@ -340,6 +348,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                         customBlocks = listOf(Render.CustomBlock(type = "text", text = text.trim(), size = 26f)))
                     PlanStore.saveCard(ctx, PlanStore.defaultLayout(ctx, card))
                     kind = "custom"
+                    boardId = null
                     tab = 0
                     status = "分享文字已载入"
                 }
@@ -501,6 +510,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
         if (busy) return
         val sentKind = kind
         val sentCard = card.copy(kind = kind)
+        val sentBoard = selectedBoard
         val sentPath = photoPath
         val sentFields = fields
         val sentEdit = edit
@@ -515,7 +525,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                         PhotoCard.render(sentPath, sentFields, sentEdit)
                     } else if (sentKind == "online") {
                         checkNotNull(OnlineCard.read(ctx)) { "请先生成在线卡片" }
-                    } else Render.render(sentCard)
+                    } else Render.render(sentCard, sentBoard?.template)
                     val output = java.io.File.createTempFile("push_", ".png", ctx.cacheDir)
                     try {
                         output.outputStream().use {
@@ -527,7 +537,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                     output
                 }
                 ctx.startForegroundService(Intent(ctx, PushService::class.java)
-                    .putExtra("bitmapPath", file.absolutePath).putExtra("kind", sentKind))
+                    .putExtra("bitmapPath", file.absolutePath).putExtra("kind", sentBoard?.title ?: sentKind))
             } catch (e: Exception) {
                 status = "失败：${e.message}"
             } finally {
@@ -649,11 +659,30 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                 tabState.SaveableStateProvider(tab) { when (tab) {
                     0 -> StudioScreen(kind, card, preview, photoReady, status, progress, busy,
                         pairedName.ifEmpty { pairedAddress }, found, device?.device?.address,
+                        boards = boards, selectedBoard = selectedBoard,
+                        onSaveBoards = { next ->
+                            withContext(Dispatchers.IO) { CloudBoards.save(ctx, next) }
+                            if (next.none { it.id == boardId }) {
+                                if (boardId != null) preview = null
+                                boardId = null
+                            }
+                            boards = next
+                        },
+                        onBoard = { board ->
+                            if (boardId != board.id) {
+                                preview = null
+                                card = PlanStore.defaultLayout(ctx, card)
+                            }
+                            kind = board.kind
+                            boardId = board.id
+                        },
                         onKind = { next ->
-                            if (kind != next) {
+                            if (kind != next || boardId != null) {
+                                preview = null
                                 card = PlanStore.defaultLayout(ctx, card)
                                 fields = defaultFields
                             }
+                            boardId = null
                             kind = next
                             if (next in listOf("photo", "bing", "ai")) {
                                 photoPath = if (next == "photo") PlanStore.lastPhoto else ImageSources.cached(ctx, next)
@@ -741,6 +770,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                         onLocationSaved = { photoLocationRevision++ },
                         onEdit = { edit = it }, onUse = {
                             PlanStore.photoEdit = edit
+                            boardId = null
                             kind = imageKind; if (imageKind == "photo") PlanStore.lastPhoto = photoPath; tab = 0
                         })
                     3 -> PlanScreen(ctx, onReplay = ::replayHistory)

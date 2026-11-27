@@ -6,6 +6,21 @@ import java.io.ByteArrayInputStream
 import java.net.URI
 
 class LayoutDownloadTest {
+    @Test fun officialSceneIndexSupportsBothTableFormatsAndIgnoresExternalLinks() {
+        val scenes = LayoutDownload.parseSceneCatalog("""
+            ## 学习与创作
+            | [桌面名片](profile-card.json) | 自定义卡片 | 姓名和职位 |
+            | [外部链接](https://example.com/a.json) | 自定义卡片 | 不应出现在目录 |
+            ## 先前发布的七套
+            | [晨间简报](../daily-brief.json) | 天气与待办 |
+        """.trimIndent())
+        assertEquals(listOf("桌面名片", "晨间简报"), scenes.map { it.title })
+        assertTrue(scenes[0].url.endsWith("/layouts/scenes/profile-card.json"))
+        assertTrue(scenes[1].url.endsWith("/layouts/daily-brief.json"))
+        assertEquals("天气与待办", scenes[1].description)
+        assertEquals("学习与创作", scenes[0].group)
+    }
+
     @Test fun acceptsRepositoryAndReleaseDownloadLinks() {
         assertEquals("https://raw.githubusercontent.com/owner/repo/main/layouts/a%20b.json",
             LayoutDownload.resolve(" https://github.com/owner/repo/blob/main/layouts/a%20b.json?raw=true#L1 ").toString())

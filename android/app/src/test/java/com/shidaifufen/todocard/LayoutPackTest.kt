@@ -25,6 +25,29 @@ class LayoutPackTest {
     @Before fun setup() { LayoutStore.init(ctx); LayoutStore.reset(ctx) }
     @After fun cleanup() { LayoutStore.reset(ctx) }
 
+    @Test fun savedCloudBoardsKeepIndependentLayoutsAndPersistOrdering() {
+        val first = CloudBoards.add(emptyList(), pack(fill = "blue"), "first").first
+        val both = CloudBoards.add(first, pack(fill = "green"), "second").first
+        assertEquals(2, both.size)
+        val card = Render.Card(kind = "weather2")
+        Render.render(card, both[0].template).also {
+            assertEquals(Color.BLUE, it.getPixel(100, 700))
+            it.recycle()
+        }
+        Render.render(card, both[1].template).also {
+            assertEquals(Color.GREEN, it.getPixel(100, 700))
+            it.recycle()
+        }
+        assertTrue(LayoutStore.changedKinds().isEmpty())
+        val reversed = both.reversed()
+        CloudBoards.save(ctx, reversed)
+        assertEquals(reversed, CloudBoards.load(ctx))
+        val updated = CloudBoards.add(reversed, pack(fill = "red"), "second").first
+        assertEquals(reversed.map { it.id }, updated.map { it.id })
+        CloudBoards.save(ctx, updated.drop(1))
+        assertEquals(updated.drop(1), CloudBoards.load(ctx))
+    }
+
     @Test fun importingChangesOnlyLayoutAndBothPushPathsUseIt() = runBlocking {
         PlanStore.init(ctx)
         val card = Render.Card(weatherCity = "深圳", quote = "用户保存的内容")

@@ -9,7 +9,8 @@ import kotlinx.coroutines.withContext
 /** 计划和手动入口共用数据准备规则，API 失败时保留已保存内容。 */
 object CardSources {
     private val gate = kotlinx.coroutines.sync.Mutex()
-    private fun resources(kind: String, card: Render.Card = Render.Card()) = LayoutStore.sources(kind, card)?.toList() ?: when (kind) {
+    private fun resources(kind: String, card: Render.Card, template: LayoutPack.Template?) =
+        LayoutStore.sources(kind, card, template)?.toList() ?: when (kind) {
         "summary" -> listOf("weather", "quote")
         "custom" -> card.customBlocks.filter { it.enabled }.map { it.type }.filter { it in listOf("weather", "quote", "poem") }.distinct()
         "weather", "weather2" -> listOf("weather")
@@ -23,7 +24,10 @@ object CardSources {
         val ttl = if (resource == "weather") 20 * 60_000L else 24 * 60 * 60_000L
         return System.currentTimeMillis() - at !in 0 until ttl
     }
-    fun stale(ctx: Context, kind: String) = resources(kind, PlanStore.card(ctx)).any { expired(ctx, it, PlanStore.card(ctx)) }
+    fun stale(ctx: Context, kind: String, template: LayoutPack.Template? = null): Boolean {
+        val card = PlanStore.card(ctx)
+        return resources(kind, card, template).any { expired(ctx, it, card) }
+    }
 
     /** Only merge fetched fields; preserve edits made while requests were in flight. */
     fun merge(current: Render.Card, data: Render.Card, kind: String): Render.Card = when (kind) {
@@ -44,7 +48,12 @@ object CardSources {
     }
 
     /** Do not apply a background result to a field the user edited while it was loading. */
-    fun mergeUnchanged(current: Render.Card, requested: Render.Card, fetched: Render.Card, kind: String): Render.Card {
+    fun mergeUnchanged(current: Render.Card, requested: Render.Card, fetched: Render.Card, kind: String,
+                       template: LayoutPack.Template? = null): Render.Card =
+        mergeResources(current, requested, fetched, resources(kind, requested, template))
+
+    private fun mergeResources(current: Render.Card, requested: Render.Card, fetched: Render.Card,
+                               resources: List<String>): Render.Card {
         fun same(resource: String) = when (resource) {
             "quote" -> current.quote == requested.quote && current.quoteBy == requested.quoteBy
             "poem" -> current.poemTitle == requested.poemTitle && current.poemBy == requested.poemBy &&
@@ -55,18 +64,19 @@ object CardSources {
             else -> false
         }
         var result = current
-        for (resource in resources(kind, requested)) if (same(resource)) result = merge(result, fetched, resource)
+        for (resource in resources) if (same(resource)) result = merge(result, fetched, resource)
         return result
     }
 
     suspend fun fresh(ctx: Context, kind: String, card: Render.Card, force: Boolean = false,
+                      template: LayoutPack.Template? = null,
                       online: () -> Boolean = { ContentOptions.online(ctx, kind) }): Render.Card {
         if (!online()) return card
         val requestedAt = System.currentTimeMillis()
         gate.lock()
         try {
             var result = card
-            for (resource in resources(kind, card)) {
+            for (resource in resources(kind, card, template)) {
                 val saved = PlanStore.card(ctx)
                 val prefs = ctx.getSharedPreferences("source_cache_v2", 0)
                 // Requests already completed after this caller started are shared, including manual refreshes.
@@ -84,7 +94,8 @@ object CardSources {
                 }
                 if (!online()) return card
                 val latest = PlanStore.card(ctx)
-                PlanStore.saveCard(ctx, mergeUnchanged(latest, card, result, resource))
+                // Persist only the resource that just finished, even if its own layout has other dependencies.
+                PlanStore.saveCard(ctx, mergeResources(latest, card, result, listOf(resource)))
                 prefs.edit().putLong(key(resource, result), System.currentTimeMillis()).apply()
             }
             return result

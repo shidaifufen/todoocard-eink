@@ -42,8 +42,7 @@ internal fun LayoutSettings() {
     var linkDialog by remember { mutableStateOf(false) }
     var link by remember {
         val saved = linkPrefs.getString("last", null)
-        val oldDefault = "https://github.com/shidaifufen/todoocard-eink/blob/main/layouts/default.json"
-        mutableStateOf(saved?.takeUnless { it == oldDefault } ?: LayoutDownload.DEFAULT_URL)
+        mutableStateOf(saved.orEmpty())
     }
     var linkError by remember { mutableStateOf("") }
     val importFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -85,7 +84,7 @@ internal fun LayoutSettings() {
     val changed = remember(revision) { LayoutStore.changedKinds() }
     LaunchedEffect(autoCheck) {
         if (!autoCheck) return@LaunchedEffect
-        val subscribed = linkPrefs.getString("last", null) ?: LayoutDownload.DEFAULT_URL
+        val subscribed = linkPrefs.getString("last", null) ?: return@LaunchedEffect
         try {
             val pack = withContext(Dispatchers.IO) { LayoutDownload.fetch(subscribed) }
             availableUpdate = pack.takeUnless(LayoutStore::matches)
@@ -158,16 +157,6 @@ internal fun LayoutSettings() {
                 OutlinedTextField(value = link, onValueChange = { link = it; linkError = "" }, enabled = !busy,
                     label = { Text("GitHub 链接") }, modifier = Modifier.fillMaxWidth(), maxLines = 4,
                     isError = linkError.isNotEmpty())
-                Text("仓库已有版式", fontSize = 12.sp)
-                Row(Modifier.horizontalScroll(rememberScrollState())) {
-                    listOf("六色场景精选" to "featured", "晨间简报" to "daily-brief", "出门天气" to "weather-field", "天气色卡" to "weather-tiles",
-                        "专注清单" to "focus-list", "诗词日历" to "verse-almanac", "蓝色天气" to "weather-blue",
-                        "一句＋天气" to "quote-weather", "默认版式" to "default").forEach { (name, file) ->
-                        TextButton(enabled = !busy, onClick = {
-                            link = "https://github.com/shidaifufen/todoocard-eink/blob/main/layouts/$file.json"; linkError = ""
-                        }) { Text(name) }
-                    }
-                }
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (linkError.isNotEmpty()) Text(linkError, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
             }
@@ -200,7 +189,15 @@ internal fun LayoutSettings() {
 }
 
 @Composable
-private fun LayoutPreview(pack: LayoutPack.Pack, onDismiss: () -> Unit, onApply: (LayoutPack.Pack) -> Unit) {
+internal fun LayoutPreview(
+    pack: LayoutPack.Pack,
+    onDismiss: () -> Unit,
+    onApply: (LayoutPack.Pack) -> Unit,
+    actionLabel: String = "应用版式",
+    independent: Boolean = false,
+    saving: Boolean = false,
+    saveError: String = "",
+) {
     val ctx = LocalContext.current
     var kind by remember(pack) { mutableStateOf(pack.templates.keys.first()) }
     var edited by remember(pack) { mutableStateOf(pack) }
@@ -225,14 +222,14 @@ private fun LayoutPreview(pack: LayoutPack.Pack, onDismiss: () -> Unit, onApply:
     AlertDialog(onDismissRequest = onDismiss, title = { Text(pack.name) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text("使用当前保存内容预览；应用后同时用于手动和定时推送。", fontSize = 12.sp)
+                if (!independent) Text("使用当前保存内容预览，应用后同时用于手动和定时推送。", fontSize = 12.sp)
                 Row(Modifier.horizontalScroll(rememberScrollState())) {
                     pack.templates.keys.forEach { k -> FilterChip(selected = k == kind, onClick = { kind = k },
                         label = { Text(templateName(k)) }, modifier = Modifier.padding(end = 6.dp)) }
                 }
                 preview?.let { Image(it.asImageBitmap(), "导入版式预览", Modifier.fillMaxWidth().aspectRatio(528f / 792f)) }
                 optionState.SaveableStateProvider(kind) {
-                    LayoutOptions(pack.templates.getValue(kind)) { templateJson ->
+                    LayoutOptions(pack.templates.getValue(kind), independent) { templateJson ->
                         val json = JSONObject(edited.json)
                         json.getJSONObject("templates").put(kind, templateJson)
                         runCatching { LayoutPack.parse(json.toString()) }
@@ -242,19 +239,28 @@ private fun LayoutPreview(pack: LayoutPack.Pack, onDismiss: () -> Unit, onApply:
                 }
                 if (!ready && error.isEmpty()) CircularProgressIndicator()
                 if (error.isNotEmpty()) Text("此版式无法应用：$error", color = MaterialTheme.colorScheme.error)
+                if (saveError.isNotBlank()) Text(saveError, color = MaterialTheme.colorScheme.error)
             }
         },
-        confirmButton = { TextButton(enabled = ready, onClick = { onApply(edited) }) { Text("应用版式") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } })
+        confirmButton = {
+            TextButton(enabled = ready && !saving, onClick = { onApply(edited) }) {
+                Text(if (saving) "正在保存…" else actionLabel)
+            }
+        },
+        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text("取消") } })
 }
 
 @Composable
-private fun LayoutOptions(template: LayoutPack.Template, onChange: (JSONObject) -> Unit) {
+private fun LayoutOptions(template: LayoutPack.Template, independent: Boolean, onChange: (JSONObject) -> Unit) {
     val nodes = remember(template) { template.nodes.map { JSONObject(it.json) } }
     val titleIndex = nodes.indexOfFirst { n ->
         n.optString("type") == "text" && n.optBoolean("bold") &&
             n.optString("text").let { it.isNotBlank() && !it.contains("{{") }
     }
+    val staticIndices = if (independent) nodes.indices.filter { i ->
+        i != titleIndex && nodes[i].optString("type") == "text" &&
+            nodes[i].optString("text").let { it.isNotBlank() && !it.contains("{{") }
+    } else emptyList()
     val colorKeys = listOf("color", "fill", "border")
     val blue = nodes.any { n -> colorKeys.any { n.optString(it) == "blue" } }
     val hasList = nodes.any { it.optString("type") == "list" }
@@ -264,14 +270,25 @@ private fun LayoutOptions(template: LayoutPack.Template, onChange: (JSONObject) 
         "底部引文" to { it.optString("text").contains("{{quote}}") || it.optString("text").contains("{{quoteBy}}") },
         "诗词赏析" to { it.optString("showIf") == "poemNote" || it.optString("text").contains("{{poemNote}}") },
     ).filterValues { predicate -> nodes.any(predicate) }
-    if (titleIndex < 0 && !blue && !hasList && groups.isEmpty()) return
+    if (titleIndex < 0 && staticIndices.isEmpty() && !blue && !hasList && groups.isEmpty()) return
     var title by rememberSaveable { mutableStateOf(nodes.getOrNull(titleIndex)?.optString("text").orEmpty()) }
     var accent by rememberSaveable { mutableStateOf("blue") }
     var numbered by rememberSaveable { mutableStateOf(nodes.any { it.optString("type") == "list" && it.optBoolean("numbered") }) }
     var hidden by rememberSaveable { mutableStateOf(arrayListOf<String>()) }
+    var fixedText by rememberSaveable {
+        mutableStateOf(ArrayList(staticIndices.map { nodes[it].optString("text") }))
+    }
     Text("场景选项", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp))
     if (titleIndex >= 0) OutlinedTextField(value = title, onValueChange = { title = it.take(48) },
         label = { Text("卡面标题") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    staticIndices.forEachIndexed { position, index ->
+        OutlinedTextField(
+            value = fixedText[position],
+            onValueChange = { value -> fixedText = ArrayList(fixedText).apply { this[position] = value.take(4096) } },
+            label = { Text(nodes[index].optString("text").take(24), maxLines = 1) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
     if (blue) {
         Text("强调色", fontSize = 12.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -295,6 +312,7 @@ private fun LayoutOptions(template: LayoutPack.Template, onChange: (JSONObject) 
             if (groups.any { (label, match) -> label in hidden && match(source) }) return@forEachIndexed
             val node = JSONObject(source.toString())
             if (index == titleIndex && title.isNotBlank()) node.put("text", title.trim())
+            staticIndices.indexOf(index).takeIf { it >= 0 }?.let { node.put("text", fixedText[it].trim()) }
             colorKeys.filter { source.optString(it) == "blue" }.forEach { node.put(it, accent) }
             if (source.optString("type") == "list") node.put("numbered", numbered)
             changed.put(node)

@@ -9,7 +9,8 @@ import java.net.URLEncoder
 
 /** Public GitHub layout files only; uses no account credentials. */
 internal object LayoutDownload {
-    const val DEFAULT_URL = "https://github.com/shidaifufen/todoocard-eink/blob/main/layouts/featured.json"
+    private const val LAYOUT_ROOT = "https://raw.githubusercontent.com/shidaifufen/todoocard-eink/main/layouts"
+    data class Scene(val title: String, val group: String, val description: String, val url: String)
     private val hosts = setOf("github.com", "raw.githubusercontent.com", "objects.githubusercontent.com",
         "release-assets.githubusercontent.com", "github-releases.githubusercontent.com", "api.github.com")
 
@@ -64,14 +65,31 @@ internal object LayoutDownload {
     }
 
     fun fetch(input: String): LayoutPack.Pack {
-        val uri = resolve(input)
-        val raw = try { download(uri) } catch (network: IOException) {
-            val fallback = apiFallback(uri) ?: throw network
-            download(fallback)
-        }
+        val raw = downloadWithFallback(resolve(input))
         check(!raw.trimStart().startsWith("<")) { "链接返回了网页，请使用 JSON 文件或 Release 附件链接" }
         return LayoutPack.parse(raw)
     }
+
+    fun scenes(): List<Scene> = parseSceneCatalog(downloadWithFallback(URI("$LAYOUT_ROOT/scenes/README.md")))
+
+    internal fun parseSceneCatalog(markdown: String): List<Scene> {
+        var group = ""
+        val row = Regex("""\|\s*\[([^\]]+)]\(((?:\.\./)?[a-z0-9-]+\.json)\)\s*\|(?:[^|]*\|)?\s*([^|]+)\|\s*""")
+        val scenes = markdown.lineSequence().mapNotNull { line ->
+            if (line.startsWith("## ")) group = line.removePrefix("## ").trim()
+            val (title, path, description) = row.matchEntire(line.trim())?.destructured ?: return@mapNotNull null
+            val file = if (path.startsWith("../")) path.removePrefix("../") else "scenes/$path"
+            Scene(title, group, description.trim(), "$LAYOUT_ROOT/$file")
+        }.distinctBy { it.url }.toList()
+        check(scenes.isNotEmpty()) { "云端暂无可用看板" }
+        return scenes
+    }
+
+    private fun downloadWithFallback(uri: URI): String =
+        try { download(uri) } catch (network: IOException) {
+            val fallback = apiFallback(uri) ?: throw network
+            download(fallback)
+        }
 
     private fun download(start: URI): String {
         var uri = start

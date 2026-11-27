@@ -132,7 +132,8 @@ object LayoutStore {
     fun template(kind: String) = state?.let { it.overrides[kind] ?: it.defaults.templates[kind] }
     internal fun renderTemplate(kind: String) = if (kind == "weather" || kind == "weather2")
         state?.overrides?.get(kind) else template(kind)
-    fun sources(kind: String, card: Render.Card? = null): Set<String>? = template(kind)?.let { t ->
+    fun sources(kind: String, card: Render.Card? = null, override: LayoutPack.Template? = null): Set<String>? =
+        (override ?: template(kind))?.let { t ->
         val custom = if (t.nodes.any { it.type == "builtin" && JSONObject(it.json).optString("kind") == "custom" })
             card?.customBlocks.orEmpty().filter { it.enabled && it.type in setOf("weather", "quote", "poem") }.map { it.type }
             else emptyList()

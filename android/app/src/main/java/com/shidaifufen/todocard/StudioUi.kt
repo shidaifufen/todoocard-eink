@@ -85,6 +85,10 @@ internal fun StudioScreen(
     deviceName: String,
     found: List<ScanResult>,
     selectedAddress: String?,
+    boards: List<CloudBoards.Board>,
+    selectedBoard: CloudBoards.Board?,
+    onSaveBoards: suspend (List<CloudBoards.Board>) -> Unit,
+    onBoard: (CloudBoards.Board) -> Unit,
     onKind: (String) -> Unit,
     onCard: (Render.Card) -> Unit,
     onLayout: (Render.Card) -> Unit,
@@ -110,29 +114,54 @@ internal fun StudioScreen(
 ) {
     var layoutOpen by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
+    var managingBoards by remember { mutableStateOf(false) }
+    var editingBoard by remember { mutableStateOf(false) }
+    var savingBoard by remember { mutableStateOf(false) }
+    var boardSaveError by remember { mutableStateOf("") }
     var generating by remember { mutableStateOf(false) }
     var prompt by remember { mutableStateOf("") }
     val isImage = kind in listOf("photo", "bing", "ai")
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val cards = rememberLazyListState()
+    val hasOnlineSources = if (selectedBoard != null) {
+        LayoutStore.sources(kind, card, selectedBoard.template).orEmpty().isNotEmpty()
+    } else {
+        LayoutStore.sources(kind, card).orEmpty().isNotEmpty() ||
+            kind in listOf("summary", "quote", "poem", "weather", "weather2", "custom")
+    }
     LaunchedEffect(drawer.targetValue) {
         if (drawer.targetValue == DrawerValue.Open) {
-            val selected = TEMPLATES.indexOfFirst { it.first == kind }.coerceAtLeast(0)
-            if (cards.layoutInfo.visibleItemsInfo.none { it.index == selected }) cards.scrollToItem(selected)
+            val selected = if (selectedBoard != null) boards.indexOfFirst { it.id == selectedBoard.id }
+                else boards.size + TEMPLATES.indexOfFirst { it.first == kind }.coerceAtLeast(0)
+            if (selected >= 0 && cards.layoutInfo.visibleItemsInfo.none { it.index == selected }) cards.scrollToItem(selected)
         }
     }
     ModalNavigationDrawer(drawerState = drawer, gesturesEnabled = drawer.isOpen,
         drawerContent = {
-            ModalDrawerSheet(Modifier.width(224.dp)) {
+            ModalDrawerSheet(Modifier.width(252.dp)) {
                 Row(Modifier.fillMaxWidth().padding(start = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("切换卡片", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                     IconButton(onClick = { scope.launch { drawer.close() } }) { Icon(Icons.Outlined.Close, "收起侧栏") }
                 }
-                LazyColumn(state = cards, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                FilledTonalButton(onClick = { managingBoards = true }, enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                    Text("云端看板")
+                }
+                LazyColumn(state = cards, modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    items(boards, key = { it.id }) { board ->
+                        NavigationDrawerItem(label = { Text(board.title, maxLines = 2) },
+                            selected = selectedBoard?.id == board.id, onClick = {
+                                if (!busy) {
+                                    onBoard(board)
+                                    scope.launch { drawer.close() }
+                                }
+                            })
+                    }
                     items(TEMPLATES, key = { it.first }) { (key, title) ->
-                        NavigationDrawerItem(label = { Text(title) }, selected = kind == key, onClick = {
+                        NavigationDrawerItem(label = { Text(title) }, selected = selectedBoard == null && kind == key, onClick = {
                             if (!busy) {
                                 onKind(key)
                                 scope.launch { drawer.close() }
@@ -164,9 +193,10 @@ internal fun StudioScreen(
         Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { scope.launch { drawer.open() } }) { Icon(Icons.Outlined.Menu, "展开卡片侧栏") }
-            Text(templateName(kind), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = StudioInk)
+            Text(selectedBoard?.title ?: templateName(kind), fontSize = 22.sp,
+                fontWeight = FontWeight.Bold, color = StudioInk, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
-        if (kind in listOf("summary", "quote", "poem", "weather", "weather2", "custom") || LayoutStore.sources(kind)?.isNotEmpty() == true) Row(
+        if (hasOnlineSources) Row(
             Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = onlineContent, onClick = { onSourceMode(true) }, enabled = !busy, label = { Text("联网更新") })
             FilterChip(selected = !onlineContent, onClick = { onSourceMode(false) }, enabled = !busy, label = { Text("手动内容") })
@@ -216,11 +246,14 @@ internal fun StudioScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("屏幕预览", fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f))
-                if (onlineContent && (kind == "bing" || LayoutStore.sources(kind)?.isNotEmpty() == true || kind in listOf("quote", "poem", "weather", "weather2", "summary", "custom"))) TextButton(
+                if (onlineContent && (kind == "bing" || hasOnlineSources)) TextButton(
                     enabled = !busy && !refreshing, onClick = onRefresh) {
                     Text(if (refreshing) "更新中…" else if (kind in listOf("weather", "weather2")) "刷新天气" else "换一张")
                 }
-                if (kind !in listOf("progress", "calendar", "online")) TextButton(enabled = !busy, onClick = {
+                if (kind !in listOf("progress", "calendar", "online") &&
+                    (selectedBoard == null || hasOnlineSources || kind in listOf("todo", "countdown") ||
+                        selectedBoard.template.nodes.any { it.json.contains("{{custom") || it.json.contains("customLines") })
+                ) TextButton(enabled = !busy, onClick = {
                     if (isImage) onPhoto() else editing = true
                 }) {
                     Icon(if (isImage) Icons.Outlined.PhotoLibrary else Icons.Outlined.Edit,
@@ -229,6 +262,10 @@ internal fun StudioScreen(
                     Text(if (isImage) "编辑照片" else "编辑内容")
                 }
             }
+            if (selectedBoard != null) TextButton(enabled = !busy, onClick = {
+                boardSaveError = ""
+                editingBoard = true
+            }) { Text("编辑看板文字与样式") }
             if (kind == "poem") TextButton(onClick = onAnalysis, enabled = !busy && !refreshing) {
                 Text(if (refreshing) "赏析获取中…" else if (card.poemNote.isBlank()) "为这首诗写 AI 赏析" else "重新生成 AI 赏析")
             }
@@ -285,6 +322,28 @@ internal fun StudioScreen(
         }
     }
     }
+    }
+    if (managingBoards) CloudBoardManager(boards, onSaveBoards, onSelect = {
+        onBoard(it)
+        scope.launch { drawer.close() }
+    }, onDismiss = { managingBoards = false })
+    if (editingBoard && selectedBoard != null) {
+        LayoutPreview(selectedBoard.pack, onDismiss = { if (!savingBoard) editingBoard = false }, onApply = { pack ->
+            savingBoard = true
+            boardSaveError = ""
+            scope.launch {
+                try {
+                    onSaveBoards(boards.map { if (it.id == selectedBoard.id) it.copy(pack = pack) else it })
+                    editingBoard = false
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    boardSaveError = failure.message ?: "看板保存失败"
+                } finally {
+                    savingBoard = false
+                }
+            }
+        }, actionLabel = "保存看板", independent = true, saving = savingBoard, saveError = boardSaveError)
     }
     if (editing && kind == "custom") CustomEditorDialog(card, onDismiss = { editing = false }, onSave = { onCard(it); editing = false })
     if (editing && kind != "custom") CardEditorDialog(kind, card, onDismiss = { editing = false }, onSave = {
