@@ -202,7 +202,7 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
     if (kind === 'music' && $('style').value !== 'cover') void refreshLyrics();
   }
 
-  async function choose(fetchItems, random) {
+  async function choose(fetchItems, random, excluded) {
     const ticket = ++operation;
     ++lyricOperation;
     status.textContent = random ? '正在抽取…' : '正在查询…';
@@ -211,8 +211,9 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
       if (!current() || ticket !== operation) return;
       if (!matches.length) throw new Error('没有匹配的内容，试试其他关键词。');
       if (random) {
-        let candidates = matches.filter(candidate => candidate.id !== item?.id && !seen.has(candidate.id));
-        if (!candidates.length) candidates = matches.filter(candidate => candidate.id !== item?.id);
+        const eligible = matches.filter(candidate => candidate.id !== item?.id && candidate.id !== excluded);
+        const unseen = eligible.filter(candidate => !seen.has(candidate.id));
+        const candidates = unseen.length ? unseen : eligible;
         if (!candidates.length) throw new Error('暂时没有其他结果，请再抽一次或换个关键词。');
         for (let attempt = 0; attempt < 3 && candidates.length; attempt++) {
           const index = Math.floor(Math.random() * candidates.length);
@@ -322,7 +323,7 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
     }
     selectingEnd = false;
     draw();
-  }, random: category => {
+  }, random: (category, excluded) => {
     $('style').value = 'cover';
     theme.value = 'auto';
     $('ink').value = 'auto';
@@ -330,6 +331,6 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
       $('kind').value = category;
       $('kind').onchange();
     }
-    return choose(() => randomItems(category), true);
+    return choose(() => randomItems(category), true, excluded);
   } };
 }

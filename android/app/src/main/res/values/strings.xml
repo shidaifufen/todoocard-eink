@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">土豆片</string>
+    <string name="widget_shuffle_name">土豆片 · 随机推送</string>
+    <string name="widget_shuffle_description">轻点图标，随机推送一张新卡片</string>
+    <string name="widget_bluetooth_permission">请在土豆片里先授予蓝牙权限</string>
+    <string name="widget_bluetooth_off">请先打开手机蓝牙</string>
+    <string name="widget_no_device">请先在土豆片设置里选择卡片设备</string>
+    <string name="widget_push_started">正在抽取新卡片</string>
+    <string name="widget_push_busy">已有卡片正在推送</string>
+    <string name="widget_push_blocked">系统暂时无法启动推送，请打开土豆片后重试</string>
 </resources>

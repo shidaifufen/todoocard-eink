@@ -112,8 +112,10 @@ object CardSources {
         error("诗词服务连续返回近期作品，请稍后再换；没有替换为本地诗词")
     }
 
-    suspend fun scheduledBitmap(ctx: Context, kind: String, onNotice: (String) -> Unit = {}): Bitmap {
-        if (OnlinePlanCategories.any { it.first == kind }) return randomOnlineCard(ctx, kind.removePrefix("online_"), onNotice)
+    suspend fun scheduledBitmap(ctx: Context, kind: String, requireFresh: Boolean = false,
+                                onNotice: (String) -> Unit = {}): Bitmap {
+        if (OnlinePlanCategories.any { it.first == kind })
+            return randomOnlineCard(ctx, kind.removePrefix("online_"), requireFresh, onNotice)
         if (kind == "online") return withContext(Dispatchers.IO) {
             checkNotNull(OnlineCard.read(ctx)) { "请先生成在线卡片" }
         }
@@ -124,7 +126,10 @@ object CardSources {
                 PlanStore.defaultPhotoTone) }
         }
         if (kind == "photo") return withContext(Dispatchers.IO) {
-            val uri = AlbumStore.randomImage(ctx, PlanStore.albums(ctx), PlanStore.lastDrawnUri)
+            val excluded = if (requireFresh) WidgetShuffle.lastItem(ctx, kind) else PlanStore.lastDrawnUri
+            val uri = AlbumStore.randomImage(ctx, PlanStore.albums(ctx), excluded,
+                allowRepeat = !requireFresh)
+            if (requireFresh) checkNotNull(uri) { "轮播图库里没有其他可用照片" }
             if (uri != null) PlanStore.lastDrawnUri = uri.toString()
             val path = uri?.let { PhotoCard.importToFiles(ctx, it) } ?: PlanStore.lastPhoto
             check(path.isNotBlank()) { "轮播相册没有可用照片，请重新授权或添加照片" }
@@ -133,6 +138,7 @@ object CardSources {
                 PhotoCard.resolvePlace(ctx, path, fields)
                 PhotoCard.render(path, fields,
                     if (uri == null) PlanStore.photoEdit.withTone(PlanStore.defaultPhotoTone) else PlanStore.defaultPhotoTone)
+                    .also { if (requireFresh && uri != null) WidgetShuffle.rememberItem(ctx, kind, uri.toString()) }
             }
             finally {
                 if (uri != null) {
@@ -141,7 +147,10 @@ object CardSources {
                 }
             }
         }
-        val card = scheduledCard(ctx, kind, onNotice)
+        val card = if (requireFresh) {
+            check(ContentOptions.online(ctx, kind)) { "${templateName(kind)}已设为手动内容" }
+            fresh(ctx, kind, PlanStore.card(ctx), force = true)
+        } else scheduledCard(ctx, kind, onNotice)
         return withContext(Dispatchers.Default) { Render.render(card.copy(kind = kind)) }
     }
 

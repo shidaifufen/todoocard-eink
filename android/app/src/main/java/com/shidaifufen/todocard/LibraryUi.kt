@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
@@ -32,6 +33,7 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -426,7 +428,7 @@ internal fun SettingsScreen(
             }
         }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("设备", "外观", "数据源", "调色预设", "关于").forEachIndexed { i, label ->
+            listOf(0 to "设备", 5 to "桌面小组件", 1 to "外观", 2 to "数据源", 3 to "调色预设", 4 to "关于").forEach { (i, label) ->
                 FilterChip(selected = section == i, onClick = { section = i },
                     label = { Text(label) }, shape = RoundedCornerShape(8.dp))
             }
@@ -530,6 +532,7 @@ internal fun SettingsScreen(
                 }
             }
             3 -> PhotoPresetSettings()
+            5 -> WidgetShuffleSettings()
             else -> {
                 Text("土豆片", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
@@ -553,4 +556,40 @@ internal fun SettingsScreen(
         Spacer(Modifier.height(24.dp))
     }
     if (aiSettings) AiSettingsDialog { aiSettings = false }
+}
+
+@Composable
+private fun WidgetShuffleSettings() {
+    val ctx = LocalContext.current
+    val manager = remember(ctx) { android.appwidget.AppWidgetManager.getInstance(ctx) }
+    var selected by remember(ctx) { mutableStateOf(WidgetShuffle.selected(ctx)) }
+    SectionCard(title = "桌面随机推送") {
+        Text("轻点桌面上的土豆片图标，即可抽一张并推送到已选设备。",
+            fontSize = 13.sp, color = StudioMuted)
+        if (manager.isRequestPinAppWidgetSupported) {
+            OutlinedButton(onClick = {
+                val provider = android.content.ComponentName(ctx, ShuffleWidget::class.java)
+                manager.requestPinAppWidget(provider, null, null)
+            }) { Text("添加到桌面") }
+        } else {
+            Text("长按系统桌面，在小组件列表中添加「土豆片 · 随机推送」。",
+                fontSize = 12.sp, color = StudioMuted, modifier = Modifier.padding(top = 8.dp))
+        }
+        Spacer(Modifier.height(12.dp))
+        Text("随机范围", fontWeight = FontWeight.SemiBold)
+        Text("至少保留一类。照片轮播使用已加入轮播图库的照片。", fontSize = 12.sp, color = StudioMuted)
+        WidgetShuffle.categories.forEach { (kind, label) ->
+            val checked = kind in selected
+            val canToggle = !checked || selected.size > 1
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                .toggleable(checked, enabled = canToggle, role = Role.Checkbox, onValueChange = {
+                    selected = if (it) selected + kind else selected - kind
+                    WidgetShuffle.save(ctx, selected)
+                }), verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked, onCheckedChange = null, enabled = canToggle,
+                    modifier = Modifier.padding(end = 12.dp))
+                Text(label)
+            }
+        }
+    }
 }

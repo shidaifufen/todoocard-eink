@@ -28,12 +28,15 @@ class PushService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent == null) { stopSelf(); return START_NOT_STICKY }
+        if (intent.action == ShuffleWidget.ACTION_SHUFFLE &&
+            (state.value.running || queue.any { it.action == ShuffleWidget.ACTION_SHUFFLE })) return START_NOT_STICKY
         queue.add(intent)
         if (task?.isActive != true) task = scope.launch {
             while (queue.isNotEmpty()) {
                 val next = queue.removeFirst()
                 push(next.getStringExtra("bitmapPath"), next.getStringExtra("kind") ?: "photo",
-                    next.getLongExtra("scheduledAt", 0), next.getBooleanExtra("replay", false))
+                    next.getLongExtra("scheduledAt", 0), next.getBooleanExtra("replay", false),
+                    widget = next.action == ShuffleWidget.ACTION_SHUFFLE)
                 // 成功或失败状态短暂展示，然后与通知一起消失；新任务可直接接续。
                 repeat(10) { if (queue.isEmpty()) delay(500) }
             }
@@ -53,9 +56,10 @@ class PushService : Service() {
         }
     }
 
-    private suspend fun push(path: String?, kind: String, scheduledAt: Long, replay: Boolean) {
+    private suspend fun push(path: String?, requestedKind: String, scheduledAt: Long, replay: Boolean, widget: Boolean) {
+        var kind = requestedKind
         val started = SystemClock.elapsedRealtime()
-        Log.i(TAG, "Push started: kind=$kind, scheduledAt=$scheduledAt")
+        Log.i(TAG, "Push started: kind=$kind, scheduledAt=$scheduledAt, widget=$widget")
         var stage = "准备卡片"
         var message = "准备推送…"
         var ok = false
@@ -67,9 +71,36 @@ class PushService : Service() {
         state.value = State(true, message)
         try {
             wake.acquire(10 * 60_000L)
-            report(if (kind.startsWith("online_") && path == null) "正在获取在线卡片…" else "正在准备卡片…", 0, true)
-            val source = if (path == null) CardSources.scheduledBitmap(this, kind) { notice = it }
-                else BitmapFactory.decodeFile(path) ?: error("无法读取卡片图片")
+            val source = when {
+                widget -> {
+                    withTimeoutOrNull(90_000L) {
+                        val candidates = WidgetShuffle.candidates(this@PushService)
+                        var failure: Exception? = null
+                        var bitmap: android.graphics.Bitmap? = null
+                        for (category in candidates) {
+                            kind = category
+                            report("正在抽取 · ${templateName(category)}", 0, true)
+                            try {
+                                bitmap = CardSources.scheduledBitmap(this@PushService, category, requireFresh = true)
+                                break
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (error: Exception) {
+                                failure = error
+                            }
+                        }
+                        bitmap ?: throw (failure ?: IllegalStateException("请先设置小组件的随机范围"))
+                    } ?: error("抽取新卡片超时")
+                }
+                path == null -> {
+                    report(if (kind.startsWith("online_")) "正在获取在线卡片…" else "正在准备卡片…", 0, true)
+                    CardSources.scheduledBitmap(this, kind) { notice = it }
+                }
+                else -> {
+                    report("正在准备卡片…", 0, true)
+                    BitmapFactory.decodeFile(path) ?: error("无法读取卡片图片")
+                }
+            }
             val payload = withContext(Dispatchers.Default) {
                 try {
                     snapshot = withContext(Dispatchers.IO) {
@@ -88,7 +119,7 @@ class PushService : Service() {
             report("查找中 · 请唤醒卡片", 0, true)
             Log.i(TAG, "Scanning for selected card; paired address available=${saved.isNotBlank()}")
             val selected = withContext(Dispatchers.IO) {
-                ble.scanForPush(saved, 120_000, allowUnfiltered = scheduledAt <= 0)
+                ble.scanForPush(saved, 120_000, allowUnfiltered = scheduledAt <= 0 && !widget)
                     ?: error("未找到卡片，请唤醒后重试")
             }
             Log.i(TAG, "Found card after ${SystemClock.elapsedRealtime() - started} ms")
@@ -109,6 +140,7 @@ class PushService : Service() {
                     onProgress = { report(if (it == 100) "显影中 · 等待设备确认" else "推送中 · $it%", it) })
             }
             ok = lastLog == "已完成并收到显影确认"
+            if (ok && widget) WidgetShuffle.sent(this, kind)
             message = if (ok) "推送成功 · 已收到显影确认" else lastLog.ifBlank { "数据已发送，未收到显影确认" }
         } catch (cancelled: CancellationException) {
             message = "推送已中断"
@@ -120,7 +152,8 @@ class PushService : Service() {
             client?.close()
             path?.let { File(it).delete() }
             if (wake.isHeld) wake.release()
-            val result = listOf(if (replay) "原图重推" else "", message, notice).filter(String::isNotBlank).joinToString(" · ")
+            val result = listOf(if (replay) "原图重推" else if (widget) "桌面小组件" else "", message, notice)
+                .filter(String::isNotBlank).joinToString(" · ")
             val detail = if (scheduledAt > 0) "计划 ${java.text.SimpleDateFormat("HH:mm", java.util.Locale.CHINA)
                 .format(java.util.Date(scheduledAt))} · $result" else result
             Log.i(TAG, "Push finished: kind=$kind, confirmed=$ok")

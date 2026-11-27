@@ -107,14 +107,14 @@ internal val OnlinePlanCategories = listOf(
 )
 
 internal class OnlineBridge(
-    private val onCard: (String, String) -> Unit,
+    private val onCard: (String, String, String) -> Unit,
     private val onHeight: (Int) -> Unit,
     private val onLyrics: (String) -> Unit,
     private val onError: (String) -> Unit,
 ) {
     @JavascriptInterface
-    fun card(category: String, png: String) {
-        if (OnlinePlanCategories.any { it.first == "online_$category" }) onCard(category, png)
+    fun card(category: String, png: String, itemId: String) {
+        if (OnlinePlanCategories.any { it.first == "online_$category" }) onCard(category, png, itemId)
     }
     @JavascriptInterface
     fun error(message: String) = onError(message.take(160))
@@ -129,7 +129,7 @@ internal class OnlineBridge(
 @SuppressLint("SetJavaScriptEnabled")
 private fun onlineWebView(
     ctx: Context,
-    onCard: (String, String) -> Unit,
+    onCard: (String, String, String) -> Unit,
     onHeight: (Int) -> Unit = {},
     onReady: (WebView) -> Unit = {},
     onLyrics: (String) -> Unit = {},
@@ -265,7 +265,7 @@ internal fun OnlineSceneInline(enabled: Boolean, dark: Boolean, onCard: (String,
             modifier = Modifier.fillMaxWidth().height(height.dp),
             factory = {
                 FrameLayout(ctx).apply {
-                    val view = onlineWebView(ctx, { category, raw -> scope.launch { callback(category, raw) } },
+                    val view = onlineWebView(ctx, { category, raw, _ -> scope.launch { callback(category, raw) } },
                         { px -> scope.launch { height = px.coerceIn(156, 1200) } }, ::style,
                         onLyrics = { raw -> scope.launch { lyrics = LyricSelection.parse(raw) } },
                         onRendererGone = {
@@ -298,12 +298,16 @@ internal fun OnlineSceneInline(enabled: Boolean, dark: Boolean, onCard: (String,
     }
 }
 
-internal suspend fun randomOnlineCard(ctx: Context, category: String, onNotice: (String) -> Unit): Bitmap {
+internal suspend fun randomOnlineCard(ctx: Context, category: String, requireFresh: Boolean,
+                                      onNotice: (String) -> Unit): Bitmap {
     require(OnlinePlanCategories.any { it.first == "online_$category" })
     val bitmap = try {
-        fetchRandomOnlineCard(ctx, category)
+        val excluded = if (requireFresh) WidgetShuffle.lastItem(ctx, category) else ""
+        val (bitmap, itemId) = fetchRandomOnlineCard(ctx, category, excluded)
+        if (requireFresh) WidgetShuffle.rememberItem(ctx, category, itemId)
+        bitmap
     } catch (error: Exception) {
-        if (error is CancellationException) throw error
+        if (error is CancellationException || requireFresh) throw error
         val cached = withContext(Dispatchers.IO) { OnlineCard.read(ctx, category) } ?: throw error
         onNotice("在线更新失败，使用上次缓存：${error.message.orEmpty().take(100)}")
         return cached
@@ -314,22 +318,24 @@ internal suspend fun randomOnlineCard(ctx: Context, category: String, onNotice: 
     return bitmap
 }
 
-private suspend fun fetchRandomOnlineCard(ctx: Context, category: String): Bitmap {
-    val raw = withContext(Dispatchers.Main) {
+private suspend fun fetchRandomOnlineCard(ctx: Context, category: String, excluded: String): Pair<Bitmap, String> {
+    val (raw, itemId) = withContext(Dispatchers.Main) {
         var browser: WebView? = null
         try {
             withTimeout(70_000) {
-                suspendCancellableCoroutine<String> { result ->
+                suspendCancellableCoroutine<Pair<String, String>> { result ->
                     val handler = android.os.Handler(android.os.Looper.getMainLooper())
                     fun fail(message: String) = handler.post {
                         if (result.isActive) result.resumeWithException(IllegalStateException(message))
                     }
-                    browser = onlineWebView(ctx, { selected, encoded ->
+                    browser = onlineWebView(ctx, { selected, encoded, id ->
                         handler.post {
-                            if (result.isActive && selected == category) result.resume(encoded)
+                            if (result.isActive && selected == category) result.resume(encoded to id)
                         }
                     }, onReady = { view ->
-                        view.evaluateJavascript("typeof window.drawRandom === 'function' && (window.drawRandom('$category'), true)") {
+                        view.evaluateJavascript(
+                            "typeof window.drawRandom === 'function' && (window.drawRandom('$category', ${JSONObject.quote(excluded)}), true)"
+                        ) {
                             if (it != "true") fail("在线卡片脚本未能加载")
                         }
                     }, onError = { fail(it) }, onRendererGone = {
@@ -343,5 +349,5 @@ private suspend fun fetchRandomOnlineCard(ctx: Context, category: String): Bitma
             throw IllegalStateException("在线卡片获取超时", error)
         } finally { browser?.closeScene() }
     }
-    return withContext(Dispatchers.Default) { OnlineCard.decode(raw) }
+    return withContext(Dispatchers.Default) { OnlineCard.decode(raw) to itemId }
 }

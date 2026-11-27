@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:width="46dp" android:height="46dp" android:gravity="center">
+        <shape>
+            <solid android:color="#0F1116" />
+            <corners android:radius="13dp" />
+        </shape>
+    </item>
+    <item
+        android:width="38dp"
+        android:height="38dp"
+        android:gravity="center"
+        android:drawable="@drawable/ic_logo" />
+</layer-list>

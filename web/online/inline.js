@@ -3,12 +3,12 @@ const canvas = document.querySelector('#card');
 const root = document.querySelector('#picker');
 const options = new URLSearchParams(location.search);
 const scheduled = options.get('scheduled') === '1';
-let imageBounds, category, drawError;
+let imageBounds, category, drawError, itemId;
 let presets;
 try { presets = Object.entries(JSON.parse(options.get('presets') || '{}')); } catch {}
 function sendCard() {
   const area = imageBounds ? [imageBounds.x, imageBounds.y, imageBounds.width, imageBounds.height].join(',') : '';
-  window.TodooScene.card(category, area + '|' + canvas.toDataURL('image/png').split(',')[1]);
+  window.TodooScene.card(category, area + '|' + canvas.toDataURL('image/png').split(',')[1], itemId);
 }
 const picker = mountOnline(root, canvas, {
   showPrompt: false,
@@ -17,17 +17,18 @@ const picker = mountOnline(root, canvas, {
   initialTone: presets?.find(([name]) => name === options.get('defaultPreset'))?.[1],
   openLyrics: selection => window.TodooScene.lyrics(JSON.stringify(selection)),
   onError: message => { drawError = message; },
-  onCard: (_canvas, _item, bounds) => {
+  onCard: (_canvas, item, bounds) => {
     category = root.querySelector('[data-online="kind"]').value;
     imageBounds = bounds;
+    itemId = item.id;
     if (!scheduled) sendCard();
   },
 });
 window.applyLyrics = (token, start, end) => picker.applyLyrics(token, start, end);
-window.drawRandom = async category => {
+window.drawRandom = async (category, excluded) => {
   try {
     drawError = '';
-    if (await picker.random(category)) sendCard();
+    if (await picker.random(category, excluded)) sendCard();
     else window.TodooScene.error(drawError || '此类别暂时没有可用的在线卡片');
   } catch (error) {
     window.TodooScene.error(error.message || '在线卡片渲染失败');

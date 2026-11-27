@@ -32,9 +32,10 @@ object AlbumStore {
     }
 
     /** 随机取一张（供计划里的照片轮播使用） */
-    fun randomImage(ctx: Context, albumUris: List<String>, except: String? = null): Uri? {
+    fun randomImage(ctx: Context, albumUris: List<String>, except: String? = null,
+                    allowRepeat: Boolean = true): Uri? {
         val all = listImages(ctx, albumUris)
-        val candidates = all.filter { it.toString() != except }.ifEmpty { all }
+        val candidates = all.filter { it.toString() != except }.ifEmpty { if (allowRepeat) all else emptyList() }
         return candidates.randomOrNull()
     }
 
