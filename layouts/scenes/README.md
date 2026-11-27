@@ -4,6 +4,31 @@
 
 待办、倒计时、天气、诗词和每日一句继续读取应用里已有的内容。英语短语、成语、开发者笔记、历史、问题卡和名片自带可替换的示例文字。要更换这些正文，修改 JSON 中对应的 `text` 再导入。
 
+## 联网看板
+
+添加后可从卡片侧栏直接打开。支持随应用设置联网取数，也可在卡片上手动刷新。历史一页需要 Android 1.8.11 或更新版本。
+
+| 版式文件 | 联网内容 |
+|---|---|
+| [历史一页](online-history-note.json) | 按当天日期联网查询历史事件，可切换条目 |
+| [晨间简报](online-daily-brief.json) | 联网天气、每日一句、待办和年度进度 |
+| [通勤气温](online-commute-forecast.json) | 当地气温、小时趋势和未来三天预报 |
+| [空气与光照](online-air-sun-dashboard.json) | 空气质量、日出日落、湿度和三天预报 |
+| [今天几点天亮](online-day-night.json) | 当地日出和日落 |
+| [出门天气](online-weather-field.json) | 小时趋势、三天预报、湿度和日出日落 |
+| [天气色卡](online-weather-tiles.json) | 满版色块、空气质量和穿衣参考 |
+| [蓝色天气看板](online-weather-blue-weather.json) | 蓝底气温、天气图标和预报 |
+| [蓝色天气色卡](online-weather-blue-weather2.json) | 蓝色主题的色块天气 |
+| [桌面日程](online-desk-agenda.json) | 当天日期、待办和当地天气 |
+| [一句＋天气](online-quote-weather.json) | 每日一句与当前天气 |
+| [极简引文](online-minimal-quote.json) | 黑底大字与实际署名 |
+| [摘录剪报](online-reading-clipping.json) | 每日一句正文和出处 |
+| [歌词海报](online-lyric-poster.json) | 海报版式，可填歌词，也可使用每日一句 |
+| [一封短信](online-letter-note.json) | 便笺版式，读取每日一句和署名 |
+| [诗笺](online-poetry-folio.json) | 联网诗词、作者和赏析 |
+| [墨色诗帖](online-ink-poem.json) | 联网诗词，采用黄底题签和蓝底正文 |
+| [诗词日签](online-verse-almanac.json) | 结合日期展示每日诗词 |
+
 ## 计划与日期
 
 ![计划与日期六张卡面预览](previews/planning.png)

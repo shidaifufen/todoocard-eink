@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "name": "今天几点天亮",
+  "templates": {
+    "weather2": {
+      "name": "今天几点天亮",
+      "sources": [
+        "weather"
+      ],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 82,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 16,
+          "width": 472,
+          "height": 51,
+          "text": "今天几点天亮",
+          "textSize": 35,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 82,
+          "width": 528,
+          "height": 218,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 113,
+          "width": 472,
+          "height": 41,
+          "text": "日出  /  {{weatherCity}}",
+          "textSize": 24,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 27,
+          "y": 166,
+          "width": 474,
+          "height": 116,
+          "text": "{{weatherSunrise}}",
+          "textSize": 86,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 300,
+          "width": 528,
+          "height": 218,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 333,
+          "width": 472,
+          "height": 38,
+          "text": "日落  /  {{date}}",
+          "textSize": 24,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 27,
+          "y": 389,
+          "width": 474,
+          "height": 116,
+          "text": "{{weatherSunset}}",
+          "textSize": 86,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 551,
+          "width": 472,
+          "height": 44,
+          "text": "{{weatherText}} · {{weatherTemp}}°",
+          "textSize": 28,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 619,
+          "width": 472,
+          "height": 87,
+          "text": "体感 {{weatherFeels}}°   湿度 {{weatherHumidity}}%\n{{wearAdvice}}",
+          "textSize": 22,
+          "color": "black",
+          "bold": false,
+          "lineHeight": 1.6
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 741,
+          "width": 472,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 752,
+          "width": 472,
+          "height": 31,
+          "text": "{{week}}   ·   更新 {{weatherUpdated}}",
+          "textSize": 17,
+          "color": "black",
+          "bold": false
+        }
+      ]
+    }
+  }
+}

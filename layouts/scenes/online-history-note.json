@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "name": "历史一页",
+  "templates": {
+    "custom": {
+      "name": "历史一页",
+      "sources": [
+        "history"
+      ],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 112,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 14,
+          "width": 472,
+          "height": 54,
+          "text": "历史一页",
+          "textSize": 38,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 29,
+          "y": 72,
+          "width": 470,
+          "height": 32,
+          "text": "历史上的今天",
+          "textSize": 20,
+          "color": "white",
+          "bold": false
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 112,
+          "width": 528,
+          "height": 142,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 29,
+          "y": 125,
+          "width": 471,
+          "height": 115,
+          "text": "{{historyDate}}",
+          "textSize": 76,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 29,
+          "y": 286,
+          "width": 470,
+          "height": 62,
+          "text": "{{historyTitle}}",
+          "textSize": 39,
+          "color": "blue",
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 376,
+          "width": 472,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 29,
+          "y": 409,
+          "width": 470,
+          "height": 176,
+          "text": "{{historyText}}",
+          "textSize": 29,
+          "color": "black",
+          "bold": false,
+          "lineHeight": 1.52
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 625,
+          "width": 528,
+          "height": 167,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 29,
+          "y": 642,
+          "width": 467,
+          "height": 42,
+          "text": "资料来源",
+          "textSize": 25,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 29,
+          "y": 696,
+          "width": 467,
+          "height": 68,
+          "text": "{{historySource}}",
+          "textSize": 24,
+          "color": "white",
+          "bold": false,
+          "lineHeight": 1.45
+        }
+      ]
+    }
+  }
+}

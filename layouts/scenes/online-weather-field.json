@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "name": "出门天气",
+  "templates": {
+    "weather": {
+      "name": "出门天气",
+      "sources": [
+        "weather"
+      ],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 111,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 30,
+          "y": 18,
+          "width": 460,
+          "height": 54,
+          "text": "{{weatherCity}}",
+          "textSize": 36,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 32,
+          "y": 72,
+          "width": 460,
+          "height": 30,
+          "text": "出门天气  ·  {{date}}",
+          "textSize": 19,
+          "color": "white"
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 123,
+          "width": 331,
+          "height": 116,
+          "text": "{{weatherTemp}}°",
+          "textSize": 88,
+          "color": "blue",
+          "bold": true
+        },
+        {
+          "type": "weatherIcon",
+          "x": 378,
+          "y": 136,
+          "width": 96,
+          "height": 96
+        },
+        {
+          "type": "text",
+          "x": 32,
+          "y": 244,
+          "width": 463,
+          "height": 42,
+          "text": "{{weatherText}}   {{weatherLow}}～{{weatherHigh}}°",
+          "textSize": 28,
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 301,
+          "width": 528,
+          "height": 66,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 315,
+          "width": 468,
+          "height": 36,
+          "text": "体感 {{weatherFeels}}°    湿度 {{weatherHumidity}}%",
+          "textSize": 23
+        },
+        {
+          "type": "weatherHours",
+          "x": 30,
+          "y": 384,
+          "width": 468,
+          "height": 121,
+          "color": "blue"
+        },
+        {
+          "type": "rect",
+          "x": 30,
+          "y": 519,
+          "width": 468,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 532,
+          "width": 460,
+          "height": 38,
+          "text": "未来三天",
+          "textSize": 26,
+          "bold": true
+        },
+        {
+          "type": "forecastBars",
+          "x": 31,
+          "y": 579,
+          "width": 466,
+          "height": 103,
+          "color": "blue"
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 704,
+          "width": 528,
+          "height": 88,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 714,
+          "width": 466,
+          "height": 34,
+          "text": "日出 {{weatherSunrise}}     日落 {{weatherSunset}}",
+          "textSize": 21,
+          "color": "white"
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 751,
+          "width": 466,
+          "height": 29,
+          "text": "空气 AQI {{weatherAqi}}   ·   {{weatherUpdated}}",
+          "textSize": 16,
+          "color": "white"
+        }
+      ]
+    }
+  }
+}

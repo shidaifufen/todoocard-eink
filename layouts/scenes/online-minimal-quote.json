@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "name": "极简引文",
+  "templates": {
+    "quote": {
+      "name": "极简引文",
+      "sources": [
+        "quote"
+      ],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 792,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 29,
+          "y": 24,
+          "width": 470,
+          "height": 55,
+          "text": "极简引文",
+          "textSize": 37,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 91,
+          "width": 472,
+          "height": 47,
+          "text": "{{date}}",
+          "textSize": 23,
+          "color": "white",
+          "bold": false
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 170,
+          "width": 88,
+          "height": 5,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 207,
+          "width": 472,
+          "height": 393,
+          "text": "{{quote}}",
+          "textSize": 48,
+          "color": "white",
+          "bold": true,
+          "lineHeight": 1.46
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 633,
+          "width": 470,
+          "height": 57,
+          "text": "{{quoteBy}}",
+          "textSize": 25,
+          "color": "white",
+          "bold": false,
+          "align": "right",
+          "showIf": "quoteBy"
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 721,
+          "width": 472,
+          "height": 2,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 745,
+          "width": 472,
+          "height": 28,
+          "text": "{{week}}",
+          "textSize": 19,
+          "color": "white",
+          "bold": false
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "name": "晨间简报",
+  "templates": {
+    "summary": {
+      "name": "晨间简报",
+      "sources": [
+        "weather",
+        "quote"
+      ],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 111,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 30,
+          "y": 18,
+          "width": 460,
+          "height": 54,
+          "text": "晨间简报",
+          "textSize": 36,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 32,
+          "y": 72,
+          "width": 460,
+          "height": 30,
+          "text": "{{date}}  ·  {{week}}",
+          "textSize": 19,
+          "color": "white"
+        },
+        {
+          "type": "text",
+          "x": 30,
+          "y": 134,
+          "width": 315,
+          "height": 97,
+          "text": "{{weatherTemp}}°",
+          "textSize": 74,
+          "bold": true
+        },
+        {
+          "type": "weatherIcon",
+          "x": 387,
+          "y": 139,
+          "width": 89,
+          "height": 89
+        },
+        {
+          "type": "text",
+          "x": 32,
+          "y": 235,
+          "width": 455,
+          "height": 38,
+          "text": "{{weatherCity}} · {{weatherText}}   {{weatherLow}}～{{weatherHigh}}°",
+          "textSize": 22
+        },
+        {
+          "type": "rect",
+          "x": 30,
+          "y": 293,
+          "width": 468,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 310,
+          "width": 445,
+          "height": 42,
+          "text": "今日待办 · {{todoCount}} 项",
+          "textSize": 28,
+          "bold": true
+        },
+        {
+          "type": "list",
+          "x": 31,
+          "y": 367,
+          "width": 465,
+          "height": 193,
+          "source": "todos",
+          "numbered": true,
+          "emptyText": "今天还没有安排",
+          "textSize": 24,
+          "lineHeight": 1.48
+        },
+        {
+          "type": "rect",
+          "x": 30,
+          "y": 581,
+          "width": 468,
+          "height": 3,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 595,
+          "width": 460,
+          "height": 34,
+          "text": "全年进度 {{yearPercent}}%",
+          "textSize": 21,
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 646,
+          "width": 528,
+          "height": 146,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 661,
+          "width": 466,
+          "height": 91,
+          "text": "{{quote}}",
+          "textSize": 25,
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 751,
+          "width": 466,
+          "height": 30,
+          "text": "{{quoteBy}}",
+          "textSize": 17,
+          "align": "right",
+          "showIf": "quoteBy"
+        }
+      ]
+    }
+  }
+}

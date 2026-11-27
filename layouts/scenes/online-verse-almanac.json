@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "name": "诗词日签",
+  "templates": {
+    "poem": {
+      "name": "诗词日签",
+      "sources": [
+        "poem"
+      ],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 111,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 30,
+          "y": 18,
+          "width": 460,
+          "height": 54,
+          "text": "每日诗词",
+          "textSize": 36,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 32,
+          "y": 72,
+          "width": 460,
+          "height": 30,
+          "text": "{{date}}  ·  {{week}}",
+          "textSize": 19,
+          "color": "white"
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 138,
+          "width": 466,
+          "height": 73,
+          "text": "{{poemTitle}}",
+          "textSize": 41,
+          "bold": true,
+          "color": "blue"
+        },
+        {
+          "type": "text",
+          "x": 32,
+          "y": 216,
+          "width": 465,
+          "height": 50,
+          "text": "{{poemBy}}",
+          "textSize": 22,
+          "showIf": "poemBy"
+        },
+        {
+          "type": "rect",
+          "x": 30,
+          "y": 278,
+          "width": 468,
+          "height": 2,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 32,
+          "y": 306,
+          "width": 464,
+          "height": 276,
+          "text": "{{poemText}}",
+          "textSize": 31,
+          "bold": true,
+          "lineHeight": 1.52
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 612,
+          "width": 528,
+          "height": 180,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 627,
+          "width": 466,
+          "height": 33,
+          "text": "诗词赏析",
+          "textSize": 23,
+          "bold": true,
+          "showIf": "poemNote"
+        },
+        {
+          "type": "text",
+          "x": 31,
+          "y": 671,
+          "width": 466,
+          "height": 92,
+          "text": "{{poemNote}}",
+          "textSize": 20,
+          "lineHeight": 1.45,
+          "showIf": "poemNote"
+        }
+      ]
+    }
+  }
+}

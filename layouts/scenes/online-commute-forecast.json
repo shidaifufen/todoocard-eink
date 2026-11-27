@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "name": "通勤气温",
+  "templates": {
+    "weather": {
+      "name": "通勤气温",
+      "sources": [
+        "weather"
+      ],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 284,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 18,
+          "width": 470,
+          "height": 52,
+          "text": "通勤气温",
+          "textSize": 36,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 77,
+          "width": 465,
+          "height": 37,
+          "text": "{{weatherCity}} · {{week}}",
+          "textSize": 22,
+          "color": "black",
+          "bold": false
+        },
+        {
+          "type": "text",
+          "x": 26,
+          "y": 117,
+          "width": 322,
+          "height": 136,
+          "text": "{{weatherTemp}}°",
+          "textSize": 95,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "weatherIcon",
+          "x": 374,
+          "y": 137,
+          "width": 109,
+          "height": 109
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 304,
+          "width": 470,
+          "height": 40,
+          "text": "{{weatherText}}   ·   体感 {{weatherFeels}}°",
+          "textSize": 26,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "weatherHours",
+          "x": 28,
+          "y": 373,
+          "width": 472,
+          "height": 145,
+          "color": "blue"
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 535,
+          "width": 472,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 553,
+          "width": 470,
+          "height": 38,
+          "text": "未来三天气温范围",
+          "textSize": 25,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "forecastBars",
+          "x": 28,
+          "y": 604,
+          "width": 472,
+          "height": 105,
+          "color": "red"
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 733,
+          "width": 528,
+          "height": 59,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 744,
+          "width": 472,
+          "height": 38,
+          "text": "{{date}}   ·   {{weatherUpdated}}",
+          "textSize": 20,
+          "color": "white",
+          "bold": false
+        }
+      ]
+    }
+  }
+}

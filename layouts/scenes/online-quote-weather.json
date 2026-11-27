@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "name": "一句＋天气",
+  "templates": {
+    "quote": {
+      "name": "一句＋天气",
+      "sources": [
+        "quote",
+        "weather"
+      ],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 32,
+          "y": 32,
+          "width": 464,
+          "height": 728,
+          "fill": "white",
+          "border": "black",
+          "borderWidth": 2
+        },
+        {
+          "type": "text",
+          "x": 52,
+          "y": 50,
+          "width": 424,
+          "height": 45,
+          "text": "{{date}} · {{week}}",
+          "textSize": 26,
+          "color": "blue",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 52,
+          "y": 110,
+          "width": 424,
+          "height": 45,
+          "text": "{{weatherCity}} {{weatherText}} {{weatherTemp}}°",
+          "textSize": 24,
+          "color": "black"
+        },
+        {
+          "type": "weatherIcon",
+          "x": 410,
+          "y": 118,
+          "width": 50,
+          "height": 50
+        },
+        {
+          "type": "rect",
+          "x": 52,
+          "y": 177,
+          "width": 424,
+          "height": 4,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x": 60,
+          "y": 215,
+          "width": 408,
+          "height": 350,
+          "text": "{{quote}}",
+          "textSize": 38,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 60,
+          "y": 580,
+          "width": 408,
+          "height": 75,
+          "text": "— {{quoteBy}}",
+          "textSize": 22,
+          "color": "black",
+          "align": "right"
+        },
+        {
+          "type": "text",
+          "x": 52,
+          "y": 702,
+          "width": 424,
+          "height": 34,
+          "text": "留一点时间给自己",
+          "textSize": 20,
+          "color": "blue"
+        }
+      ]
+    }
+  }
+}

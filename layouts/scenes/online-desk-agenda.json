@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "name": "桌面日程",
+  "templates": {
+    "summary": {
+      "name": "桌面日程",
+      "sources": [
+        "weather"
+      ],
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 203,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 17,
+          "width": 470,
+          "height": 52,
+          "text": "桌面日程",
+          "textSize": 36,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 27,
+          "y": 86,
+          "width": 270,
+          "height": 100,
+          "text": "{{day}}",
+          "textSize": 80,
+          "color": "white",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 315,
+          "y": 103,
+          "width": 193,
+          "height": 30,
+          "text": "{{year}} 年 {{month}} 月",
+          "textSize": 21,
+          "color": "white",
+          "bold": false,
+          "align": "right"
+        },
+        {
+          "type": "text",
+          "x": 315,
+          "y": 143,
+          "width": 193,
+          "height": 34,
+          "text": "{{week}}",
+          "textSize": 24,
+          "color": "white",
+          "bold": true,
+          "align": "right"
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 229,
+          "width": 184,
+          "height": 41,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 38,
+          "y": 233,
+          "width": 164,
+          "height": 32,
+          "text": "今日 · {{todoCount}} 项",
+          "textSize": 20,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "list",
+          "x": 30,
+          "y": 293,
+          "width": 468,
+          "height": 325,
+          "source": "todos",
+          "numbered": true,
+          "textSize": 27,
+          "emptyText": "今天还没有安排",
+          "lineHeight": 1.55
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 647,
+          "width": 528,
+          "height": 145,
+          "fill": "yellow"
+        },
+        {
+          "type": "weatherIcon",
+          "x": 398,
+          "y": 670,
+          "width": 96,
+          "height": 96
+        },
+        {
+          "type": "text",
+          "x": 29,
+          "y": 668,
+          "width": 349,
+          "height": 45,
+          "text": "{{weatherTemp}}° · {{weatherText}}",
+          "textSize": 31,
+          "color": "black",
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 29,
+          "y": 729,
+          "width": 349,
+          "height": 45,
+          "text": "{{weatherCity}} · {{weatherLow}}～{{weatherHigh}}°",
+          "textSize": 21,
+          "color": "black",
+          "bold": false
+        }
+      ]
+    }
+  }
+}
