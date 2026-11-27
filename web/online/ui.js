@@ -175,7 +175,7 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
   }
 
   async function select(hit, ticket) {
-    const art = await loadArt(hit.artwork);
+    const art = await loadArt(hit.artwork, hit.artworkFallback);
     if (!current() || ticket !== operation) return;
     item = hit;
     artwork = art;
@@ -209,7 +209,11 @@ export function mountOnline(root, canvas, { onCard = () => {}, onEmpty = () => {
     try {
       const matches = await fetchItems();
       if (!current() || ticket !== operation) return;
-      if (!matches.length) throw new Error(kind === 'earthquake' ? '近一周没有符合条件的重要地震。' : '没有匹配的内容，试试其他关键词。');
+      if (!matches.length) {
+        if (kind === 'movie') throw new Error('没有找到带海报的电影，试试其他译名或英文片名。');
+        if (kind === 'earthquake') throw new Error('近一周没有符合条件的重要地震。');
+        throw new Error('没有匹配的内容，试试其他关键词。');
+      }
       if (random) {
         const eligible = matches.filter(candidate => candidate.id !== item?.id && candidate.id !== excluded);
         const unseen = eligible.filter(candidate => !seen.has(candidate.id));

@@ -1,5 +1,8 @@
 const endpoints = {
   apple: 'https://itunes.apple.com',
+  movies: 'https://v3-cinemeta.strem.io/catalog/movie/top/',
+  posters: 'https://images.metahub.space/poster/medium/',
+  posterRelay: 'https://wsrv.nl/',
   lyrics: 'https://lrclib.net',
   idioms: 'https://cdn.jsdelivr.net/gh/pwxcoo/chinese-xinhua@master/data/idiom.json',
   idiomsFallback: 'https://raw.githubusercontent.com/pwxcoo/chinese-xinhua/master/data/idiom.json',
@@ -12,7 +15,7 @@ const endpoints = {
 
 export const kinds = {
   music: { name: '音乐封面', placeholder: '歌名、歌手或专辑' },
-  movie: { name: '电影海报', placeholder: '电影名称，例如 星际穿越' },
+  movie: { name: '电影海报', placeholder: '简体、繁体或英文片名' },
   english: { name: '英语短语', placeholder: '例如 take off 或 look forward to' },
   idiom: { name: '成语词条', placeholder: '例如 持之以恒，或搜索拼音' },
   rates: { name: '汇率速览', placeholder: '例如 USD、人民币，或 USD HKD', action: '更新汇率' },
@@ -112,12 +115,30 @@ async function chart(kind, country, timeoutMs) {
   });
 }
 
+async function catalogFilms(query) {
+  const term = encodeURIComponent(query.normalize('NFKC'));
+  const data = await json(endpoints.movies + 'search=' + term + '.json', undefined, 8000);
+  if (!Array.isArray(data.metas)) throw new Error('电影索引返回的数据无效');
+  return unique(data.metas.flatMap(movie => {
+    const id = movie.imdb_id || movie.id;
+    const title = clean(movie.name);
+    if (movie.type !== 'movie' || !/^tt\d{7,10}$/.test(id) || !title || !movie.poster) return [];
+    const poster = endpoints.posters + id + '/img';
+    const year = clean(movie.releaseInfo).match(/^(?:18|19|20)\d{2}(?=\b)/)?.[0];
+    return [{
+      id: 'movie:' + id, title, by: year, year,
+      artwork: url(endpoints.posterRelay, { url: poster }), artworkFallback: poster,
+      source: 'Cinemeta',
+    }];
+  })).slice(0, 25);
+}
+
 function wikipediaFilms(query, language) {
   const wiki = 'https://' + language + '.wikipedia.org';
   return json(url(wiki + '/w/api.php', {
     action: 'query', generator: 'search', gsrsearch: query + (language === 'zh' ? ' 電影' : ' film'),
     gsrlimit: '14', prop: 'pageimages|description', pilicense: 'any', pithumbsize: '650', format: 'json', origin: '*',
-  })).then(data => Object.values(data.query?.pages || {}).sort((a, b) => a.index - b.index).flatMap(item => {
+  }), undefined, 6500).then(data => Object.values(data.query?.pages || {}).sort((a, b) => a.index - b.index).flatMap(item => {
     if (!item.thumbnail?.source || !Number.isFinite(item.pageid)) return [];
     const artwork = new URL(item.thumbnail.source);
     if (artwork.protocol !== 'https:' || artwork.hostname !== 'upload.wikimedia.org') return [];
@@ -133,11 +154,21 @@ function wikipediaFilms(query, language) {
 }
 
 async function films(query) {
+  let unavailable = false;
+  try {
+    const matches = await catalogFilms(query);
+    if (matches.length) return matches;
+  } catch {
+    unavailable = true;
+  }
   const language = /\p{Script=Han}/u.test(query) ? 'zh' : 'en';
-  const [wiki, top] = await Promise.allSettled([wikipediaFilms(query, language), chart('movie', 'us')]);
+  const [wiki, top] = await Promise.allSettled([wikipediaFilms(query, language), chart('movie', 'us', 6500)]);
   const matching = (top.value || []).filter(film => normalized(film.title).includes(normalized(query)));
-  if (wiki.status === 'rejected' && top.status === 'rejected') throw wiki.reason;
-  return unique([...(wiki.value || []), ...matching]);
+  const result = unique([...(wiki.value || []), ...matching]);
+  if (!result.length && unavailable && wiki.status === 'rejected') {
+    throw new Error('电影检索服务暂时不可用，请稍后重试');
+  }
+  return result;
 }
 
 const verbs = ['bring','call','carry','come','cut','drop','fall','figure','find','get','give','go','hold',
@@ -309,7 +340,16 @@ export async function songLyrics(track) {
   return lyrics ? lyrics.split(/\r?\n/).map(line => line.trim()).filter(Boolean).slice(0, 180) : [];
 }
 
-export function loadArt(artwork) {
+export async function loadArt(artwork, fallback) {
+  try {
+    return await loadArtwork(artwork);
+  } catch (error) {
+    if (!fallback) throw error;
+    return loadArtwork(fallback);
+  }
+}
+
+function loadArtwork(artwork) {
   if (!artwork) return Promise.resolve(null);
   return new Promise((resolve, reject) => {
     const image = new Image();

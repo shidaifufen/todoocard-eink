@@ -12,8 +12,8 @@ android {
         applicationId = "com.shidaifufen.todocard"
         minSdk = 26
         targetSdk = 35
-        versionCode = 26
-        versionName = "1.8.13"
+        versionCode = 27
+        versionName = "1.8.14"
     }
     signingConfigs {
         create("stable") {
