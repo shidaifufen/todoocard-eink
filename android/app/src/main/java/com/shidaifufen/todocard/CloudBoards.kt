@@ -1,8 +1,13 @@
 package com.shidaifufen.todocard
 
 import android.content.Context
+import android.util.AtomicFile
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.util.UUID
 
 internal object CloudBoards {
@@ -14,6 +19,60 @@ internal object CloudBoards {
     ) {
         val template get() = pack.templates.getValue(kind)
         val title get() = pack.name
+        val planKey get() = "cloud:$id"
+        val autoUpdates get() = origin.matches(publishedScene)
+    }
+
+    private val publishedScene = Regex(
+        "https://raw\\.githubusercontent\\.com/shidaifufen/todoocard-eink/main/layouts/scenes/live-[a-z0-9-]+\\.json"
+    )
+
+    private fun cachedFile(ctx: Context, board: Board) =
+        AtomicFile(File(ctx.cacheDir, "cloud-scene-${UUID.fromString(board.id)}.json"))
+
+    private fun withPack(board: Board, pack: LayoutPack.Pack): Board {
+        require(pack.templates.keys == setOf(board.kind)) { "云端看板的类型已更改" }
+        return board.copy(pack = pack)
+    }
+
+    fun cached(ctx: Context, board: Board): Board {
+        if (!board.autoUpdates) return board
+        return runCatching {
+            val raw = cachedFile(ctx, board).openRead().use(LayoutDownload::read)
+            withPack(board, LayoutPack.parse(raw))
+        }.getOrDefault(board)
+    }
+
+    suspend fun latest(ctx: Context, board: Board): Board = withContext(Dispatchers.IO) {
+        if (!board.autoUpdates) return@withContext board
+        val updated = withPack(board, LayoutDownload.fetch(board.origin))
+        val file = cachedFile(ctx, board)
+        synchronized(this@CloudBoards) {
+            val out = file.startWrite()
+            try {
+                out.write(updated.pack.json.toByteArray(Charsets.UTF_8))
+                file.finishWrite(out)
+            } catch (error: Exception) {
+                file.failWrite(out)
+                throw error
+            }
+        }
+        updated
+    }
+
+    suspend fun scheduledBitmap(ctx: Context, key: String, onNotice: (String) -> Unit): android.graphics.Bitmap {
+        val board = withContext(Dispatchers.IO) { load(ctx).firstOrNull { it.planKey == key } }
+            ?: error("计划中的云端看板已移除，请重新选择")
+        val active = try {
+            latest(ctx, board)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            onNotice("云端刷新失败，发送上次保存的看板")
+            cached(ctx, board)
+        }
+        val card = CardSources.scheduledCard(ctx, active.kind, onNotice, template = active.template)
+        return withContext(Dispatchers.Default) { Render.render(card.copy(kind = active.kind), active.template) }
     }
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("cloud_boards", Context.MODE_PRIVATE)

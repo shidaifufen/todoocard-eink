@@ -1,0 +1,43 @@
+name: Refresh online dashboards
+
+on:
+  schedule:
+    - cron: '17 */2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-online-dashboards
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TZ: Asia/Hong_Kong
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Fetch upstream data
+        id: data
+        continue-on-error: true
+        run: node tools/refresh-online-dashboards.mjs
+      - name: Publish changed dashboards
+        run: |
+          git add -- 'layouts/scenes/live-*.json'
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Refresh live dashboard data'
+          git pull --rebase origin main
+          git push origin HEAD:main
+      - name: Check upstream results
+        if: steps.data.outcome == 'failure'
+        run: exit 1

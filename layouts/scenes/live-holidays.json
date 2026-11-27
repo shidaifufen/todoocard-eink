@@ -1,0 +1,209 @@
+{
+  "schemaVersion": 1,
+  "name": "假日倒数",
+  "templates": {
+    "custom": {
+      "name": "假日倒数",
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 230,
+          "fill": "yellow"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 22,
+          "width": 472,
+          "height": 42,
+          "text": "假日倒数",
+          "textSize": 26,
+          "color": "black",
+          "shrink": true,
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 65,
+          "width": 48,
+          "height": 5,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 78,
+          "width": 472,
+          "height": 103,
+          "text": "还有 28 天",
+          "textSize": 75,
+          "color": "black",
+          "shrink": true,
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 186,
+          "width": 472,
+          "height": 39,
+          "text": "中国香港",
+          "textSize": 25,
+          "color": "black",
+          "shrink": true
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 253,
+          "width": 118,
+          "height": 96,
+          "text": "12-25",
+          "textSize": 23,
+          "color": "black",
+          "shrink": true,
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 156,
+          "y": 253,
+          "width": 344,
+          "height": 96,
+          "text": "聖誕節",
+          "textSize": 34,
+          "color": "black",
+          "shrink": true,
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 356,
+          "width": 472,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 369,
+          "width": 118,
+          "height": 96,
+          "text": "12-26",
+          "textSize": 23,
+          "color": "black",
+          "shrink": true,
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 156,
+          "y": 369,
+          "width": 344,
+          "height": 96,
+          "text": "聖誕節翌日",
+          "textSize": 34,
+          "color": "black",
+          "shrink": true,
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 472,
+          "width": 472,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 485,
+          "width": 118,
+          "height": 96,
+          "text": "01-01",
+          "textSize": 23,
+          "color": "black",
+          "shrink": true,
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 156,
+          "y": 485,
+          "width": 344,
+          "height": 96,
+          "text": "元旦新年",
+          "textSize": 34,
+          "color": "black",
+          "shrink": true,
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 588,
+          "width": 472,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 601,
+          "width": 118,
+          "height": 96,
+          "text": "02-06",
+          "textSize": 23,
+          "color": "black",
+          "shrink": true,
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 156,
+          "y": 601,
+          "width": 344,
+          "height": 96,
+          "text": "農曆年初一",
+          "textSize": 34,
+          "color": "black",
+          "shrink": true,
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 704,
+          "width": 472,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 736,
+          "width": 528,
+          "height": 56,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 746,
+          "width": 472,
+          "height": 34,
+          "text": "Nager.Date · 全国或全区公共假日",
+          "textSize": 20,
+          "color": "white",
+          "shrink": true
+        }
+      ]
+    }
+  }
+}

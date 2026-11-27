@@ -1,0 +1,233 @@
+{
+  "schemaVersion": 1,
+  "name": "剧集档案",
+  "templates": {
+    "custom": {
+      "name": "剧集档案",
+      "nodes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 528,
+          "height": 230,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 22,
+          "width": 472,
+          "height": 42,
+          "text": "剧集档案",
+          "textSize": 26,
+          "color": "white",
+          "shrink": true,
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 65,
+          "width": 48,
+          "height": 5,
+          "fill": "white"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 78,
+          "width": 472,
+          "height": 103,
+          "text": "Sherlock",
+          "textSize": 50,
+          "color": "white",
+          "shrink": true,
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 186,
+          "width": 472,
+          "height": 39,
+          "text": "Drama · Crime · Mystery",
+          "textSize": 25,
+          "color": "white",
+          "shrink": true
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 253,
+          "width": 118,
+          "height": 43,
+          "text": "首播",
+          "textSize": 23,
+          "color": "black",
+          "shrink": true,
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 156,
+          "y": 253,
+          "width": 344,
+          "height": 43,
+          "text": "2010-07-25",
+          "textSize": 25,
+          "color": "black",
+          "shrink": true,
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 303,
+          "width": 472,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 316,
+          "width": 118,
+          "height": 43,
+          "text": "状态",
+          "textSize": 23,
+          "color": "black",
+          "shrink": true,
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 156,
+          "y": 316,
+          "width": 344,
+          "height": 43,
+          "text": "已完结",
+          "textSize": 25,
+          "color": "black",
+          "shrink": true,
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 366,
+          "width": 472,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 379,
+          "width": 118,
+          "height": 43,
+          "text": "平台",
+          "textSize": 23,
+          "color": "black",
+          "shrink": true,
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 156,
+          "y": 379,
+          "width": 344,
+          "height": 43,
+          "text": "BBC One",
+          "textSize": 25,
+          "color": "black",
+          "shrink": true,
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 429,
+          "width": 472,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 442,
+          "width": 118,
+          "height": 43,
+          "text": "评分",
+          "textSize": 23,
+          "color": "black",
+          "shrink": true,
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 156,
+          "y": 442,
+          "width": 344,
+          "height": 43,
+          "text": "8.9 / 10",
+          "textSize": 25,
+          "color": "black",
+          "shrink": true,
+          "bold": true
+        },
+        {
+          "type": "rect",
+          "x": 28,
+          "y": 492,
+          "width": 472,
+          "height": 2,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 507,
+          "width": 472,
+          "height": 31,
+          "text": "剧情简介",
+          "textSize": 21,
+          "color": "blue",
+          "shrink": true,
+          "bold": true
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 540,
+          "width": 472,
+          "height": 185,
+          "text": "Sherlock Holmes and Dr. John Watson's adventures in 21st Century London. A thrilling, funny, fast-paced contemporary reimagining of the Arthur Conan Doyle classic.",
+          "textSize": 24,
+          "color": "black",
+          "shrink": true,
+          "wrap": true
+        },
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 736,
+          "width": 528,
+          "height": 56,
+          "fill": "black"
+        },
+        {
+          "type": "text",
+          "x": 28,
+          "y": 746,
+          "width": 472,
+          "height": 34,
+          "text": "TVmaze · CC BY-SA",
+          "textSize": 20,
+          "color": "white",
+          "shrink": true
+        }
+      ]
+    }
+  }
+}

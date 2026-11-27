@@ -116,7 +116,11 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
     var kind by rememberSaveable { mutableStateOf("summary") }
     var boards by remember(ctx) { mutableStateOf(CloudBoards.load(ctx)) }
     var boardId by rememberSaveable { mutableStateOf<String?>(null) }
-    val selectedBoard = boards.find { it.id == boardId && it.kind == kind }
+    val installedBoard = boards.find { it.id == boardId && it.kind == kind }
+    var refreshedBoard by remember(installedBoard) { mutableStateOf<CloudBoards.Board?>(null) }
+    val selectedBoard = refreshedBoard ?: installedBoard
+    var cloudRefresh by remember(installedBoard) { mutableIntStateOf(0) }
+    var cloudRefreshing by remember(installedBoard) { mutableStateOf(false) }
     val tabState = rememberSaveableStateHolder()
     LaunchedEffect(Unit) { SchedulerWorker.clearLegacyWork(ctx) }
     var onlineSaving by remember { mutableStateOf(false) }
@@ -239,6 +243,22 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                 status = "AI 图片已生成，可以调整裁切后推送"
             }.onFailure { status = "生成失败：${it.message}" }
             refreshing = false
+        }
+    }
+    LaunchedEffect(installedBoard, tab, cloudRefresh) {
+        val board = installedBoard ?: return@LaunchedEffect
+        if (tab != 0 || !board.autoUpdates) return@LaunchedEffect
+        cloudRefreshing = true
+        try {
+            refreshedBoard = withContext(Dispatchers.IO) { CloudBoards.cached(ctx, board) }
+            refreshedBoard = CloudBoards.latest(ctx, board)
+            if (cloudRefresh > 0) status = "已获取最新云端看板"
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            status = "云端刷新失败，已保留上次的看板：${error.message}"
+        } finally {
+            cloudRefreshing = false
         }
     }
     LaunchedEffect(kind, selectedBoard, contentDay, sourceRevision, layoutRevision) {
@@ -703,7 +723,9 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                         carouselCount = carouselPhotos.size,
                         onDraw = { drawCarousel()?.let { loadPhoto(it, openEditor = false) } },
                         onAddPhotos = ::addCarouselPhotos,
-                        onRefresh = { refreshCard() }, onAnalysis = ::refreshAnalysis, refreshing = refreshing,
+                        onRefresh = {
+                            if (selectedBoard?.autoUpdates == true) cloudRefresh++ else refreshCard()
+                        }, onAnalysis = ::refreshAnalysis, refreshing = refreshing || cloudRefreshing,
                         onScanAll = { requestScan(true) }, scanTimedOut = scanTimedOut,
                         onGenerate = ::generateImage, onlineContent = onlineContent,
                         onlineControls = {
@@ -773,7 +795,7 @@ private fun App(activity: MainActivity, incomingIntent: Intent?) {
                             boardId = null
                             kind = imageKind; if (imageKind == "photo") PlanStore.lastPhoto = photoPath; tab = 0
                         })
-                    3 -> PlanScreen(ctx, onReplay = ::replayHistory)
+                    3 -> PlanScreen(ctx, boards = boards, onReplay = ::replayHistory)
                     else -> SettingsScreen(pairedName, pairedAddress, defaultFields, found,
                         device?.device?.address, status, theme,
                         defaultLayout = PlanStore.defaultLayout(ctx, card),

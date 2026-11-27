@@ -26,8 +26,11 @@ import java.util.Locale
 /** 每日计划 / 间隔推送 / 时间轴 / 历史 —— 统一视觉：卡片分组 + 标准时间选择器 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PlanScreen(ctx: android.content.Context, onReplay: (PlanStore.Hist) -> Unit) {
+internal fun PlanScreen(ctx: android.content.Context, boards: List<CloudBoards.Board>, onReplay: (PlanStore.Hist) -> Unit) {
     PlanStore.init(ctx)
+    val boardChoices = boards.map { it.planKey to it.title }
+    val boardNames = boardChoices.toMap()
+    fun name(key: String) = boardNames[key] ?: templateName(key)
     var fixed by remember { mutableStateOf(PlanStore.fixed(ctx)) }
     var itvs by remember { mutableStateOf(PlanStore.intervals(ctx)) }
     var hist by remember { mutableStateOf(PlanStore.history(ctx)) }
@@ -60,7 +63,7 @@ fun PlanScreen(ctx: android.content.Context, onReplay: (PlanStore.Hist) -> Unit)
             fixed.forEachIndexed { i, f ->
                 PlanRow(
                     time = f.time,
-                    title = templateName(f.template),
+                    title = name(f.template),
                     enabled = f.enabled,
                     onToggle = { v ->
                         fixed = fixed.toMutableList().also { it[i] = f.copy(enabled = v) }
@@ -81,7 +84,7 @@ fun PlanScreen(ctx: android.content.Context, onReplay: (PlanStore.Hist) -> Unit)
             }
             itvs.forEachIndexed { i, t ->
                 val days = when (t.days) { "workday" -> "工作日"; "weekend" -> "周末"; else -> "每天" }
-                val cards = if (t.templates.size == 1) templateName(t.templates.first()) else "从 ${t.templates.size} 张卡片中随机推送"
+                val cards = if (t.templates.size == 1) name(t.templates.first()) else "从 ${t.templates.size} 张卡片中随机推送"
                 PlanRow(
                     time = "${t.start}–${t.end}",
                     title = "每 ${t.everyMin} 分钟 · $days · $cards",
@@ -110,10 +113,10 @@ fun PlanScreen(ctx: android.content.Context, onReplay: (PlanStore.Hist) -> Unit)
                     if (HistoryCards.file(ctx, h.snapshot) != null) {
                         TextButton(onClick = { selected = h }, modifier = Modifier.weight(1f),
                             contentPadding = PaddingValues(0.dp)) {
-                            Text(templateName(h.template) + " · 查看图片", fontSize = 12.sp,
+                            Text(name(h.template) + " · 查看图片", fontSize = 12.sp,
                                 textDecoration = TextDecoration.Underline)
                         }
-                    } else Text(templateName(h.template), fontSize = 12.sp, modifier = Modifier.weight(1f))
+                    } else Text(name(h.template), fontSize = 12.sp, modifier = Modifier.weight(1f))
                     Text(if (h.ok) "✓ ${h.seconds}s" else "✕", fontSize = 12.sp,
                         color = if (h.ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
                 }
@@ -151,6 +154,7 @@ fun PlanScreen(ctx: android.content.Context, onReplay: (PlanStore.Hist) -> Unit)
         val existing = if (idx >= 0) fixed[idx] else PlanStore.Fixed("08:00", "summary")
         PlanEditDialog(
             initial = existing,
+            boards = boardChoices,
             title = if (idx >= 0) "编辑计划" else "新增计划",
             onDismiss = { editFixed = null },
             onConfirm = { item ->
@@ -172,6 +176,7 @@ fun PlanScreen(ctx: android.content.Context, onReplay: (PlanStore.Hist) -> Unit)
         val existing = if (idx >= 0) itvs[idx] else PlanStore.Interval(60, "09:00", "22:00", "all", "summary")
         IntervalEditDialog(
             initial = existing,
+            boards = boardChoices,
             title = if (idx >= 0) "编辑间隔推送" else "新增间隔推送",
             onDismiss = { editItv = null },
             onConfirm = { item ->
@@ -246,7 +251,16 @@ private fun TimeField(label: String, value: String, onChange: (String) -> Unit) 
 }
 
 @Composable
-private fun TemplatePicker(current: String, onPick: (String) -> Unit) {
+private fun TemplatePicker(current: String, boards: List<Pair<String, String>>, onPick: (String) -> Unit) {
+    if (boards.isNotEmpty()) {
+        Text("我的云端看板", fontSize = 12.sp)
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            boards.forEach { (key, name) ->
+                FilterChip(selected = current == key, onClick = { onPick(key) }, label = { Text(name, fontSize = 12.sp) })
+            }
+        }
+        Text("内置卡片", fontSize = 12.sp)
+    }
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         (TEMPLATES.filter { it.first != "online" || current == "online" } + OnlinePlanCategories).forEach { (key, name) ->
             FilterChip(selected = current == key, onClick = { onPick(key) }, label = { Text(name, fontSize = 12.sp) })
@@ -255,7 +269,7 @@ private fun TemplatePicker(current: String, onPick: (String) -> Unit) {
 }
 
 @Composable
-private fun PlanEditDialog(initial: PlanStore.Fixed, title: String, onDismiss: () -> Unit,
+private fun PlanEditDialog(initial: PlanStore.Fixed, boards: List<Pair<String, String>>, title: String, onDismiss: () -> Unit,
                            onConfirm: (PlanStore.Fixed) -> Unit, onDelete: (() -> Unit)?) {
     var item by remember { mutableStateOf(initial) }
     AlertDialog(
@@ -267,7 +281,7 @@ private fun PlanEditDialog(initial: PlanStore.Fixed, title: String, onDismiss: (
                 Spacer(Modifier.height(10.dp))
                 Text("模板", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(4.dp))
-                TemplatePicker(item.template) { item = item.copy(template = it) }
+                TemplatePicker(item.template, boards) { item = item.copy(template = it) }
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("启用", fontSize = 13.sp, modifier = Modifier.weight(1f))
@@ -286,7 +300,7 @@ private fun PlanEditDialog(initial: PlanStore.Fixed, title: String, onDismiss: (
 }
 
 @Composable
-private fun IntervalEditDialog(initial: PlanStore.Interval, title: String, onDismiss: () -> Unit,
+private fun IntervalEditDialog(initial: PlanStore.Interval, boards: List<Pair<String, String>>, title: String, onDismiss: () -> Unit,
                                onConfirm: (PlanStore.Interval) -> Unit, onDelete: (() -> Unit)?) {
     var item by remember { mutableStateOf(initial) }
     AlertDialog(
@@ -311,7 +325,10 @@ private fun IntervalEditDialog(initial: PlanStore.Interval, title: String, onDis
                 Spacer(Modifier.height(10.dp))
                 Text("推送卡片 · 已选 ${item.templates.size} 张", fontSize = 13.sp)
                 Text("每次到点随机推送其中一张", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                val choices = TEMPLATES.filter { it.first != "online" || "online" in initial.templates } + OnlinePlanCategories
+                val missing = initial.templates.filter { key -> key.startsWith("cloud:") && boards.none { it.first == key } }
+                val choices = boards.map { (key, title) -> key to "$title · 云端" } +
+                    missing.map { it to "已移除的云端看板" } +
+                    TEMPLATES.filter { it.first != "online" || "online" in initial.templates } + OnlinePlanCategories
                 Column(Modifier.heightIn(max = 240.dp).verticalScroll(rememberScrollState())) {
                 choices.forEach { (key, name) ->
                     val checked = key in item.templates
@@ -378,7 +395,8 @@ private fun TimelineCard(fixed: List<PlanStore.Fixed>, itvs: List<PlanStore.Inte
     }
 }
 
-fun templateName(k: String): String = (TEMPLATES + OnlinePlanCategories).firstOrNull { it.first == k }?.second ?: k
+fun templateName(k: String): String = (TEMPLATES + OnlinePlanCategories).firstOrNull { it.first == k }?.second
+    ?: if (k.startsWith("cloud:")) "已移除的云端看板" else k
 
 fun planNext(fixed: List<PlanStore.Fixed>, itvs: List<PlanStore.Interval>,
              now: Long, hours: Int): List<Long> =

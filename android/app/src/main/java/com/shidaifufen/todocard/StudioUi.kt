@@ -303,9 +303,14 @@ internal fun StudioScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("屏幕预览", fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f))
-                if (onlineContent && (kind == "bing" || hasOnlineSources)) TextButton(
+                if (selectedBoard?.autoUpdates == true || onlineContent && (kind == "bing" || hasOnlineSources)) TextButton(
                     enabled = !busy && !refreshing, onClick = onRefresh) {
-                    Text(if (refreshing) "更新中…" else if (kind in listOf("weather", "weather2")) "刷新天气" else "换一张")
+                    Text(when {
+                        refreshing -> "更新中…"
+                        selectedBoard?.autoUpdates == true -> "刷新云端"
+                        kind in listOf("weather", "weather2") -> "刷新天气"
+                        else -> "换一张"
+                    })
                 }
                 if (kind !in listOf("progress", "calendar", "online") &&
                     (selectedBoard == null || hasOnlineSources || kind in listOf("todo", "countdown") ||

@@ -132,6 +132,7 @@ object CardSources {
 
     suspend fun scheduledBitmap(ctx: Context, kind: String, requireFresh: Boolean = false,
                                 onNotice: (String) -> Unit = {}): Bitmap {
+        if (kind.startsWith("cloud:")) return CloudBoards.scheduledBitmap(ctx, kind, onNotice)
         if (OnlinePlanCategories.any { it.first == kind })
             return randomOnlineCard(ctx, kind.removePrefix("online_"), requireFresh, onNotice)
         if (kind == "online") return withContext(Dispatchers.IO) {
@@ -173,8 +174,9 @@ object CardSources {
     }
 
     internal suspend fun scheduledCard(ctx: Context, kind: String, onNotice: (String) -> Unit = {},
+        template: LayoutPack.Template? = null,
         fetch: suspend (Context, String, Render.Card, Boolean) -> Render.Card =
-            { context, template, card, force -> fresh(context, template, card, force) }): Render.Card {
+            { context, key, card, force -> fresh(context, key, card, force, template) }): Render.Card {
         // Every scheduled send refreshes online content, even inside the normal UI cache TTL.
         val saved = PlanStore.card(ctx).copy(history = HistoryToday.cached(ctx))
         return try { fetch(ctx, kind, saved, true) }
