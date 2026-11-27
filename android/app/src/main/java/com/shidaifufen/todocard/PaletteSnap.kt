@@ -53,7 +53,7 @@ object PaletteSnap {
     }
 
     /** Text and vector cards are finished with exact panel colors before they are saved or sent. */
-    internal fun finishCard(bitmap: Bitmap, strength: Int): Bitmap = bitmap.also {
+    internal fun finishCard(bitmap: Bitmap, strength: Int = 0): Bitmap = bitmap.also {
         snap(it, 3 * 255 * 255, neutralCutoff = 128 - strength.coerceIn(0, 100) / 3)
         if (strength > 0) cleanWhiteBackground(it, strength.coerceIn(1, 100))
     }
