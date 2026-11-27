@@ -5,12 +5,14 @@ import android.graphics.Bitmap
 import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -43,6 +45,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun LibraryScreen(
     photos: List<Uri>,
@@ -98,215 +101,227 @@ internal fun LibraryScreen(
             }
         }
     }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-        .background(StudioBackground).padding(horizontal = 20.dp)) {
-        Spacer(Modifier.height(12.dp))
-        Text("相册", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        Text("选一张照片，调整画面后放上卡片", fontSize = 12.sp, color = StudioMuted)
-        Spacer(Modifier.height(16.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onPick, shape = RoundedCornerShape(8.dp), modifier = Modifier.weight(1f)) {
-                Icon(Icons.Outlined.AddPhotoAlternate, null, Modifier.size(18.dp))
-                Spacer(Modifier.width(5.dp)); Text("选照片")
-            }
-            OutlinedButton(onClick = onCamera, shape = RoundedCornerShape(8.dp), modifier = Modifier.weight(1f)) {
-                Icon(Icons.Outlined.CameraAlt, null, Modifier.size(18.dp))
-                Spacer(Modifier.width(5.dp)); Text("拍照")
-            }
-        }
-        OutlinedButton(onClick = onAddPhotos, shape = RoundedCornerShape(8.dp),
-            modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Outlined.AddPhotoAlternate, null, Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp)); Text("从系统相册多选，加入轮播")
-        }
-        TextButton(onClick = onAddAlbum, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Outlined.FolderOpen, null, Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp)); Text("选择整个系统相册 / 文件夹")
-        }
-        if (photos.isNotEmpty()) {
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("相册照片", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                Text("${photos.size} 张可轮播", fontSize = 12.sp, color = StudioMuted)
-            }
-            Spacer(Modifier.height(8.dp))
-            if (photos.isEmpty()) Text("相册里还没有可用照片", fontSize = 12.sp, color = StudioMuted)
-            else LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(photos) { uri ->
-                    AsyncImage(model = uri, contentDescription = "选择相册照片",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.size(82.dp).background(MaterialTheme.colorScheme.surface, RoundedCornerShape(4.dp))
-                            .clickable { onAlbumPhoto(uri) })
+    BoxWithConstraints(Modifier.fillMaxSize().background(StudioBackground)) {
+        val previewWidth = minOf(255.dp, (maxWidth - 40.dp).coerceAtLeast(0.dp), maxHeight / 3)
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 20.dp)) {
+            item(key = "library") {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+                    Spacer(Modifier.height(12.dp))
+                    Text("相册", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                    Text("选一张照片，调整画面后放上卡片", fontSize = 12.sp, color = StudioMuted)
+                    Spacer(Modifier.height(16.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = onPick, shape = RoundedCornerShape(8.dp), modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Outlined.AddPhotoAlternate, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(5.dp)); Text("选照片")
+                        }
+                        OutlinedButton(onClick = onCamera, shape = RoundedCornerShape(8.dp), modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Outlined.CameraAlt, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(5.dp)); Text("拍照")
+                        }
+                    }
+                    OutlinedButton(onClick = onAddPhotos, shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Outlined.AddPhotoAlternate, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp)); Text("从系统相册多选，加入轮播")
+                    }
+                    TextButton(onClick = onAddAlbum, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Outlined.FolderOpen, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp)); Text("选择整个系统相册 / 文件夹")
+                    }
+                    if (photos.isNotEmpty()) {
+                        Spacer(Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("相册照片", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            Text("${photos.size} 张可轮播", fontSize = 12.sp, color = StudioMuted)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(photos) { uri ->
+                                AsyncImage(model = uri, contentDescription = "选择相册照片",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.size(82.dp).background(MaterialTheme.colorScheme.surface, RoundedCornerShape(4.dp))
+                                        .clickable { onAlbumPhoto(uri) })
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(18.dp))
                 }
             }
-        }
-        Spacer(Modifier.height(18.dp))
-        if (photoPath.isBlank()) {
-            Box(Modifier.fillMaxWidth().height(250.dp)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)),
-                contentAlignment = Alignment.Center) {
-                Text("选一张照片开始编辑", color = StudioMuted)
-            }
-        } else {
-            Text("照片编辑", fontWeight = FontWeight.SemiBold)
-            Text("拖动调整位置，双指缩放",
-                fontSize = 12.sp, color = StudioMuted)
-            Spacer(Modifier.height(10.dp))
-            BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                val width = minOf(maxWidth, 255.dp)
-                Box(Modifier.width(width).aspectRatio(2f / 3f)
-                    .background(Color.White)
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                    .pointerInput(photoPath) {
-                        detectTransformGestures { centroid, pan, zoom, _ ->
-                            val params = currentEdit
-                            val src = currentSource ?: return@detectTransformGestures
-                            val nextZoom = (params.zoom * zoom).coerceIn(1f, 4f)
-                            val w = size.width.toFloat()
-                            val h = size.height * (Render.H - currentBand).toFloat() / Render.H
-                            val cover = PhotoEdit.baseScale(w, h, src, params.fit)
-                            val oldW = src.width * cover * params.zoom
-                            val oldH = src.height * cover * params.zoom
-                            val newW = src.width * cover * nextZoom
-                            val newH = src.height * cover * nextZoom
-                            val ratio = nextZoom / params.zoom
-                            val oldX = params.dx * (oldW - w).coerceAtLeast(0f) / 2
-                            val oldY = params.dy * (oldH - h).coerceAtLeast(0f) / 2
-                            val nextX = (oldX * ratio + (centroid.x - w / 2) * (1 - ratio) + pan.x)
-                            val nextY = (oldY * ratio + (centroid.y - h / 2) * (1 - ratio) + pan.y)
-                            currentOnEdit(params.copy(
-                                zoom = nextZoom,
-                                dx = if (newW - w < 1f) 0f else (nextX * 2 / (newW - w)).coerceIn(-1f, 1f),
-                                dy = if (newH - h < 1f) 0f else (nextY * 2 / (newH - h)).coerceIn(-1f, 1f),
-                            ))
-                        }
-                    }) {
-                    source?.let { bitmap ->
-                        Canvas(Modifier.fillMaxSize()) {
-                            drawIntoCanvas { canvas ->
-                                val native = canvas.nativeCanvas
-                                native.save()
-                                native.scale(size.width / Render.W, size.height / Render.H)
-                                val panel = panelPreview
-                                if (panel != null) native.drawBitmap(panel, 0f, 0f, null)
-                                else PhotoEdit.drawInto(native, bitmap, edit, band)
-                                infoBand?.let { native.drawBitmap(it, 0f, 0f, null) }
-                                native.restore()
-                            }
-                            if (showGrid && tool == 0) {
-                                val line = Color.White.copy(alpha = .5f)
-                                val bottom = size.height * (Render.H - band) / Render.H
-                                for (index in 1..2) {
-                                    drawLine(line, androidx.compose.ui.geometry.Offset(size.width * index / 3, 0f),
-                                        androidx.compose.ui.geometry.Offset(size.width * index / 3, bottom), 1.dp.toPx())
-                                    drawLine(line, androidx.compose.ui.geometry.Offset(0f, bottom * index / 3),
-                                        androidx.compose.ui.geometry.Offset(size.width, bottom * index / 3), 1.dp.toPx())
+            if (photoPath.isBlank()) {
+                item(key = "empty") {
+                    Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp).height(250.dp)
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center) {
+                        Text("选一张照片开始编辑", color = StudioMuted)
+                    }
+                }
+            } else {
+                stickyHeader(key = "photo-preview") {
+                    Column(Modifier.fillMaxWidth().background(StudioBackground)
+                        .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 4.dp)) {
+                        Text("照片编辑", fontWeight = FontWeight.SemiBold)
+                        Text(if (sixColors && panelPreview == null && source != null) "正在更新六色预览…"
+                            else "拖动调整位置，双指缩放",
+                            fontSize = 12.sp, color = StudioMuted)
+                        Spacer(Modifier.height(10.dp))
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Box(Modifier.width(previewWidth).aspectRatio(2f / 3f)
+                                .background(Color.White)
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                .pointerInput(photoPath) {
+                                    detectTransformGestures { centroid, pan, zoom, _ ->
+                                        val params = currentEdit
+                                        val src = currentSource ?: return@detectTransformGestures
+                                        val nextZoom = (params.zoom * zoom).coerceIn(1f, 4f)
+                                        val w = size.width.toFloat()
+                                        val h = size.height * (Render.H - currentBand).toFloat() / Render.H
+                                        val cover = PhotoEdit.baseScale(w, h, src, params.fit)
+                                        val oldW = src.width * cover * params.zoom
+                                        val oldH = src.height * cover * params.zoom
+                                        val newW = src.width * cover * nextZoom
+                                        val newH = src.height * cover * nextZoom
+                                        val ratio = nextZoom / params.zoom
+                                        val oldX = params.dx * (oldW - w).coerceAtLeast(0f) / 2
+                                        val oldY = params.dy * (oldH - h).coerceAtLeast(0f) / 2
+                                        val nextX = (oldX * ratio + (centroid.x - w / 2) * (1 - ratio) + pan.x)
+                                        val nextY = (oldY * ratio + (centroid.y - h / 2) * (1 - ratio) + pan.y)
+                                        currentOnEdit(params.copy(
+                                            zoom = nextZoom,
+                                            dx = if (newW - w < 1f) 0f else (nextX * 2 / (newW - w)).coerceIn(-1f, 1f),
+                                            dy = if (newH - h < 1f) 0f else (nextY * 2 / (newH - h)).coerceIn(-1f, 1f),
+                                        ))
+                                    }
+                                }) {
+                                source?.let { bitmap ->
+                                    Canvas(Modifier.fillMaxSize()) {
+                                        drawIntoCanvas { canvas ->
+                                            val native = canvas.nativeCanvas
+                                            native.save()
+                                            native.scale(size.width / Render.W, size.height / Render.H)
+                                            val panel = panelPreview
+                                            if (panel != null) native.drawBitmap(panel, 0f, 0f, null)
+                                            else PhotoEdit.drawInto(native, bitmap, edit, band)
+                                            infoBand?.let { native.drawBitmap(it, 0f, 0f, null) }
+                                            native.restore()
+                                        }
+                                        if (showGrid && tool == 0) {
+                                            val line = Color.White.copy(alpha = .5f)
+                                            val bottom = size.height * (Render.H - band) / Render.H
+                                            for (index in 1..2) {
+                                                drawLine(line, androidx.compose.ui.geometry.Offset(size.width * index / 3, 0f),
+                                                    androidx.compose.ui.geometry.Offset(size.width * index / 3, bottom), 1.dp.toPx())
+                                                drawLine(line, androidx.compose.ui.geometry.Offset(0f, bottom * index / 3),
+                                                    androidx.compose.ui.geometry.Offset(size.width, bottom * index / 3), 1.dp.toPx())
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                            FilterChip(!sixColors, { sixColors = false }, label = { Text("调色预览") })
+                            Spacer(Modifier.width(8.dp))
+                            FilterChip(sixColors, { sixColors = true }, label = { Text("六色预览") })
+                        }
+                        Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("裁切", "调色", "信息带").forEachIndexed { index, title ->
+                                FilterChip(tool == index, onClick = { tool = index }, label = { Text(title) },
+                                    shape = RoundedCornerShape(8.dp))
+                            }
+                        }
                     }
                 }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                FilterChip(!sixColors, { sixColors = false }, label = { Text("调色预览") })
-                Spacer(Modifier.width(8.dp))
-                FilterChip(sixColors, { sixColors = true }, label = { Text("六色预览") })
-            }
-            Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("裁切", "调色", "信息带").forEachIndexed { index, title ->
-                    FilterChip(tool == index, onClick = { tool = index }, label = { Text(title) },
-                        shape = RoundedCornerShape(8.dp))
-                }
-            }
-            if (sixColors && panelPreview == null && source != null) Text(
-                "正在更新六色预览…",
-                color = StudioMuted, fontSize = 12.sp)
-            if (tool == 0) {
-            Adjustment("缩放", edit.zoom * 100f, 100f..400f, { onEdit(edit.copy(zoom = it / 100f)) }, "%.0f%%")
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                FilterChip(edit.fit, { onEdit(edit.copy(fit = true, zoom = 1f, dx = 0f, dy = 0f)) }, label = { Text("适应") })
-                FilterChip(!edit.fit, { onEdit(edit.copy(fit = false, zoom = 1f, dx = 0f, dy = 0f)) }, label = { Text("铺满") })
-                TextButton(onClick = { onEdit(edit.copy(zoom = 1f, dx = 0f, dy = 0f)) }) { Text("居中") }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("显示构图网格", Modifier.weight(1f), fontSize = 13.sp)
-                Switch(showGrid, onCheckedChange = { showGrid = it })
-            }
-            Adjustment("左右", edit.dx, -1f..1f, { onEdit(edit.copy(dx = it)) }, "%+.1f")
-            Adjustment("上下", edit.dy, -1f..1f, { onEdit(edit.copy(dy = it)) }, "%+.1f")
-            }
-            Spacer(Modifier.height(16.dp))
-            if (tool == 2) {
-            Text("信息带", fontWeight = FontWeight.SemiBold)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(
-                    Triple("日期", fields.date, { v: Boolean -> fields.copy(date = v) }),
-                    Triple("时间", fields.time, { v: Boolean -> fields.copy(time = v) }),
-                    Triple("机身", fields.camera, { v: Boolean -> fields.copy(camera = v) }),
-                    Triple("参数", fields.params, { v: Boolean -> fields.copy(params = v) }),
-                ).forEach { (label, selected, update) ->
-                    FilterChip(selected = selected, onClick = { onFields(update(!selected)) },
-                        label = { Text(label, fontSize = 12.sp) }, shape = RoundedCornerShape(8.dp))
-                }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("显示拍摄位置", Modifier.weight(1f))
-                Switch(fields.location, onCheckedChange = { onFields(fields.copy(location = it)) })
-            }
-            Adjustment("信息字号", fields.textScale * 100f, 80f..150f,
-                { onFields(fields.copy(textScale = it / 100f)) }, "%.0f%%")
-            OutlinedTextField(value = locationNote, onValueChange = { locationNote = it.take(120) },
-                label = { Text("这张照片的地点备注（可选）") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            TextButton(onClick = { PhotoCard.saveLocationNote(photoPath, locationNote); locationRevision++; onLocationSaved() }) { Text("保存地点") }
-            if (fields.location) {
-                val detected = remember(photoPath, photoLocationRevision) { PhotoCard.embeddedLocation(photoPath) }
-                Text(if (detected.isBlank()) "当前副本里读不到拍摄位置" else "照片位置 · $detected",
-                    fontSize = 12.sp, color = StudioMuted)
-                if (detected.isBlank()) TextButton(onClick = onPickOriginal) { Text("重新选择原图并读取位置") }
-            }
-            }
-            if (tool == 1) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                for (group in PhotoEdit.Preset.entries.chunked(2)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for (preset in group) {
-                    OutlinedButton(onClick = {
-                        onEdit(edit.withTone(PlanStore.photoPreset(preset)))
-                        sixColors = true
-                    },
-                        modifier = Modifier.weight(1f), contentPadding = PaddingValues(6.dp),
-                        shape = RoundedCornerShape(8.dp)) { Text(preset.label) }
+                item(key = "photo-adjustments") {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+                        if (tool == 0) {
+                            Adjustment("缩放", edit.zoom * 100f, 100f..400f, { onEdit(edit.copy(zoom = it / 100f)) }, "%.0f%%")
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                FilterChip(edit.fit, { onEdit(edit.copy(fit = true, zoom = 1f, dx = 0f, dy = 0f)) }, label = { Text("适应") })
+                                FilterChip(!edit.fit, { onEdit(edit.copy(fit = false, zoom = 1f, dx = 0f, dy = 0f)) }, label = { Text("铺满") })
+                                TextButton(onClick = { onEdit(edit.copy(zoom = 1f, dx = 0f, dy = 0f)) }) { Text("居中") }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("显示构图网格", Modifier.weight(1f), fontSize = 13.sp)
+                                Switch(showGrid, onCheckedChange = { showGrid = it })
+                            }
+                            Adjustment("左右", edit.dx, -1f..1f, { onEdit(edit.copy(dx = it)) }, "%+.1f")
+                            Adjustment("上下", edit.dy, -1f..1f, { onEdit(edit.copy(dy = it)) }, "%+.1f")
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        if (tool == 2) {
+                            Text("信息带", fontWeight = FontWeight.SemiBold)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                listOf(
+                                    Triple("日期", fields.date, { v: Boolean -> fields.copy(date = v) }),
+                                    Triple("时间", fields.time, { v: Boolean -> fields.copy(time = v) }),
+                                    Triple("机身", fields.camera, { v: Boolean -> fields.copy(camera = v) }),
+                                    Triple("参数", fields.params, { v: Boolean -> fields.copy(params = v) }),
+                                ).forEach { (label, selected, update) ->
+                                    FilterChip(selected = selected, onClick = { onFields(update(!selected)) },
+                                        label = { Text(label, fontSize = 12.sp) }, shape = RoundedCornerShape(8.dp))
+                                }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("显示拍摄位置", Modifier.weight(1f))
+                                Switch(fields.location, onCheckedChange = { onFields(fields.copy(location = it)) })
+                            }
+                            Adjustment("信息字号", fields.textScale * 100f, 80f..150f,
+                                { onFields(fields.copy(textScale = it / 100f)) }, "%.0f%%")
+                            OutlinedTextField(value = locationNote, onValueChange = { locationNote = it.take(120) },
+                                label = { Text("这张照片的地点备注（可选）") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                            TextButton(onClick = { PhotoCard.saveLocationNote(photoPath, locationNote); locationRevision++; onLocationSaved() }) { Text("保存地点") }
+                            if (fields.location) {
+                                val detected = remember(photoPath, photoLocationRevision) { PhotoCard.embeddedLocation(photoPath) }
+                                Text(if (detected.isBlank()) "当前副本里读不到拍摄位置" else "照片位置 · $detected",
+                                    fontSize = 12.sp, color = StudioMuted)
+                                if (detected.isBlank()) TextButton(onClick = onPickOriginal) { Text("重新选择原图并读取位置") }
+                            }
+                        }
+                        if (tool == 1) {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                for (group in PhotoEdit.Preset.entries.chunked(2)) {
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        for (preset in group) {
+                                            OutlinedButton(onClick = {
+                                                onEdit(edit.withTone(PlanStore.photoPreset(preset)))
+                                                sixColors = true
+                                            },
+                                            modifier = Modifier.weight(1f), contentPadding = PaddingValues(6.dp),
+                                            shape = RoundedCornerShape(8.dp)) { Text(preset.label) }
+                                        }
+                                        if (group.size == 1) Spacer(Modifier.weight(1f))
+                                    }
+                                }
+                            }
+                            PhotoToneAdjustments(edit, onEdit, showPresets = false)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("杂色吸附", Modifier.weight(1f), fontSize = 13.sp)
+                                Switch(edit.snapThreshold > 0, onCheckedChange = {
+                                    onEdit(edit.copy(snapThreshold = if (it) 60 else 0))
+                                })
+                            }
+                            if (edit.snapThreshold > 0) Adjustment("强度", edit.snapThreshold.toFloat(), 1f..100f,
+                                { onEdit(edit.copy(snapThreshold = it.toInt())) }, "%.0f")
+                            TextButton(onClick = { showAdvanced = !showAdvanced }) {
+                                Text(if (showAdvanced) "收起更多调整" else "更多调整")
+                            }
+                            if (showAdvanced) {
+                                Adjustment("色相", edit.hue, -180f..180f, { onEdit(edit.copy(hue = it)) }, "%+.0f°")
+                            }
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { onEdit(PhotoEdit.Params()) }, shape = RoundedCornerShape(8.dp)) {
+                                Icon(Icons.Outlined.RestartAlt, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(5.dp)); Text("重置")
+                            }
+                            Button(onClick = onUse, shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)) { Text("使用这张照片") }
+                        }
                     }
-                    if (group.size == 1) Spacer(Modifier.weight(1f))
-                    }
                 }
-            }
-            PhotoToneAdjustments(edit, onEdit, showPresets = false)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("杂色吸附", Modifier.weight(1f), fontSize = 13.sp)
-                Switch(edit.snapThreshold > 0, onCheckedChange = {
-                    onEdit(edit.copy(snapThreshold = if (it) 60 else 0))
-                })
-            }
-            if (edit.snapThreshold > 0) Adjustment("强度", edit.snapThreshold.toFloat(), 1f..100f,
-                { onEdit(edit.copy(snapThreshold = it.toInt())) }, "%.0f")
-            TextButton(onClick = { showAdvanced = !showAdvanced }) {
-                Text(if (showAdvanced) "收起更多调整" else "更多调整")
-            }
-            if (showAdvanced) {
-            Adjustment("色相", edit.hue, -180f..180f, { onEdit(edit.copy(hue = it)) }, "%+.0f°")
-            }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { onEdit(PhotoEdit.Params()) }, shape = RoundedCornerShape(8.dp)) {
-                    Icon(Icons.Outlined.RestartAlt, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(5.dp)); Text("重置")
-                }
-                Button(onClick = onUse, shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.weight(1f)) { Text("使用这张照片") }
             }
         }
-        Spacer(Modifier.height(20.dp))
     }
 }
 
