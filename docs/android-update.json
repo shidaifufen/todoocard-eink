@@ -1,13 +1,13 @@
 {
-  "tag_name": "v1.8.11-android",
-  "draft": false,
   "prerelease": false,
+  "draft": false,
+  "tag_name": "v1.8.12-android",
   "assets": [
     {
-      "name": "todocard-android-1.8.11.apk",
-      "browser_download_url": "https://github.com/shidaifufen/todoocard-eink/releases/download/v1.8.11-android/todocard-android-1.8.11.apk",
-      "size": 12491326,
-      "digest": "sha256:5a2961669095c3f9838fa77515adc02dd0a9a48b6d604ae3a290cd600f8c79d8"
+      "digest": "sha256:208cde2f8f134a19941617687ae73ed69d7d22716e465f6e5129ed4f718b2037",
+      "name": "todocard-android-1.8.12.apk",
+      "browser_download_url": "https://github.com/shidaifufen/todoocard-eink/releases/download/v1.8.12-android/todocard-android-1.8.12.apk",
+      "size": 12494294
     }
   ]
 }
