@@ -27,7 +27,7 @@ internal object LayoutRender {
                     draw(canvas, node, n, card, values)
                 } finally { canvas.restore() }
             }
-            return if (containsPhoto) bitmap else PaletteSnap.finishCard(bitmap)
+            return if (containsPhoto) bitmap else PaletteSnap.finishCard(bitmap, card.textSnap)
         } catch (error: Exception) { bitmap.recycle(); throw error }
     }
 

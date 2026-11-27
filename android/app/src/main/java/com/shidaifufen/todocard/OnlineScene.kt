@@ -104,6 +104,8 @@ private val pages = mapOf(
 internal val OnlinePlanCategories = listOf(
     "online_music" to "随机音乐封面", "online_movie" to "随机电影海报",
     "online_english" to "随机英语短语", "online_idiom" to "随机成语",
+    "online_rates" to "汇率速览", "online_holidays" to "假日倒数",
+    "online_earthquake" to "一周地震", "online_television" to "随机剧集档案",
 )
 
 internal class OnlineBridge(

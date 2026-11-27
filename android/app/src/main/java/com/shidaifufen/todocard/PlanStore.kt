@@ -136,6 +136,7 @@ object PlanStore {
                 fontScale = data.optDouble("fontScale", 1.0).toFloat().coerceIn(.8f, 1.5f),
                 lineSpacing = data.optDouble("lineSpacing", 1.0).toFloat().coerceIn(.8f, 1.6f),
                 elementSpacing = data.optDouble("elementSpacing", 1.0).toFloat().coerceIn(.6f, 1.6f),
+                textSnap = data.optInt("textSnap", Render.DEFAULT_TEXT_SNAP).coerceIn(0, 100),
                 customBlocks = data.optJSONArray("customBlocks")?.let { blocks ->
                     (0 until blocks.length()).map { i -> blocks.getJSONObject(i).let {
                         Render.CustomBlock(it.optString("id", "block_$i"), it.optString("type", "text"),
@@ -174,6 +175,7 @@ object PlanStore {
                 put(JSONObject().put("time", it.time).put("temperature", it.temperature).put("code", it.code))
             } })
             .put("fontScale", card.fontScale).put("lineSpacing", card.lineSpacing).put("elementSpacing", card.elementSpacing)
+            .put("textSnap", card.textSnap)
             .put("customAccent", card.customAccent).put("customComposition", card.customComposition)
             .put("customBlocks", JSONArray().apply { card.customBlocks.forEach {
                 put(JSONObject().put("id", it.id).put("type", it.type).put("text", it.text)
@@ -244,7 +246,7 @@ object PlanStore {
     fun defaultLayout(ctx: Context, content: Render.Card): Render.Card {
         val saved = card(ctx)
         return content.copy(fontScale = saved.fontScale, lineSpacing = saved.lineSpacing,
-            elementSpacing = saved.elementSpacing)
+            elementSpacing = saved.elementSpacing, textSnap = saved.textSnap)
     }
 
     private fun fieldsKey() = "photoFields"

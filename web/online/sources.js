@@ -4,6 +4,10 @@ const endpoints = {
   idioms: 'https://cdn.jsdelivr.net/gh/pwxcoo/chinese-xinhua@master/data/idiom.json',
   idiomsFallback: 'https://raw.githubusercontent.com/pwxcoo/chinese-xinhua/master/data/idiom.json',
   english: 'https://api.datamuse.com/words',
+  rates: 'https://api.frankfurter.dev/v1/latest',
+  holidays: 'https://date.nager.at/api/v3/PublicHolidays',
+  earthquakes: 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_week.geojson',
+  television: 'https://api.tvmaze.com/search/shows',
 };
 
 export const kinds = {
@@ -11,6 +15,10 @@ export const kinds = {
   movie: { name: '电影海报', placeholder: '电影名称，例如 星际穿越' },
   english: { name: '英语短语', placeholder: '例如 take off 或 look forward to' },
   idiom: { name: '成语词条', placeholder: '例如 持之以恒，或搜索拼音' },
+  rates: { name: '汇率速览', placeholder: '例如 USD、人民币，或 USD HKD', action: '更新汇率' },
+  holidays: { name: '假日倒数', placeholder: '例如 香港、美国、日本', action: '查看假日' },
+  earthquake: { name: '一周地震', placeholder: '按英文地区筛选，例如 Japan', action: '查看最新' },
+  television: { name: '剧集档案', placeholder: '例如 Sherlock 或 The Office' },
 };
 
 const requests = new Map();
@@ -161,8 +169,91 @@ async function idioms(query) {
     source: 'chinese-xinhua' }));
 }
 
+const currencyNames = { 人民币: 'CNY', 美元: 'USD', 港币: 'HKD', 港元: 'HKD', 欧元: 'EUR', 日元: 'JPY', 英镑: 'GBP' };
+const currencyCode = value => currencyNames[value] || value.toUpperCase();
+const num = (value, digits = 0) => new Intl.NumberFormat('en', { maximumFractionDigits: digits }).format(value);
+const regions = {
+  HK: '中国香港', MO: '中国澳门', JP: '日本', KR: '韩国', US: '美国', GB: '英国', SG: '新加坡',
+  AU: '澳大利亚', CA: '加拿大', DE: '德国', FR: '法国',
+};
+
+async function rates(query) {
+  const [base = 'USD', ...requested] = query.split(/[\s,，/]+/).filter(Boolean).map(currencyCode);
+  const symbols = [...new Set(requested.length ? requested : ['CNY', 'HKD', 'EUR', 'JPY', 'USD'])]
+    .filter(code => code !== base).slice(0, 4);
+  if (![base, ...symbols].every(code => /^[A-Z]{3}$/.test(code)) || !symbols.length) {
+    throw new Error('请输入不同的货币代码，例如 USD HKD，或输入人民币');
+  }
+  const data = await json(url(endpoints.rates, { base, symbols: symbols.join(',') }));
+  const rows = symbols.filter(code => Number.isFinite(data.rates?.[code]) && data.rates[code] > 0)
+    .map(code => [code, num(data.rates[code], 6)]);
+  if (!rows.length || !data.date) return [];
+  return [{ id: 'rates:' + base + ':' + symbols.join(',') + ':' + data.date, title: '1 ' + base,
+    by: data.date + ' · 参考汇率', rows, source: 'Frankfurter' }];
+}
+
+function localDay() {
+  const now = new Date();
+  return Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+async function holidays(query) {
+  const region = Object.keys(regions).find(code =>
+    regions[code] === query || regions[code].replace(/^中国/, '') === query) || query.toUpperCase() || 'HK';
+  if (!/^[A-Z]{2}$/.test(region) || region === 'CN') {
+    throw new Error('请输入支持的地区，例如香港、日本、美国，或两位地区代码');
+  }
+  const today = localDay();
+  const year = new Date(today).getUTCFullYear();
+  const upcoming = async year => {
+    const data = await json(endpoints.holidays + '/' + year + '/' + region);
+    return data.filter(day => Date.parse(day.date) >= today && day.global)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .filter((day, index, list) => index === 0 || day.date !== list[index - 1].date);
+  };
+  const dates = await upcoming(year);
+  if (dates.length < 4) {
+    try { dates.push(...await upcoming(year + 1)); }
+    catch (error) { if (!dates.length) throw error; }
+  }
+  if (!dates.length) return [];
+  const days = (Date.parse(dates[0].date) - today) / 86400000;
+  return [{ id: 'holidays:' + region + ':' + today, title: days ? '还有 ' + days + ' 天' : '今天是假日',
+    by: regions[region] || region, rows: dates.slice(0, 4).map(day => [day.date.slice(5), clean(day.localName || day.name)]),
+    source: 'Nager.Date · 全国或全区公共假日' }];
+}
+
+async function earthquakes(query) {
+  const data = await json(endpoints.earthquakes);
+  return (data.features || []).map(({ id, properties: p, geometry }) => {
+    if (!Number.isFinite(p?.mag) || !Number.isFinite(p.time) || !p.place ||
+        !p.place.toLowerCase().includes(query.toLowerCase())) return null;
+    const depth = geometry?.coordinates?.[2];
+    return { id: 'quake:' + id + ':' + p.updated, title: 'M ' + num(p.mag, 1), by: p.place,
+      rows: [['时间 UTC', new Date(p.time).toISOString().slice(0, 16).replace('T', ' ')],
+        ['深度', Number.isFinite(depth) ? num(depth, 1) + ' km' : '暂无']],
+      source: 'USGS · 近一周重要地震', time: p.time };
+  }).filter(Boolean).sort((a, b) => b.time - a.time).slice(0, 18);
+}
+
+async function television(query) {
+  const data = await json(url(endpoints.television, { q: query }));
+  return data.map(({ show }) => {
+    if (!show?.name || !show.id) return null;
+    const summary = clean(show.summary?.replace(/<[^>]*>/g, ' ')
+      .replace(/&(?:amp|quot|#39|nbsp);/g, entity => ({ '&amp;': '&', '&quot;': '"', '&#39;': "'", '&nbsp;': ' ' })[entity]));
+    return { id: 'tv:' + show.id, title: clean(show.name), by: show.genres?.join(' · ') || show.language || '',
+      rows: [['首播', show.premiered], ['状态', ({ Running: '播出中', Ended: '已完结', 'In Development': '制作中' })[show.status] || show.status],
+        ['平台', show.network?.name || show.webChannel?.name], ['评分', show.rating?.average ? num(show.rating.average, 1) + ' / 10' : '暂无']]
+        .filter(([, value]) => value), summary: summary.slice(0, 450), source: 'TVmaze · CC BY-SA' };
+  }).filter(Boolean).slice(0, 15);
+}
+
 export async function findItems(kind, query) {
   query = clean(query).slice(0, 100);
+  if (kind === 'rates') return rates(query);
+  if (kind === 'holidays') return holidays(query);
+  if (kind === 'earthquake') return earthquakes(query);
   if (!query) throw new Error('请输入搜索内容');
   switch (kind) {
     case 'music': return songs(query);
@@ -172,6 +263,7 @@ export async function findItems(kind, query) {
       return exact.length ? exact : phrases(query + '*');
     }
     case 'idiom': return idioms(query);
+    case 'television': return television(query);
     default: throw new Error('未支持的场景');
   }
 }
@@ -194,7 +286,12 @@ export async function randomItems(kind) {
   }
   if (kind === 'movie') return chart(kind, 'us');
   if (kind === 'english') return phrases(verbs[randomIndex(verbs.length)] + ' *');
-  return idioms('');
+  if (kind === 'idiom') return idioms('');
+  if (kind === 'television') {
+    const titles = ['Sherlock', 'The Office', 'Planet Earth', 'Friends', 'Doctor Who', 'The Crown'];
+    return television(titles[randomIndex(titles.length)]);
+  }
+  return findItems(kind, '');
 }
 
 export async function songLyrics(track) {

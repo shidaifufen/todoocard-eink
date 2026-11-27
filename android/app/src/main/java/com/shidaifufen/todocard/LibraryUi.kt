@@ -492,8 +492,14 @@ internal fun SettingsScreen(
                     LayoutSlider("文字大小", defaultLayout.fontScale, .8f..1.5f) { onDefaultLayout(defaultLayout.copy(fontScale = it)) }
                     LayoutSlider("行间距", defaultLayout.lineSpacing, .8f..1.6f) { onDefaultLayout(defaultLayout.copy(lineSpacing = it)) }
                     LayoutSlider("元素间距", defaultLayout.elementSpacing, .7f..1.4f) { onDefaultLayout(defaultLayout.copy(elementSpacing = it)) }
+                    LayoutSlider("杂色吸附", defaultLayout.textSnap / 100f, 0f..1f) {
+                        onDefaultLayout(defaultLayout.copy(textSnap = kotlin.math.round(it * 100).toInt()))
+                    }
+                    Text("清理文字卡片白底上的细碎颗粒。细笔画过淡时可调低。",
+                        fontSize = 12.sp, color = StudioMuted)
                     TextButton(onClick = {
-                        onDefaultLayout(defaultLayout.copy(fontScale = 1f, lineSpacing = 1f, elementSpacing = 1f))
+                        onDefaultLayout(defaultLayout.copy(fontScale = 1f, lineSpacing = 1f,
+                            elementSpacing = 1f, textSnap = Render.DEFAULT_TEXT_SNAP))
                     }) { Text("恢复默认排版") }
                 }
                 LayoutSettings()

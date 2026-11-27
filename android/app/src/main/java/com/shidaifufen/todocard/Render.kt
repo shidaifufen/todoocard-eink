@@ -17,6 +17,7 @@ object Render {
     const val W = 528
     const val H = 792
     const val M = 32f
+    const val DEFAULT_TEXT_SNAP = 45
 
     private val BLACK = Color.rgb(0, 0, 0)
     private val WHITE = Color.rgb(255, 255, 255)
@@ -64,6 +65,7 @@ object Render {
         val customAccent: String = "red",
         val history: HistoryToday.Event? = null,
         val customComposition: Boolean = false,
+        val textSnap: Int = DEFAULT_TEXT_SNAP,
     )
 
     data class WeatherHour(val time: String, val temperature: Float, val code: Int)
@@ -116,7 +118,8 @@ object Render {
     fun render(card: Card, template: LayoutPack.Template? = null): Bitmap {
         (template ?: LayoutStore.renderTemplate(card.kind))?.let { return LayoutRender.render(card, it) }
         val bitmap = renderNative(card)
-        return if (card.kind == "custom" && hasCustomPhotos(card)) bitmap else PaletteSnap.finishCard(bitmap)
+        return if (card.kind == "custom" && hasCustomPhotos(card)) bitmap
+        else PaletteSnap.finishCard(bitmap, card.textSnap)
     }
 
     internal fun hasCustomPhotos(card: Card) =

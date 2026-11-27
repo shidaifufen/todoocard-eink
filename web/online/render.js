@@ -1,4 +1,5 @@
 import { finishGraphics, tuneImage, vivid } from './tone.js';
+import { kinds } from './sources.js';
 
 const BLACK = '#000', WHITE = '#fff', BLUE = '#00f', YELLOW = '#ff0', RED = '#f00';
 const W = 528, H = 792;
@@ -149,6 +150,53 @@ function dictionary(g, kind, item) {
   line(g, item.source, 30, 756, 468, 18, WHITE);
 }
 
+function information(g, kind, item) {
+  const colors = { rates: BLUE, holidays: YELLOW, earthquake: RED, television: BLACK };
+  const theme = colors[kind];
+  const ink = theme === YELLOW ? BLACK : WHITE;
+  const inset = 28, width = W - inset * 2;
+  rect(g, 0, 0, W, 242, theme);
+  line(g, kinds[kind].name, inset, 25, width, 25, ink, true);
+  rect(g, inset, 63, 46, 5, ink);
+  const title = block(g, item.title, inset, 85, width, 99,
+    kind === 'television' ? 49 : 78, ink, true);
+  if (item.by) {
+    line(g, item.by, inset, Math.min(205, title.bottom + 12), width, 25, ink, false, 18);
+  }
+  if (kind === 'television') {
+    item.rows.forEach(([label, value], index) => {
+      const x = inset + (index % 2) * 240;
+      const y = 264 + Math.floor(index / 2) * 83;
+      line(g, label, x, y, 222, 19, BLUE, true);
+      line(g, value, x, y + 27, 222, 27, BLACK, true, 18);
+    });
+    const top = 265 + Math.ceil(item.rows.length / 2) * 83;
+    if (item.summary) {
+      rect(g, inset, top, width, 3, BLACK);
+      line(g, '剧情简介', inset, top + 14, width, 20, BLUE, true);
+      block(g, item.summary, inset, top + 46, width, 718 - top - 46, 26);
+    }
+  } else {
+    const rowHeight = Math.floor(465 / item.rows.length);
+    item.rows.forEach(([label, value], index) => {
+      const top = 252 + index * rowHeight;
+      const compact = item.rows.length >= 3;
+      const x = compact ? 150 : inset;
+      line(g, label, inset, top + (compact ? rowHeight / 2 : 29), compact ? 112 : width,
+        25, theme === YELLOW ? BLACK : theme, true, 19, undefined, compact);
+      if (compact) {
+        block(g, value, x, top + 6, W - inset - x, rowHeight - 19,
+          kind === 'rates' ? 43 : 32, BLACK, true, true, undefined, true);
+      } else {
+        line(g, value, x, top + 78, W - inset - x, 42, BLACK, true, 24);
+      }
+      rect(g, inset, top + rowHeight - 3, width, 2, BLACK);
+    });
+  }
+  rect(g, 0, 736, W, H - 736, BLACK);
+  line(g, item.source, inset, 754, width, 21, WHITE);
+}
+
 export function paint(canvas, kind, item, artwork, verses = [], tone = vivid, style = 'cover', typography) {
   const g = canvas.getContext('2d');
   g.save();
@@ -158,6 +206,7 @@ export function paint(canvas, kind, item, artwork, verses = [], tone = vivid, st
   let imageBounds, fits = true;
   if (kind === 'music') ({ bounds: imageBounds, fits } = music(g, item, artwork, verses, tone, style, typography));
   else if (kind === 'movie') imageBounds = movie(g, item, artwork, tone);
+  else if (item.rows) information(g, kind, item);
   else dictionary(g, kind, item);
   g.restore();
   finishGraphics(g,imageBounds);

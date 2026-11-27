@@ -53,11 +53,33 @@ object PaletteSnap {
     }
 
     /** Text and vector cards are finished with exact panel colors before they are saved or sent. */
-    internal fun finishCard(bitmap: Bitmap): Bitmap = bitmap.also {
-        snap(it, 3 * 255 * 255)
+    internal fun finishCard(bitmap: Bitmap, strength: Int): Bitmap = bitmap.also {
+        snap(it, 3 * 255 * 255, neutralCutoff = 128 - strength.coerceIn(0, 100) / 3)
+        if (strength > 0) cleanWhiteBackground(it, strength.coerceIn(1, 100))
     }
 
-    private fun snap(bitmap: Bitmap, limit: Int) {
+    private fun cleanWhiteBackground(bitmap: Bitmap, strength: Int) {
+        val width = bitmap.width
+        val height = bitmap.height
+        val pixels = IntArray(width * height)
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+        val offsets = intArrayOf(-width - 1, -width, -width + 1, -1, 1, width - 1, width, width + 1)
+        // Start with isolated colored pixels, then black pixels. At high strength include tiny pairs.
+        val whiteNeighbors = if (strength >= 80) 7 else 8
+        val marked = mutableListOf<Int>()
+        for (y in 1 until height - 1) for (x in 1 until width - 1) {
+            val index = y * width + x
+            val color = pixels[index]
+            if (color == Color.WHITE || color == Color.BLACK && strength < 35) continue
+            if (offsets.count { pixels[index + it] == Color.WHITE } >= whiteNeighbors) marked.add(index)
+        }
+        if (marked.isNotEmpty()) {
+            marked.forEach { pixels[it] = Color.WHITE }
+            bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
+        }
+    }
+
+    private fun snap(bitmap: Bitmap, limit: Int, neutralCutoff: Int = 128) {
         val pixels = IntArray(bitmap.width * bitmap.height)
         bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
         var changed = false
@@ -68,7 +90,7 @@ object PaletteSnap {
             val g = Color.green(color)
             val b = Color.blue(color)
             if (maxOf(r, g, b) - minOf(r, g, b) < 42) {
-                pixels[index] = if ((r * 299 + g * 587 + b * 114) / 1000 < 128)
+                pixels[index] = if ((r * 299 + g * 587 + b * 114) / 1000 < neutralCutoff)
                     Color.BLACK else Color.WHITE
                 changed = true
                 continue

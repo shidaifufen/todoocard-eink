@@ -5,6 +5,7 @@ import random
 import re
 import time
 from collections import deque
+from datetime import date, datetime, timezone
 from io import BytesIO
 from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
@@ -17,7 +18,11 @@ from image_tone import INKS, VIVID, panel_preview, tune
 CATEGORIES = {
     "online_music": "随机音乐封面", "online_movie": "随机电影海报",
     "online_english": "随机英语短语", "online_idiom": "随机成语",
+    "online_rates": "汇率速览", "online_holidays": "假日倒数",
+    "online_earthquake": "一周地震", "online_television": "随机剧集档案",
 }
+INFORMATION_COLORS = {"rates": "blue", "holidays": "yellow", "earthquake": "red", "television": "black"}
+SHOWS = ("Sherlock", "The Office", "Planet Earth", "Friends", "Doctor Who", "The Crown")
 VERBS = "bring call carry come cut drop fall figure find get give go hold keep leave look make move pick point pull put run set show stand take turn work".split()
 W, H = 528, 792
 recent = {kind: deque(maxlen=45) for kind in CATEGORIES}
@@ -59,6 +64,9 @@ def chart(mode):
 
 def draw(kind):
     mode = kind.removeprefix("online_")
+    if mode in INFORMATION_COLORS:
+        title, subtitle, rows, source = information_fields(mode)
+        return information_card(mode, title, subtitle, rows, source)
     if mode in ("music", "movie"):
         entries = chart(mode)
         keys = [entry["im:name"]["label"] for entry in entries]
@@ -90,6 +98,88 @@ def draw(kind):
         recent[kind].append(title)
         return image
     raise ValueError("暂时无法生成此类别的在线卡片")
+
+
+def information_fields(mode):
+    if mode == "rates":
+        symbols = ("CNY", "HKD", "EUR", "JPY")
+        data = feed("https://api.frankfurter.dev/v1/latest?base=USD&symbols=" + ",".join(symbols))
+        rows = [(code, f"{data['rates'][code]:.6f}".rstrip("0").rstrip(".")) for code in symbols if code in data["rates"]]
+        return "1 USD", data["date"] + " · 参考汇率", rows, "Frankfurter"
+    if mode == "holidays":
+        today = date.today()
+        upcoming = {}
+        for year in (today.year, today.year + 1):
+            try:
+                holidays = feed(f"https://date.nager.at/api/v3/PublicHolidays/{year}/HK")
+            except (OSError, ValueError):
+                if not upcoming:
+                    raise
+                break
+            for item in holidays:
+                day = date.fromisoformat(item["date"])
+                if day >= today and item.get("global"):
+                    upcoming.setdefault(day, item.get("localName") or item["name"])
+            if len(upcoming) >= 4:
+                break
+        if not upcoming:
+            raise ValueError("暂时查不到未来公共假日")
+        days = (min(upcoming) - today).days
+        rows = [(day.strftime("%m-%d"), upcoming[day]) for day in sorted(upcoming)[:4]]
+        return f"还有 {days} 天" if days else "今天是假日", "中国香港", rows, "Nager.Date · 全国或全区公共假日"
+    if mode == "earthquake":
+        endpoint = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_week.geojson"
+        features = feed(endpoint)["features"]
+        eligible = [item for item in features if item["properties"].get("mag") is not None]
+        if not eligible:
+            raise ValueError("近一周没有符合条件的重要地震")
+        latest = max(eligible, key=lambda item: item["properties"]["time"])
+        number = latest["properties"]
+        timestamp = datetime.fromtimestamp(number["time"] / 1000, timezone.utc)
+        depth = latest["geometry"]["coordinates"][2]
+        rows = [("时间 UTC", timestamp.strftime("%Y-%m-%d %H:%M")), ("深度", f"{depth:.1f} km")]
+        return f"M {number['mag']:.1f}", number["place"], rows, "USGS · 近一周重要地震"
+    for query in random.sample(SHOWS, 3):
+        matches = feed("https://api.tvmaze.com/search/shows?" + urlencode({"q": query}))
+        available = [item["show"] for item in matches if item["show"]["id"] not in recent["online_television"]]
+        if available:
+            show = random.choice(available[:5])
+            break
+    else:
+        raise ValueError("暂时没有其他剧集可抽取")
+    recent["online_television"].append(show["id"])
+    provider = show.get("network") or show.get("webChannel") or {}
+    status = {"Running": "播出中", "Ended": "已完结", "In Development": "制作中"}
+    rating = (show.get("rating") or {}).get("average")
+    rows = [("首播", show.get("premiered")), ("状态", status.get(show.get("status"), show.get("status"))),
+            ("平台", provider.get("name")), ("评分", f"{rating:.1f} / 10" if rating is not None else "暂无")]
+    return show["name"], " · ".join(show["genres"]) or show.get("language"), rows, "TVmaze · CC BY-SA"
+
+
+def information_card(mode, title, subtitle, rows, source):
+    image = Image.new("RGB", (W, H), "white")
+    painter = ImageDraw.Draw(image)
+    color = INFORMATION_COLORS[mode]
+    ink = "black" if color == "yellow" else "white"
+    painter.rectangle((0, 0, W, 241), fill=color)
+    text(painter, CATEGORIES["online_" + mode].removeprefix("随机"), 28, 25, 25, 472, ink, True)
+    painter.rectangle((28, 64, 74, 69), fill=ink)
+    text(painter, title, 28, 89, 49 if mode == "television" else 74, 472, ink, True)
+    text(painter, subtitle, 28, 188, 23, 472, ink)
+    rows = [(label, value) for label, value in rows if value]
+    height = 464 // max(1, len(rows))
+    for index, (label, value) in enumerate(rows):
+        y = 252 + index * height
+        if len(rows) >= 3:
+            text(painter, label, 28, y + (height - 23) // 2, 23, 118, bold=True)
+            text(painter, value, 152, y + (height - 33) // 2, 33, 348, bold=True)
+        else:
+            text(painter, label, 28, y + 30, 24, 472, bold=True)
+            text(painter, value, 28, y + 77, 37, 472, bold=True)
+        painter.rectangle((28, y + height - 3, 500, y + height - 2), fill="black")
+    painter.rectangle((0, 736, W, H), fill="black")
+    text(painter, source, 28, 754, 19, 472, "white")
+    return render.snap_palette(image)
 
 
 def text(draw, value, x, y, size, width, color="black", bold=False):
