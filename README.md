@@ -9,7 +9,7 @@
 
 ## 安卓版（原生 Kotlin）
 
-- 安装包 [Android 1.8.9](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.8.9-android)。使用固定签名，可覆盖升级已采用该签名的版本。安装后可在「设置 → 在线升级」检查并安装后续正式版。
+- 安装包 [Android 1.8.10](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.8.10-android)。使用固定签名，可覆盖升级已采用该签名的版本。安装后可在「设置 → 在线升级」检查并安装后续正式版。
 - 源码：`android/`；构建：push 到 main 触发 `.github/workflows/build-android.yml`
 - 功能：卡片模板、照片裁切与调色、相册、每日计划与发送历史、配对后等广播推送、Android 系统分享与跨窗口拖放图片
 - 荣耀任意门由 MagicOS 推荐服务。土豆片已接入 Android 系统图片分享入口，任意门的厂商级独立服务仍需荣耀官方推荐服务接入。[荣耀任意门说明](https://www.honor.com/cn/support/content/zh-cn15868678/)
