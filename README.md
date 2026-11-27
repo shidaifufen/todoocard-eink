@@ -9,13 +9,15 @@
 
 ## 安卓版（原生 Kotlin）
 
-- 安装包 [Android 1.8.12](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.8.12-android)。使用固定签名，可覆盖升级已采用该签名的版本。安装后可在「设置 → 关于 → 在线升级」检查并安装后续正式版。
+- 安装包 [Android 1.8.13](https://github.com/shidaifufen/todoocard-eink/releases/tag/v1.8.13-android)。使用固定签名，可覆盖升级已采用该签名的版本。安装后可在「设置 → 关于 → 在线升级」检查并安装后续正式版。
 - 源码：`android/`；构建：push 到 main 触发 `.github/workflows/build-android.yml`
 - 功能：卡片模板、照片裁切与调色、相册、每日计划与发送历史、配对后等广播推送、Android 系统分享与跨窗口拖放图片
 - 荣耀任意门由 MagicOS 推荐服务。土豆片已接入 Android 系统图片分享入口，任意门的厂商级独立服务仍需荣耀官方推荐服务接入。[荣耀任意门说明](https://www.honor.com/cn/support/content/zh-cn15868678/)
 - 交接与真机调试：见 [HANDOFF-ANDROID.md](HANDOFF-ANDROID.md)
 
 ### 在线场景与看板版式
+
+Android 1.8.13 起，「卡片 → 切换卡片 → 云端看板 → 官方场景 → 联网看板」可添加汇率速览、假日倒数、一周地震和剧集档案。加入「我的看板」后，可以选入每日计划或间隔推送。官方实时看板在打开、手动刷新或执行计划时取 GitHub 最新内容。
 
 在卡片列表打开「在线场景」，可按名称搜索或随手抽一张。音乐使用 Apple Music 封面，「大封面＋一句」可选一行歌词，「封面＋歌词」点选起止行后自动选中中间各行。歌词来自 LRCLIB。电影海报铺满卡片，底部显示片名和上映年份。计划中可分别选择随机音乐封面、电影海报、英语短语和成语。
 
